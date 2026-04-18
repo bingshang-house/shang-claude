@@ -732,23 +732,48 @@
       .finally(() => { btn.textContent = '📸 截圖'; btn.disabled = false; });
   }
 
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // 手機上改按鈕文字為「圖片存檔」
+  if (isMobile) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.querySelector('.btn-pdf');
+      if (btn) btn.textContent = '🖼️ 圖片存檔';
+    });
+  }
+
   function downloadPDF() {
     const el  = document.getElementById('capture-area');
     const btn = document.querySelector('.btn-pdf');
     btn.textContent = '⏳ 處理中...'; btn.disabled = true;
     html2canvas(el, { scale: 2, backgroundColor: '#F7F5F0', useCORS: true, logging: false })
       .then(canvas => {
-        const { jsPDF } = window.jspdf;
-        const pdf    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const margin = 10;
-        const imgW   = pdf.internal.pageSize.getWidth() - margin * 2;
-        const imgH   = canvas.height * imgW / canvas.width;
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgW, imgH);
-        const date = new Date().toLocaleDateString('zh-TW').replace(/\//g, '');
-        pdf.save(`房貸試算_${date}.pdf`);
+        if (isMobile) {
+          // 手機：開新分頁顯示圖片，長按可存到相簿
+          const dataUrl = canvas.toDataURL('image/png');
+          const w = window.open('', '_blank');
+          if (w) {
+            w.document.write(`<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>房貸試算結果</title></head><body style="margin:0;background:#222;text-align:center"><p style="color:#FFB700;padding:12px 10px 6px;font-size:15px;font-weight:bold">長按圖片 → 儲存至相簿 📥</p><img src="${dataUrl}" style="max-width:100%;display:block;margin:0 auto"></body></html>`);
+          } else {
+            alert('請允許彈出視窗，或改用「截圖」按鈕儲存結果');
+          }
+        } else {
+          // 電腦：下載 PDF
+          const { jsPDF } = window.jspdf;
+          const pdf    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+          const margin = 10;
+          const imgW   = pdf.internal.pageSize.getWidth() - margin * 2;
+          const imgH   = canvas.height * imgW / canvas.width;
+          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgW, imgH);
+          const date = new Date().toLocaleDateString('zh-TW').replace(/\//g, '');
+          pdf.save(`房貸試算_${date}.pdf`);
+        }
       })
-      .catch(() => alert('PDF 生成失敗，請嘗試列印功能'))
-      .finally(() => { btn.textContent = '📄 下載 PDF'; btn.disabled = false; });
+      .catch(() => alert('生成失敗，請改用截圖或列印功能'))
+      .finally(() => {
+        btn.textContent = isMobile ? '🖼️ 圖片存檔' : '📄 下載 PDF';
+        btn.disabled = false;
+      });
   }
 
   function toggleDetail() {
