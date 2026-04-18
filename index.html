@@ -578,12 +578,8 @@
           <div class="dti-hint">60% 基準（一般標準）</div>
           <div class="q-value" id="r-dti-60" style="font-size:1.2rem">—</div>
         </div>
-        <div class="dti-col">
-          <div class="dti-hint">70% 基準（最寬鬆上限）</div>
-          <div class="q-value" id="r-dti-70" style="font-size:1.2rem">—</div>
-        </div>
       </div>
-      <div class="q-sub">算法：（月還款＋其他負債）÷ 60%～70%｜不含生活費，商業銀行常用</div>
+      <div class="q-sub">算法：（月還款＋其他負債）÷ 60%｜不含生活費，商業銀行常用標準</div>
     </div>
   </div>
 
@@ -745,7 +741,6 @@
     // 商業銀行：負債比快速試算（不含生活費）
     const dtiBase = firstPayment + otherDebt;
     document.getElementById('r-dti-60').textContent = `${fmt(dtiBase / 0.6)} 元`;
-    document.getElementById('r-dti-70').textContent = `${fmt(dtiBase / 0.7)} 元`;
 
     show('result-card');
 
@@ -882,7 +877,6 @@
     const ratio     = document.getElementById('ratio-value').textContent;
     const dtiVal    = document.getElementById('dti-value').textContent;
     const dti60     = document.getElementById('r-dti-60').textContent;
-    const dti70     = document.getElementById('r-dti-70').textContent;
     return `【房貸試算結果】亞灣賞哥試算\n` +
       `━━━━━━━━━━━━━━\n` +
       `🏠 房屋總價：${price} 萬\n` +
@@ -897,7 +891,7 @@
       `📊 最低月收入需求：${minIncome}\n` +
       (ratio !== '—' ? `🏦 收支比（公股銀行）：${ratio}\n` : '') +
       (dtiVal !== '—' ? `🏢 負債比（商業銀行）：${dtiVal}\n` : '') +
-      `📋 商業銀行最低月收入：${dti60}（60%）/ ${dti70}（70%）\n` +
+      `📋 商業銀行最低月收入：${dti60}（60% 基準）\n` +
       `━━━━━━━━━━━━━━\n` +
       `⚠️ 本試算僅供參考，不代表銀行核貸承諾。\n` +
       `實際貸款條件以各銀行正式審核結果為準。\n` +
