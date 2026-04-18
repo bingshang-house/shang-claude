@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>房貸試算器 ｜ 亞灣賞哥 × 永慶不動產</title>
+  <style>
+    :root {
+      --yc-gold:    #FFB700;
+      --yc-dark:    #CC8F00;
+      --yc-deep:    #7A5500;
+      --yc-light:   #FFF8E0;
+      --yc-pale:    #FFFBF0;
+      --bg:         #F7F5F0;
+      --white:      #FFFFFF;
+      --text:       #1A1A1A;
+      --text-sub:   #666666;
+      --border:     #E8E0CC;
+      --radius:     12px;
+      --shadow:     0 2px 16px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'PingFang TC', 'Microsoft JhengHei', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 16px;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--yc-gold);
+      color: var(--yc-deep);
+      padding: 20px 16px 16px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(204,143,0,0.3);
+    }
+    header h1 { font-size: clamp(1.2rem, 4vw, 1.6rem); font-weight: 800; letter-spacing: 1px; }
+    header p  { font-size: 0.82rem; opacity: 0.75; margin-top: 3px; }
+
+    /* ── Container ── */
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 16px 12px 60px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 20px 16px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+    }
+    .card h2 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--yc-deep);
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--yc-light);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ── Grid ── */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .field.full { grid-column: 1 / -1; }
+    @media (max-width: 480px) {
+      .grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: 1; }
+    }
+
+    /* ── Field ── */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+
+    label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-sub);
+    }
+
+    .input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .input-wrap input,
+    .input-wrap select {
+      width: 100%;
+      padding: 11px 42px 11px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 1rem;
+      color: var(--text);
+      background: var(--yc-pale);
+      transition: border 0.2s, background 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+      min-height: 44px;
+    }
+    .input-wrap input:focus,
+    .input-wrap select:focus {
+      outline: none;
+      border-color: var(--yc-gold);
+      background: var(--white);
+      box-shadow: 0 0 0 3px rgba(255,183,0,0.15);
+    }
+    .unit {
+      position: absolute;
+      right: 10px;
+      font-size: 0.75rem;
+      color: #aaa;
+      pointer-events: none;
+    }
+    .hint {
+      font-size: 0.72rem;
+      color: #bbb;
+      line-height: 1.4;
+    }
+    .hint a { color: var(--yc-dark); text-decoration: none; }
+    .hint a:hover { text-decoration: underline; }
+
+    /* ── 利率快選按鈕 ── */
+    .rate-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .rate-btn {
+      padding: 6px 11px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      background: var(--white);
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.15s;
+      min-height: 32px;
+      white-space: nowrap;
+    }
+    .rate-btn:hover  { background: var(--yc-light); border-color: var(--yc-dark); color: var(--yc-deep); }
+    .rate-btn.active { background: var(--yc-gold);  border-color: var(--yc-dark); color: var(--yc-deep); font-weight: 800; }
+    .rate-青安       { border-color: #ccc; color: #555; }
+    .rate-青安:hover,
+    .rate-青安.active { background: #e8f4e8; border-color: #5a9a5a; color: #2d6a2d; }
+
+    /* ── 試算按鈕 ── */
+    .btn-calc {
+      width: 100%;
+      padding: 15px;
+      background: var(--yc-gold);
+      color: var(--yc-deep);
+      border: none;
+      border-radius: var(--radius);
+      font-size: 1.1rem;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 2px;
+      transition: all 0.2s;
+      margin-top: 4px;
+      min-height: 52px;
+      box-shadow: 0 4px 12px rgba(255,183,0,0.4);
+    }
+    .btn-calc:hover  { background: var(--yc-dark); color: var(--white); transform: translateY(-1px); }
+    .btn-calc:active { transform: translateY(0); }
+
+    /* ── 結果 grid ── */
+    .result-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 480px) { .result-grid { grid-template-columns: 1fr; } }
+
+    .result-item {
+      background: var(--yc-pale);
+      border-radius: 10px;
+      padding: 14px;
+      border: 1px solid var(--yc-light);
+    }
+    .result-item .r-label { font-size: 0.75rem; color: var(--text-sub); margin-bottom: 4px; }
+    .result-item .r-value { font-size: 1.25rem; font-weight: 800; color: var(--yc-deep); }
+    .result-item .r-sub   { font-size: 0.72rem; color: #aaa; margin-top: 3px; }
+
+    .result-item.highlight {
+      background: var(--yc-gold);
+      border-color: var(--yc-dark);
+    }
+    .result-item.highlight .r-label { color: var(--yc-deep); opacity: 0.75; }
+    .result-item.highlight .r-value { color: var(--yc-deep); font-size: 1.5rem; }
+    .result-item.highlight .r-sub   { color: var(--yc-deep); opacity: 0.65; }
+
+    /* ── 代書快速試算 block ── */
+    .quick-block {
+      margin-top: 12px;
+      background: #FFFBF0;
+      border-radius: 10px;
+      padding: 14px;
+      border-left: 4px solid var(--yc-gold);
+    }
+    .quick-block .q-label { font-size: 0.75rem; color: var(--yc-dark); font-weight: 700; margin-bottom: 5px; }
+    .quick-block .q-value { font-size: 1.4rem; font-weight: 800; color: var(--yc-deep); }
+    .quick-block .q-sub   { font-size: 0.72rem; color: #aaa; margin-top: 4px; line-height: 1.5; }
+
+    /* ── 收支比 ── */
+    .ratio-block {
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 4px;
+    }
+    .ratio-block.green  { background: #d4edda; }
+    .ratio-block.yellow { background: #fff3cd; }
+    .ratio-block.red    { background: #f8d7da; }
+
+    .ratio-light {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+    }
+    .green  .ratio-light { background: #28a745; }
+    .yellow .ratio-light { background: #ffc107; }
+    .red    .ratio-light { background: #dc3545; }
+
+    .ratio-text .big  { font-size: 1.7rem; font-weight: 800; }
+    .ratio-text .desc { font-size: 0.8rem; color: #444; margin-top: 4px; line-height: 1.4; }
+
+    .ratio-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 12px; }
+    .ratio-table th, .ratio-table td {
+      padding: 8px 6px; border: 1px solid #e8e0cc; text-align: center;
+    }
+    .ratio-table th { background: var(--yc-light); color: var(--yc-deep); font-weight: 700; }
+    .ratio-table tr.active td { background: var(--yc-gold); font-weight: 700; color: var(--yc-deep); }
+
+    /* ── 明細表 ── */
+    .toggle-detail {
+      width: 100%;
+      padding: 12px;
+      background: var(--yc-pale);
+      border: 1.5px solid var(--yc-light);
+      border-radius: 8px;
+      color: var(--yc-dark);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.2s;
+      min-height: 44px;
+    }
+    .toggle-detail:hover { background: var(--yc-light); }
+
+    .detail-table-wrap { overflow-x: auto; margin-top: 12px; -webkit-overflow-scrolling: touch; }
+    table.detail { width: 100%; border-collapse: collapse; font-size: 0.78rem; min-width: 380px; }
+    table.detail th {
+      background: var(--yc-gold); color: var(--yc-deep);
+      padding: 9px 8px; text-align: right; white-space: nowrap; font-weight: 700;
+    }
+    table.detail th:first-child { text-align: center; }
+    table.detail td {
+      padding: 7px 8px; border-bottom: 1px solid #f0ebe0; text-align: right;
+    }
+    table.detail td:first-child { text-align: center; color: #aaa; }
+    table.detail tr:nth-child(even) td { background: var(--yc-pale); }
+    table.detail tr:hover td { background: var(--yc-light); }
+
+    /* ── 備註 ── */
+    .note { font-size: 0.72rem; color: #bbb; margin-top: 10px; line-height: 1.7; }
+
+    .hidden { display: none; }
+
+    footer {
+      text-align: center;
+      font-size: 0.72rem;
+      color: #ccc;
+      margin-top: 32px;
+      padding-bottom: 20px;
+    }
+
+    /* ── 手機額外優化 ── */
+    @media (max-width: 480px) {
+      header { padding: 14px 12px 12px; }
+      .container { padding: 12px 10px 50px; }
+      .card { padding: 16px 13px; }
+      .btn-calc { font-size: 1rem; padding: 14px; }
+      .ratio-text .big { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🏠 房貸試算器</h1>
+  <p>亞灣賞哥 ｜ 永慶不動產 高雄亞灣中華加盟店</p>
+</header>
+
+<div class="container">
+
+  <!-- 貸款條件 -->
+  <div class="card">
+    <h2>📋 貸款條件</h2>
+    <div class="grid">
+      <div class="field">
+        <label>房屋總價</label>
+        <div class="input-wrap">
+          <input type="number" id="price" placeholder="例：1500" min="0" inputmode="decimal" />
+          <span class="unit">萬元</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>頭期款</label>
+        <div class="input-wrap">
+          <input type="number" id="down" placeholder="例：300" min="0" inputmode="decimal" />
+          <span class="unit">萬元</span>
+        </div>
+        <span class="hint" id="down-pct"></span>
+      </div>
+      <div class="field">
+        <label>貸款年限</label>
+        <div class="input-wrap">
+          <select id="years">
+            <option value="10">10 年</option>
+            <option value="15">15 年</option>
+            <option value="20" selected>20 年</option>
+            <option value="25">25 年</option>
+            <option value="30">30 年</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>年利率</label>
+        <div class="input-wrap">
+          <input type="number" id="rate" placeholder="例：2.5" min="0" step="0.01" inputmode="decimal" />
+          <span class="unit">%</span>
+        </div>
+        <div class="rate-btns">
+          <button type="button" class="rate-btn" onclick="setRate(2.32, this)">台銀 2.32%</button>
+          <button type="button" class="rate-btn" onclick="setRate(3.00, this)">合庫 3.00%</button>
+          <button type="button" class="rate-btn" onclick="setRate(2.70, this)">一銀 2.70%</button>
+          <button type="button" class="rate-btn" onclick="setRate(2.68, this)">中信 2.68%</button>
+          <button type="button" class="rate-btn" onclick="setRate(2.75, this)">北富銀 2.75%</button>
+          <button type="button" class="rate-btn rate-青安" onclick="setRate(1.775, this)">新青安 1.775%</button>
+        </div>
+        <span class="hint">2026/02 央行統計，僅供參考　<a href="https://www.money101.com.tw/blog/%E6%88%BF%E8%B2%B8%E5%88%A9%E7%8E%87" target="_blank">查看最新利率 →</a></span>
+      </div>
+      <div class="field full">
+        <label>還款方式</label>
+        <div class="input-wrap">
+          <select id="method">
+            <option value="annuity">本息均攤（每月固定還款）</option>
+            <option value="principal">本金均攤（每月遞減）</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 收入與負債 -->
+  <div class="card">
+    <h2>💰 收入與負債</h2>
+    <div class="grid">
+      <div class="field">
+        <label>每月收入</label>
+        <div class="input-wrap">
+          <input type="number" id="income" placeholder="例：60000" min="0" inputmode="decimal" />
+          <span class="unit">元</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>其他每月負債</label>
+        <div class="input-wrap">
+          <input type="number" id="other-debt" placeholder="0" min="0" value="0" inputmode="decimal" />
+          <span class="unit">元</span>
+        </div>
+        <span class="hint">車貸、信貸、信用卡分期等</span>
+      </div>
+      <div class="field full">
+        <label>每月基本生活費（本人）</label>
+        <div class="input-wrap">
+          <input type="number" id="living" value="15000" min="0" inputmode="decimal" />
+          <span class="unit">元</span>
+        </div>
+        <span class="hint">銀行預設認定約 15,000 元，可依實際調整</span>
+      </div>
+      <div class="field">
+        <label>扶養人數（子女）</label>
+        <div class="input-wrap">
+          <input type="number" id="dependents" placeholder="0" min="0" value="0" inputmode="numeric" />
+          <span class="unit">人</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>每位扶養人每月生活費</label>
+        <div class="input-wrap">
+          <input type="number" id="dep-living" value="15000" min="0" inputmode="decimal" />
+          <span class="unit">元</span>
+        </div>
+        <span class="hint">預設 15,000 元</span>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-calc" onclick="calculate()">立即試算</button>
+
+  <!-- 結果 -->
+  <div class="card hidden" id="result-card">
+    <h2>📊 試算結果</h2>
+    <div class="result-grid">
+      <div class="result-item highlight">
+        <div class="r-label">每月還款金額</div>
+        <div class="r-value" id="r-monthly">—</div>
+        <div class="r-sub" id="r-monthly-sub"></div>
+      </div>
+      <div class="result-item">
+        <div class="r-label">貸款金額</div>
+        <div class="r-value" id="r-loan">—</div>
+      </div>
+      <div class="result-item">
+        <div class="r-label">總繳利息</div>
+        <div class="r-value" id="r-interest">—</div>
+      </div>
+      <div class="result-item">
+        <div class="r-label">總還款金額</div>
+        <div class="r-value" id="r-total">—</div>
+      </div>
+    </div>
+
+    <!-- 代書快速試算 -->
+    <div class="quick-block">
+      <div class="q-label">💡 最低所需月收入（代書快速試算）</div>
+      <div class="q-value" id="r-min-income">—</div>
+      <div class="q-sub" id="r-min-income-sub"></div>
+      <div class="q-sub">算法：（月還款＋生活費＋扶養費＋其他負債）× 1.4｜適用薪轉至省屬行庫（台銀、合庫、一銀）</div>
+    </div>
+  </div>
+
+  <!-- 收支比 -->
+  <div class="card hidden" id="ratio-card">
+    <h2>🏦 銀行收支比評估</h2>
+    <div class="ratio-block" id="ratio-block">
+      <div class="ratio-light" id="ratio-light">💡</div>
+      <div class="ratio-text">
+        <div class="big" id="ratio-value">—</div>
+        <div class="desc" id="ratio-desc">—</div>
+      </div>
+    </div>
+
+    <table class="ratio-table" style="margin-top:14px">
+      <thead>
+        <tr><th>收支比</th><th>銀行態度</th><th>預估核貸成數</th></tr>
+      </thead>
+      <tbody id="ratio-tbody">
+        <tr data-min="200"><td>≥ 200%</td><td>最樂觀</td><td>最高 8 成</td></tr>
+        <tr data-min="180" data-max="199"><td>180%–199%</td><td>尚可</td><td>約 7.5 成</td></tr>
+        <tr data-min="160" data-max="179"><td>160%–179%</td><td>尚可</td><td>約 7 成</td></tr>
+        <tr data-min="140" data-max="159"><td>140%–159%</td><td>偏低</td><td>約 6.5 成</td></tr>
+        <tr data-max="139"><td>＜ 140%</td><td>困難</td><td>減 2 成或婉拒</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      ※ 收支比 ＝ 月收入 ÷（月還款＋其他負債＋本人生活費＋扶養費）× 100%<br/>
+      ※ 以上為公股銀行（台銀、合庫、一銀）參考標準，薪轉帳戶送省屬行庫審核更有利<br/>
+      ※ 實際核貸依各銀行規定為準
+    </div>
+  </div>
+
+  <!-- 明細表 -->
+  <div class="card hidden" id="detail-card">
+    <h2>📅 還款明細表</h2>
+    <button class="toggle-detail" onclick="toggleDetail()">▼ 展開逐月明細</button>
+    <div class="detail-table-wrap hidden" id="detail-wrap">
+      <table class="detail">
+        <thead>
+          <tr>
+            <th>期數</th><th>每月還款</th><th>還本金</th><th>還利息</th><th>剩餘本金</th>
+          </tr>
+        </thead>
+        <tbody id="detail-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>亞灣賞哥 × shang-Agent ｜ 本試算結果僅供參考，實際核貸以銀行為準</footer>
+
+<script>
+  function setRate(val, btn) {
+    document.getElementById('rate').value = val;
+    document.querySelectorAll('.rate-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  const fmt  = (n) => Math.round(n).toLocaleString('zh-TW');
+  const fmtW = (n) => (n / 10000).toFixed(1) + ' 萬';
+
+  document.getElementById('price').addEventListener('input', updateDownPct);
+  document.getElementById('down').addEventListener('input', updateDownPct);
+  function updateDownPct() {
+    const p = parseFloat(document.getElementById('price').value) || 0;
+    const d = parseFloat(document.getElementById('down').value) || 0;
+    const el = document.getElementById('down-pct');
+    el.textContent = (p > 0 && d > 0) ? `佔總價 ${(d / p * 100).toFixed(1)}%` : '';
+  }
+
+  function calculate() {
+    const price      = parseFloat(document.getElementById('price').value) || 0;
+    const down       = parseFloat(document.getElementById('down').value) || 0;
+    const years      = parseInt(document.getElementById('years').value);
+    const annRate    = parseFloat(document.getElementById('rate').value) || 0;
+    const method     = document.getElementById('method').value;
+    const income     = parseFloat(document.getElementById('income').value) || 0;
+    const otherDebt  = parseFloat(document.getElementById('other-debt').value) || 0;
+    const living     = parseFloat(document.getElementById('living').value) || 15000;
+    const dependents = parseInt(document.getElementById('dependents').value) || 0;
+    const depLiving  = parseFloat(document.getElementById('dep-living').value) || 15000;
+    const depTotal   = dependents * depLiving;
+
+    if (price <= 0 || annRate <= 0) { alert('請填入房屋總價與年利率'); return; }
+    const loan = (price - down) * 10000;
+    if (loan <= 0) { alert('貸款金額不可為零，請檢查頭期款'); return; }
+
+    const n = years * 12;
+    const r = annRate / 100 / 12;
+    let schedule = [];
+
+    if (method === 'annuity') {
+      const M = loan * r * Math.pow(1+r,n) / (Math.pow(1+r,n) - 1);
+      let bal = loan;
+      for (let i = 1; i <= n; i++) {
+        const interest = bal * r, principal = M - interest;
+        bal -= principal;
+        schedule.push({ month:i, payment:M, principal, interest, balance:Math.max(0,bal) });
+      }
+    } else {
+      const mp = loan / n;
+      let bal = loan;
+      for (let i = 1; i <= n; i++) {
+        const interest = bal * r, payment = mp + interest;
+        bal -= mp;
+        schedule.push({ month:i, payment, principal:mp, interest, balance:Math.max(0,bal) });
+      }
+    }
+
+    const firstPayment  = schedule[0].payment;
+    const totalPayment  = schedule.reduce((s,r) => s + r.payment, 0);
+    const totalInterest = totalPayment - loan;
+
+    document.getElementById('r-loan').textContent     = fmtW(loan);
+    document.getElementById('r-monthly').textContent  = `${fmt(firstPayment)} 元`;
+    document.getElementById('r-monthly-sub').textContent =
+      method === 'principal' ? '（首月，之後逐月遞減）' : '（每月固定）';
+    document.getElementById('r-interest').textContent = fmtW(totalInterest);
+    document.getElementById('r-total').textContent    = fmtW(totalPayment);
+
+    // 代書快速試算
+    const minBase   = firstPayment + living + depTotal + otherDebt;
+    const minIncome = minBase * 1.4;
+    document.getElementById('r-min-income').textContent = `${fmt(minIncome)} 元`;
+    document.getElementById('r-min-income-sub').textContent =
+      `月支出合計 ${fmt(minBase)} 元 × 1.4` +
+      (dependents > 0 ? `｜含 ${dependents} 位扶養人 ${fmt(depTotal)} 元` : '');
+
+    show('result-card');
+
+    // 收支比
+    if (income > 0) {
+      const totalExp = firstPayment + otherDebt + living + depTotal;
+      const ratio    = income / totalExp * 100;
+
+      document.getElementById('ratio-value').textContent = ratio.toFixed(1) + '%';
+      const block = document.getElementById('ratio-block');
+      const light = document.getElementById('ratio-light');
+      const desc  = document.getElementById('ratio-desc');
+      block.className = 'ratio-block';
+
+      if (ratio >= 200) {
+        block.classList.add('green'); light.textContent = '✅';
+        desc.textContent = '核貸最樂觀，收入充裕，銀行審核通過率高';
+      } else if (ratio >= 160) {
+        block.classList.add('yellow'); light.textContent = '⚠️';
+        desc.textContent = '尚可，核貸成數可能略有限制，建議準備補充資料';
+      } else {
+        block.classList.add('red'); light.textContent = '❌';
+        desc.textContent = '收支比偏低，核貸困難，建議調高頭期款或降低負債';
+      }
+
+      document.querySelectorAll('#ratio-tbody tr').forEach(row => {
+        row.classList.remove('active');
+        const min = parseFloat(row.dataset.min) || 0;
+        const max = parseFloat(row.dataset.max) || Infinity;
+        if (ratio >= min && ratio <= max) row.classList.add('active');
+      });
+
+      show('ratio-card');
+    }
+
+    // 明細表
+    const tbody = document.getElementById('detail-body');
+    tbody.innerHTML = '';
+    schedule.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${row.month}</td><td>${fmt(row.payment)}</td><td>${fmt(row.principal)}</td><td>${fmt(row.interest)}</td><td>${fmt(row.balance)}</td>`;
+      tbody.appendChild(tr);
+    });
+    show('detail-card');
+
+    document.getElementById('result-card').scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  function show(id) { document.getElementById(id).classList.remove('hidden'); }
+
+  function toggleDetail() {
+    const wrap = document.getElementById('detail-wrap');
+    const btn  = document.querySelector('.toggle-detail');
+    const open = wrap.classList.contains('hidden');
+    wrap.classList.toggle('hidden', !open);
+    btn.textContent = open ? '▲ 收起明細' : '▼ 展開逐月明細';
+  }
+</script>
+</body>
+</html>
