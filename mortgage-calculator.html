@@ -309,6 +309,18 @@
     }
     #living-custom:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,183,0,0.15); }
 
+    /* ── 負債比（商業銀行）── */
+    .quick-block.dti { border-left-color: #4a90d9; background: #f0f6ff; }
+    .quick-block.dti .q-label { color: #2c5282; }
+    .quick-block.dti .q-value { color: #1a365d; }
+    .quick-block.dti .q-sub   { color: #4a6fa5; }
+    .dti-cols { display: flex; gap: 20px; flex-wrap: wrap; margin: 6px 0 4px; }
+    .dti-col .dti-hint { font-size: 0.72rem; color: #6a8ab5; margin-bottom: 2px; }
+    .ratio-divider { border: none; border-top: 1px dashed #e0e0e0; margin: 16px 0 12px; }
+    .ratio-subtitle { font-size: 0.85rem; font-weight: 700; margin-bottom: 8px; }
+    .ratio-subtitle.public     { color: var(--yc-deep); }
+    .ratio-subtitle.commercial { color: #2c5282; }
+
     /* ── 顧問名片（截圖/PDF 底部）── */
     .agent-bar {
       background: var(--yc-gold);
@@ -550,18 +562,35 @@
       </div>
     </div>
 
-    <!-- 代書快速試算 -->
+    <!-- 代書快速試算（公股）-->
     <div class="quick-block">
-      <div class="q-label">💡 最低所需月收入（代書快速試算）</div>
+      <div class="q-label">🏦 最低月收入｜公股銀行（收支比）嚴格版</div>
       <div class="q-value" id="r-min-income">—</div>
       <div class="q-sub" id="r-min-income-sub"></div>
       <div class="q-sub">算法：（月還款＋生活費＋扶養費＋其他負債）× 1.4</div>
     </div>
+
+    <!-- 負債比快速試算（商業銀行）-->
+    <div class="quick-block dti" style="margin-top:8px">
+      <div class="q-label">🏢 最低月收入｜商業銀行（負債比）寬鬆版</div>
+      <div class="dti-cols">
+        <div class="dti-col">
+          <div class="dti-hint">60% 基準（一般標準）</div>
+          <div class="q-value" id="r-dti-60" style="font-size:1.2rem">—</div>
+        </div>
+        <div class="dti-col">
+          <div class="dti-hint">70% 基準（最寬鬆上限）</div>
+          <div class="q-value" id="r-dti-70" style="font-size:1.2rem">—</div>
+        </div>
+      </div>
+      <div class="q-sub">算法：（月還款＋其他負債）÷ 60%～70%｜不含生活費，商業銀行常用</div>
+    </div>
   </div>
 
-  <!-- 收支比 -->
+  <!-- 收支比 + 負債比 -->
   <div class="card hidden" id="ratio-card">
-    <h2>🏦 銀行收支比評估</h2>
+    <h2>📊 銀行核貸評估對照</h2>
+    <div class="ratio-subtitle public">🏦 公股銀行｜收支比評估（嚴格版）</div>
     <div class="ratio-block" id="ratio-block">
       <div class="ratio-light" id="ratio-light">💡</div>
       <div class="ratio-text">
@@ -584,9 +613,22 @@
     </table>
 
     <div class="note">
-      ※ 收支比 ＝ 月收入 ÷（月還款＋其他負債＋本人生活費＋扶養費）× 100%<br/>
-      ※ 以上為公股銀行參考標準，實際核貸依各銀行規定為準<br/>
-      ※ 實際核貸依各銀行規定為準
+      ※ 收支比 ＝ 月收入 ÷（月還款＋其他負債＋本人生活費＋扶養費）× 100%
+    </div>
+
+    <hr class="ratio-divider">
+    <div class="ratio-subtitle commercial">🏢 商業銀行｜負債比評估（寬鬆版）</div>
+    <div class="ratio-block hidden" id="dti-block">
+      <div class="ratio-light" id="dti-light">💡</div>
+      <div class="ratio-text">
+        <div class="big" id="dti-value">—</div>
+        <div class="desc" id="dti-desc">—</div>
+      </div>
+    </div>
+    <div class="note" style="margin-top:8px">
+      ※ 負債比 ＝（月還款＋其他負債）÷ 月收入 × 100%（不含生活費）<br/>
+      ※ 商業銀行通常以 60%～70% 為核貸參考上限<br/>
+      ※ 以上均為參考標準，實際核貸依各銀行規定為準
     </div>
   </div>
 
@@ -692,13 +734,18 @@
     document.getElementById('r-interest').textContent = fmtW(totalInterest);
     document.getElementById('r-total').textContent    = fmtW(totalPayment);
 
-    // 代書快速試算
+    // 公股銀行：收支比快速試算（× 1.4 ≈ 收支比 140%）
     const minBase   = firstPayment + living + depTotal + otherDebt;
     const minIncome = minBase * 1.4;
     document.getElementById('r-min-income').textContent = `${fmt(minIncome)} 元`;
     document.getElementById('r-min-income-sub').textContent =
       `月支出合計 ${fmt(minBase)} 元 × 1.4` +
       (dependents > 0 ? `｜含 ${dependents} 位扶養人 ${fmt(depTotal)} 元` : '');
+
+    // 商業銀行：負債比快速試算（不含生活費）
+    const dtiBase = firstPayment + otherDebt;
+    document.getElementById('r-dti-60').textContent = `${fmt(dtiBase / 0.6)} 元`;
+    document.getElementById('r-dti-70').textContent = `${fmt(dtiBase / 0.7)} 元`;
 
     show('result-card');
 
@@ -730,6 +777,24 @@
         const max = parseFloat(row.dataset.max) || Infinity;
         if (ratio >= min && ratio <= max) row.classList.add('active');
       });
+
+      // 商業銀行：負債比燈號
+      const dti      = dtiBase / income * 100;
+      const dBlock   = document.getElementById('dti-block');
+      const dLight   = document.getElementById('dti-light');
+      const dDesc    = document.getElementById('dti-desc');
+      dBlock.className = 'ratio-block';
+      document.getElementById('dti-value').textContent = dti.toFixed(1) + '%';
+      if (dti <= 50) {
+        dBlock.classList.add('green'); dLight.textContent = '✅';
+        dDesc.textContent = '負債比優良，還款壓力輕，商業銀行核貸機率高';
+      } else if (dti <= 70) {
+        dBlock.classList.add('yellow'); dLight.textContent = '⚠️';
+        dDesc.textContent = '負債比尚可，在商業銀行可接受範圍內';
+      } else {
+        dBlock.classList.add('red'); dLight.textContent = '❌';
+        dDesc.textContent = '負債比偏高，建議增加頭期款或降低其他負債';
+      }
 
       show('ratio-card');
     }
@@ -815,6 +880,9 @@
     const interest  = document.getElementById('r-interest').textContent;
     const minIncome = document.getElementById('r-min-income').textContent;
     const ratio     = document.getElementById('ratio-value').textContent;
+    const dtiVal    = document.getElementById('dti-value').textContent;
+    const dti60     = document.getElementById('r-dti-60').textContent;
+    const dti70     = document.getElementById('r-dti-70').textContent;
     return `【房貸試算結果】亞灣賞哥試算\n` +
       `━━━━━━━━━━━━━━\n` +
       `🏠 房屋總價：${price} 萬\n` +
@@ -827,7 +895,9 @@
       `💸 總繳利息：${interest}\n` +
       `🏙️ 生活費標準：${livingName}\n` +
       `📊 最低月收入需求：${minIncome}\n` +
-      (ratio !== '—' ? `🏦 收支比：${ratio}\n` : '') +
+      (ratio !== '—' ? `🏦 收支比（公股銀行）：${ratio}\n` : '') +
+      (dtiVal !== '—' ? `🏢 負債比（商業銀行）：${dtiVal}\n` : '') +
+      `📋 商業銀行最低月收入：${dti60}（60%）/ ${dti70}（70%）\n` +
       `━━━━━━━━━━━━━━\n` +
       `⚠️ 本試算僅供參考，不代表銀行核貸承諾。\n` +
       `實際貸款條件以各銀行正式審核結果為準。\n` +
