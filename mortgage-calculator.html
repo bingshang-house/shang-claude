@@ -309,6 +309,21 @@
     }
     #living-custom:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,183,0,0.15); }
 
+    /* ── 顧問名片（截圖/PDF 底部）── */
+    .agent-bar {
+      background: var(--yc-gold);
+      border-radius: 10px;
+      padding: 13px 16px;
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .agent-bar-name    { font-size: 1rem; font-weight: 800; color: var(--yc-deep); }
+    .agent-bar-contact { font-size: 0.82rem; color: var(--yc-deep); opacity: 0.85; }
+
     /* ── 免責聲明 ── */
     .disclaimer-block {
       background: #fff8e1;
@@ -367,6 +382,32 @@
 </header>
 
 <div class="container">
+
+  <!-- 顧問資訊 -->
+  <div class="card no-print" id="agent-card">
+    <h2>👤 顧問資訊（選填）</h2>
+    <div class="grid">
+      <div class="field">
+        <label>姓名</label>
+        <div class="input-wrap">
+          <input type="text" id="agent-name" placeholder="例：賞哥" autocomplete="name" />
+        </div>
+      </div>
+      <div class="field">
+        <label>電話</label>
+        <div class="input-wrap">
+          <input type="tel" id="agent-phone" placeholder="例：0912-345-678" inputmode="tel" />
+        </div>
+      </div>
+      <div class="field full">
+        <label>LINE ID</label>
+        <div class="input-wrap">
+          <input type="text" id="agent-line" placeholder="例：@bingshang" />
+        </div>
+      </div>
+    </div>
+    <span class="hint">填寫後自動存入瀏覽器，下次開啟不用重填；截圖、PDF、列印及 LINE 分享均會帶入</span>
+  </div>
 
   <!-- 貸款條件 -->
   <div class="card no-print">
@@ -549,6 +590,11 @@
     </div>
   </div>
 
+  <div class="agent-bar hidden" id="agent-bar">
+    <div class="agent-bar-name" id="bar-name"></div>
+    <div class="agent-bar-contact" id="bar-contact"></div>
+  </div>
+
   <div class="disclaimer-block">
     ⚠️ <strong>重要聲明</strong>：本試算結果僅供初步參考，不代表任何銀行之核貸承諾。實際貸款金額、利率及核貸條件，須經各銀行正式審核後方可確認，最終結果以銀行書面通知為準。利率資料依 2026/02 央行統計，實際利率以各銀行公告為準，並可能隨市場變動調整。本工具由亞灣賞哥提供，僅作為諮詢參考之用。
   </div>
@@ -704,6 +750,40 @@
 
   function show(id) { document.getElementById(id).classList.remove('hidden'); }
 
+  /* ── 顧問資訊 localStorage ── */
+  function getAgent() {
+    return {
+      name:  document.getElementById('agent-name').value.trim(),
+      phone: document.getElementById('agent-phone').value.trim(),
+      line:  document.getElementById('agent-line').value.trim(),
+    };
+  }
+
+  function updateAgentBar() {
+    const a   = getAgent();
+    const bar = document.getElementById('agent-bar');
+    if (a.name || a.phone || a.line) {
+      document.getElementById('bar-name').textContent = a.name || '（未填姓名）';
+      const parts = [a.phone && `📞 ${a.phone}`, a.line && `LINE：${a.line}`].filter(Boolean);
+      document.getElementById('bar-contact').textContent = parts.join('　');
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+    }
+  }
+
+  ['agent-name', 'agent-phone', 'agent-line'].forEach(id => {
+    const el  = document.getElementById(id);
+    const val = localStorage.getItem(id);
+    if (val) el.value = val;
+    el.addEventListener('input', function () {
+      localStorage.setItem(id, this.value);
+      updateAgentBar();
+    });
+  });
+
+  updateAgentBar();
+
   function toggleCustomLiving(sel) {
     const el = document.getElementById('living-custom');
     el.classList.toggle('hidden', sel.value !== 'custom');
@@ -719,6 +799,13 @@
     const rate    = document.getElementById('rate').value;
     const sel     = document.getElementById('method');
     const method  = sel.options[sel.selectedIndex].text;
+    const ag = getAgent();
+    const agentLine = [
+      ag.name  && `顧問：${ag.name}`,
+      ag.phone && `📞 ${ag.phone}`,
+      ag.line  && `LINE：${ag.line}`,
+    ].filter(Boolean).join('　') || `亞灣賞哥｜永慶不動產 高雄亞灣中華加盟店`;
+
     const livingEl   = document.getElementById('living');
     const livingName = livingEl.value === 'custom'
       ? `自訂 ${document.getElementById('living-custom').value} 元`
@@ -746,7 +833,7 @@
       `實際貸款條件以各銀行正式審核結果為準。\n` +
       `━━━━━━━━━━━━━━\n` +
       `試算工具：https://bingshang-house.github.io/shang-claude/mortgage-calculator.html\n` +
-      `諮詢：亞灣賞哥｜永慶不動產 高雄亞灣中華加盟店`;
+      agentLine;
   }
 
   function shareToLine() {
