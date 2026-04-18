@@ -309,6 +309,18 @@
     }
     #living-custom:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,183,0,0.15); }
 
+    /* ── 寬限期 ── */
+    .result-item.highlight-blue {
+      background: #dbeafe; border-color: #93c5fd;
+    }
+    .result-item.highlight-blue .r-label { color: #1e40af; opacity: 0.85; }
+    .result-item.highlight-blue .r-value { color: #1e3a8a; font-size: 1.5rem; }
+    .result-item.highlight-blue .r-sub   { color: #1e40af; opacity: 0.65; }
+    .result-item.full { grid-column: 1 / -1; }
+
+    table.detail tr.grace-row td              { background: #eff6ff; }
+    table.detail tr.grace-row td:nth-child(3) { color: #9ca3af; }
+
     /* ── 負債比（商業銀行）── */
     .quick-block.dti { border-left-color: #4a90d9; background: #f0f6ff; }
     .quick-block.dti .q-label { color: #2c5282; }
@@ -466,7 +478,7 @@
         </div>
         <span class="hint">2026/02 央行統計，僅供參考　<a href="https://www.money101.com.tw/blog/%E6%88%BF%E8%B2%B8%E5%88%A9%E7%8E%87" target="_blank">查看最新利率 →</a></span>
       </div>
-      <div class="field full">
+      <div class="field">
         <label>還款方式</label>
         <div class="input-wrap">
           <select id="method">
@@ -474,6 +486,20 @@
             <option value="principal">本金均攤（每月遞減）</option>
           </select>
         </div>
+      </div>
+      <div class="field">
+        <label>寬限期（僅付利息）</label>
+        <div class="input-wrap">
+          <select id="grace">
+            <option value="0" selected>無寬限期</option>
+            <option value="1">1 年</option>
+            <option value="2">2 年</option>
+            <option value="3">3 年</option>
+            <option value="4">4 年</option>
+            <option value="5">5 年</option>
+          </select>
+        </div>
+        <span class="hint">寬限期間只付利息不還本金，期後依剩餘年限重新計算</span>
       </div>
     </div>
   </div>
@@ -559,6 +585,11 @@
       <div class="result-item">
         <div class="r-label">總還款金額</div>
         <div class="r-value" id="r-total">—</div>
+      </div>
+      <div class="result-item highlight-blue full hidden" id="r-post-grace-item">
+        <div class="r-label">⚠️ 寬限期後每月還款（實際長期負擔）</div>
+        <div class="r-value" id="r-post-grace">—</div>
+        <div class="r-sub" id="r-post-grace-sub"></div>
       </div>
     </div>
 
@@ -697,56 +728,79 @@
     const loan = (price - down) * 10000;
     if (loan <= 0) { alert('貸款金額不可為零，請檢查頭期款'); return; }
 
-    const n = years * 12;
-    const r = annRate / 100 / 12;
+    const n           = years * 12;
+    const r           = annRate / 100 / 12;
+    const grace       = parseInt(document.getElementById('grace').value) || 0;
+    const graceMonths = grace * 12;
+    const postMonths  = n - graceMonths;
     let schedule = [];
 
+    // 寬限期：只付利息
+    for (let i = 1; i <= graceMonths; i++) {
+      const interest = loan * r;
+      schedule.push({ month:i, payment:interest, principal:0, interest, balance:loan, isGrace:true });
+    }
+
+    // 寬限後：依剩餘期數重新計算
     if (method === 'annuity') {
-      const M = loan * r * Math.pow(1+r,n) / (Math.pow(1+r,n) - 1);
+      const M = loan * r * Math.pow(1+r, postMonths) / (Math.pow(1+r, postMonths) - 1);
       let bal = loan;
-      for (let i = 1; i <= n; i++) {
+      for (let i = graceMonths + 1; i <= n; i++) {
         const interest = bal * r, principal = M - interest;
         bal -= principal;
-        schedule.push({ month:i, payment:M, principal, interest, balance:Math.max(0,bal) });
+        schedule.push({ month:i, payment:M, principal, interest, balance:Math.max(0,bal), isGrace:false });
       }
     } else {
-      const mp = loan / n;
-      let bal = loan;
-      for (let i = 1; i <= n; i++) {
+      const mp = loan / postMonths;
+      let bal  = loan;
+      for (let i = graceMonths + 1; i <= n; i++) {
         const interest = bal * r, payment = mp + interest;
         bal -= mp;
-        schedule.push({ month:i, payment, principal:mp, interest, balance:Math.max(0,bal) });
+        schedule.push({ month:i, payment, principal:mp, interest, balance:Math.max(0,bal), isGrace:false });
       }
     }
 
-    const firstPayment  = schedule[0].payment;
-    const totalPayment  = schedule.reduce((s,r) => s + r.payment, 0);
-    const totalInterest = totalPayment - loan;
+    const firstPayment     = schedule[0].payment;
+    const postGracePayment = grace > 0 ? schedule[graceMonths].payment : firstPayment;
+    const totalPayment     = schedule.reduce((s, row) => s + row.payment, 0);
+    const totalInterest    = totalPayment - loan;
 
-    document.getElementById('r-loan').textContent     = fmtW(loan);
-    document.getElementById('r-monthly').textContent  = `${fmt(firstPayment)} 元`;
-    document.getElementById('r-monthly-sub').textContent =
-      method === 'principal' ? '（首月，之後逐月遞減）' : '（每月固定）';
+    document.getElementById('r-loan').textContent    = fmtW(loan);
     document.getElementById('r-interest').textContent = fmtW(totalInterest);
-    document.getElementById('r-total').textContent    = fmtW(totalPayment);
+    document.getElementById('r-total').textContent   = fmtW(totalPayment);
 
-    // 公股銀行：收支比快速試算（× 1.4 ≈ 收支比 140%）
-    const minBase   = firstPayment + living + depTotal + otherDebt;
+    if (grace > 0) {
+      document.getElementById('r-monthly').textContent     = `${fmt(firstPayment)} 元`;
+      document.getElementById('r-monthly-sub').textContent = `寬限期 ${grace} 年，每月純付利息`;
+      document.getElementById('r-post-grace').textContent  = `${fmt(postGracePayment)} 元`;
+      document.getElementById('r-post-grace-sub').textContent =
+        method === 'principal' ? `第 ${grace+1} 年起首月，之後逐月遞減` : `第 ${grace+1} 年起，每月固定`;
+      show('r-post-grace-item');
+    } else {
+      document.getElementById('r-monthly').textContent     = `${fmt(firstPayment)} 元`;
+      document.getElementById('r-monthly-sub').textContent =
+        method === 'principal' ? '（首月，之後逐月遞減）' : '（每月固定）';
+      document.getElementById('r-post-grace-item').classList.add('hidden');
+    }
+
+    // 公股銀行：收支比快速試算（用寬限後金額，才是長期真實負擔）
+    const minBase   = postGracePayment + living + depTotal + otherDebt;
     const minIncome = minBase * 1.4;
     document.getElementById('r-min-income').textContent = `${fmt(minIncome)} 元`;
     document.getElementById('r-min-income-sub').textContent =
       `月支出合計 ${fmt(minBase)} 元 × 1.4` +
+      (grace > 0 ? `｜以寬限後月付款計算` : '') +
       (dependents > 0 ? `｜含 ${dependents} 位扶養人 ${fmt(depTotal)} 元` : '');
 
-    // 商業銀行：負債比快速試算（不含生活費）
-    const dtiBase = firstPayment + otherDebt;
+    // 商業銀行：負債比快速試算（不含生活費，用寬限後金額）
+    const dtiBase = postGracePayment + otherDebt;
     document.getElementById('r-dti-60').textContent = `${fmt(dtiBase / 0.6)} 元`;
 
     show('result-card');
 
-    // 收支比
+    // 收支比（用寬限後金額）
     if (income > 0) {
-      const totalExp = firstPayment + otherDebt + living + depTotal;
+      const totalExp = postGracePayment + otherDebt + living + depTotal;
       const ratio    = income / totalExp * 100;
 
       document.getElementById('ratio-value').textContent = ratio.toFixed(1) + '%';
@@ -799,7 +853,9 @@
     tbody.innerHTML = '';
     schedule.forEach(row => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${row.month}</td><td>${fmt(row.payment)}</td><td>${fmt(row.principal)}</td><td>${fmt(row.interest)}</td><td>${fmt(row.balance)}</td>`;
+      if (row.isGrace) tr.classList.add('grace-row');
+      const monthLabel = row.isGrace ? `${row.month} 🔵` : row.month;
+      tr.innerHTML = `<td>${monthLabel}</td><td>${fmt(row.payment)}</td><td>${row.isGrace ? '—' : fmt(row.principal)}</td><td>${fmt(row.interest)}</td><td>${fmt(row.balance)}</td>`;
       tbody.appendChild(tr);
     });
     show('detail-card');
