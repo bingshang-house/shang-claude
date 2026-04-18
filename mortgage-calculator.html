@@ -295,6 +295,20 @@
       .ratio-text .big { font-size: 1.4rem; }
     }
 
+    /* ── 自訂生活費輸入框 ── */
+    #living-custom {
+      margin-top: 8px;
+      width: 100%;
+      padding: 11px 12px;
+      border: 1.5px solid var(--yc-gold);
+      border-radius: 8px;
+      font-size: 1rem;
+      color: var(--text);
+      background: var(--white);
+      min-height: 44px;
+    }
+    #living-custom:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,183,0,0.15); }
+
     /* ── 免責聲明 ── */
     .disclaimer-block {
       background: #fff8e1;
@@ -433,27 +447,28 @@
         <span class="hint">車貸、信貸、信用卡分期等</span>
       </div>
       <div class="field full">
-        <label>每月基本生活費（本人）</label>
+        <label>每人每月生活費（本人及每位扶養人）</label>
         <div class="input-wrap">
-          <input type="number" id="living" value="15000" min="0" inputmode="decimal" />
-          <span class="unit">元</span>
+          <select id="living" onchange="toggleCustomLiving(this)">
+            <option value="16970" selected>高雄市　16,970 元</option>
+            <option value="20744">臺北市　20,744 元</option>
+            <option value="17750">新北市　17,750 元</option>
+            <option value="17186">桃園市　17,186 元</option>
+            <option value="16431">臺中市　16,431 元</option>
+            <option value="15515">臺南市 / 臺灣省各縣市　15,515 元</option>
+            <option value="15173">金門縣 / 連江縣　15,173 元</option>
+            <option value="custom">✏️ 自訂金額...</option>
+          </select>
         </div>
-        <span class="hint">銀行預設認定約 15,000 元，可依實際調整</span>
+        <input type="number" id="living-custom" class="hidden" placeholder="請輸入每月生活費（元）" min="0" inputmode="decimal" />
+        <span class="hint">115年度衛福部公告最低生活費，本人及每位扶養人均適用同一標準｜<a href="https://dep.mohw.gov.tw/dosaasw/cp-566-84031-103.html" target="_blank">查看官方公告 →</a></span>
       </div>
-      <div class="field">
-        <label>扶養人數（子女）</label>
+      <div class="field full">
+        <label>扶養人數（子女 / 父母）</label>
         <div class="input-wrap">
           <input type="number" id="dependents" placeholder="0" min="0" value="0" inputmode="numeric" />
           <span class="unit">人</span>
         </div>
-      </div>
-      <div class="field">
-        <label>每位扶養人每月生活費</label>
-        <div class="input-wrap">
-          <input type="number" id="dep-living" value="15000" min="0" inputmode="decimal" />
-          <span class="unit">元</span>
-        </div>
-        <span class="hint">預設 15,000 元</span>
       </div>
     </div>
   </div>
@@ -589,10 +604,12 @@
     const method     = document.getElementById('method').value;
     const income     = parseFloat(document.getElementById('income').value) || 0;
     const otherDebt  = parseFloat(document.getElementById('other-debt').value) || 0;
-    const living     = parseFloat(document.getElementById('living').value) || 15000;
+    const livingEl   = document.getElementById('living');
+    const living     = livingEl.value === 'custom'
+      ? (parseFloat(document.getElementById('living-custom').value) || 15000)
+      : parseFloat(livingEl.value) || 15000;
     const dependents = parseInt(document.getElementById('dependents').value) || 0;
-    const depLiving  = parseFloat(document.getElementById('dep-living').value) || 15000;
-    const depTotal   = dependents * depLiving;
+    const depTotal   = dependents * living;
 
     if (price <= 0 || annRate <= 0) { alert('請填入房屋總價與年利率'); return; }
     const loan = (price - down) * 10000;
@@ -689,6 +706,12 @@
 
   function show(id) { document.getElementById(id).classList.remove('hidden'); }
 
+  function toggleCustomLiving(sel) {
+    const el = document.getElementById('living-custom');
+    el.classList.toggle('hidden', sel.value !== 'custom');
+    if (sel.value === 'custom') el.focus();
+  }
+
   /* ── 分享 / 截圖 / 列印 / PDF ── */
   function generateShareText() {
     const price   = document.getElementById('price').value;
@@ -698,6 +721,10 @@
     const rate    = document.getElementById('rate').value;
     const sel     = document.getElementById('method');
     const method  = sel.options[sel.selectedIndex].text;
+    const livingEl   = document.getElementById('living');
+    const livingName = livingEl.value === 'custom'
+      ? `自訂 ${document.getElementById('living-custom').value} 元`
+      : livingEl.options[livingEl.selectedIndex].text.trim();
     const monthly   = document.getElementById('r-monthly').textContent;
     const loan      = document.getElementById('r-loan').textContent;
     const interest  = document.getElementById('r-interest').textContent;
@@ -713,6 +740,7 @@
       `━━━━━━━━━━━━━━\n` +
       `💳 每月還款：${monthly}\n` +
       `💸 總繳利息：${interest}\n` +
+      `🏙️ 生活費標準：${livingName}\n` +
       `📊 最低月收入需求：${minIncome}\n` +
       (ratio !== '—' ? `🏦 收支比：${ratio}\n` : '') +
       `━━━━━━━━━━━━━━\n` +
