@@ -595,7 +595,7 @@
 
     <!-- 代書快速試算（公股）-->
     <div class="quick-block">
-      <div class="q-label">🏦 最低月收入｜公股銀行（收支比）嚴格版</div>
+      <div class="q-label">🏦 最低月收入｜房仲及代書經驗速算版</div>
       <div class="q-value" id="r-min-income">—</div>
       <div class="q-sub" id="r-min-income-sub"></div>
       <div class="q-sub">算法：（月還款＋生活費＋扶養費＋其他負債）× 1.4</div>
@@ -880,12 +880,12 @@
     const bar = document.getElementById('agent-bar');
     const ph  = document.getElementById('print-header-sub');
     if (a.name || a.phone || a.line) {
-      document.getElementById('bar-name').textContent = a.name || '（未填姓名）';
+      document.getElementById('bar-name').textContent = `您的房產顧問：${a.name || '（未填姓名）'}`;
       const contactParts = [a.phone && `📞 ${a.phone}`, a.line && `LINE：${a.line}`].filter(Boolean);
       document.getElementById('bar-contact').textContent = contactParts.join('　');
       bar.classList.remove('hidden');
       // 同步更新列印標題
-      const phParts = [a.name, ...contactParts, '賞好賞不動產有限公司'].filter(Boolean);
+      const phParts = [a.name ? `您的房產顧問：${a.name}` : null, ...contactParts, '賞好賞不動產有限公司'].filter(Boolean);
       ph.textContent = phParts.join('　｜　');
     } else {
       bar.classList.add('hidden');
@@ -922,7 +922,7 @@
     const method  = sel.options[sel.selectedIndex].text;
     const ag = getAgent();
     const agentLine = [
-      ag.name  && `顧問：${ag.name}`,
+      ag.name  && `您的房產顧問：${ag.name}`,
       ag.phone && `📞 ${ag.phone}`,
       ag.line  && `LINE：${ag.line}`,
     ].filter(Boolean).join('　') || `亞灣賞哥｜賞好賞不動產有限公司`;
