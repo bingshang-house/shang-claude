@@ -295,6 +295,20 @@
       .ratio-text .big { font-size: 1.4rem; }
     }
 
+    /* ── 免責聲明 ── */
+    .disclaimer-block {
+      background: #fff8e1;
+      border: 1.5px solid #ffe082;
+      border-left: 4px solid #f59e0b;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 0.75rem;
+      color: #7a5500;
+      line-height: 1.7;
+      margin-top: 12px;
+    }
+    .disclaimer-block strong { color: #b45309; }
+
     /* ── 分享工具列 ── */
     .share-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
     .share-btn {
@@ -522,6 +536,10 @@
     </div>
   </div>
 
+  <div class="disclaimer-block">
+    ⚠️ <strong>重要聲明</strong>：本試算結果僅供初步參考，不代表任何銀行之核貸承諾。實際貸款金額、利率及核貸條件，須經各銀行正式審核後方可確認，最終結果以銀行書面通知為準。利率資料依 2026/02 央行統計，實際利率以各銀行公告為準，並可能隨市場變動調整。本工具由亞灣賞哥提供，僅作為諮詢參考之用。
+  </div>
+
   </div><!-- /capture-area -->
 
   <!-- 明細表 -->
@@ -542,7 +560,7 @@
 
 </div>
 
-<footer class="no-print">亞灣賞哥 × shang-Agent ｜ 本試算結果僅供參考，實際核貸以銀行為準</footer>
+<footer class="no-print">亞灣賞哥 × shang-Agent ｜ 本試算結果僅供初步參考，不代表任何銀行核貸承諾，實際條件以銀行書面審核結果為準</footer>
 
 <script>
   function setRate(val, btn) {
@@ -697,6 +715,9 @@
       `💸 總繳利息：${interest}\n` +
       `📊 最低月收入需求：${minIncome}\n` +
       (ratio !== '—' ? `🏦 收支比：${ratio}\n` : '') +
+      `━━━━━━━━━━━━━━\n` +
+      `⚠️ 本試算僅供參考，不代表銀行核貸承諾。\n` +
+      `實際貸款條件以各銀行正式審核結果為準。\n` +
       `━━━━━━━━━━━━━━\n` +
       `試算工具：https://bingshang-house.github.io/shang-claude/mortgage-calculator.html\n` +
       `諮詢：亞灣賞哥｜永慶不動產 高雄亞灣中華加盟店`;
