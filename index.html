@@ -555,14 +555,14 @@
   <div class="share-bar hidden no-print" id="share-bar">
     <button class="share-btn btn-screenshot" onclick="takeScreenshot()">📸 截圖</button>
     <button class="share-btn btn-line"       onclick="shareToLine()">💬 LINE 分享</button>
-    <button class="share-btn btn-print"      onclick="window.print()">🖨️ 列印</button>
+    <button class="share-btn btn-print"      onclick="printPage()">🖨️ 列印</button>
     <button class="share-btn btn-pdf"        onclick="downloadPDF()">📄 下載 PDF</button>
   </div>
 
   <div id="capture-area">
   <div class="print-header">
     <h2>🏠 房貸試算結果</h2>
-    <p>亞灣賞哥 ｜ 賞好賞不動產有限公司</p>
+    <p id="print-header-sub">亞灣賞哥 ｜ 賞好賞不動產有限公司</p>
   </div>
 
   <!-- 結果 -->
@@ -878,13 +878,18 @@
   function updateAgentBar() {
     const a   = getAgent();
     const bar = document.getElementById('agent-bar');
+    const ph  = document.getElementById('print-header-sub');
     if (a.name || a.phone || a.line) {
       document.getElementById('bar-name').textContent = a.name || '（未填姓名）';
-      const parts = [a.phone && `📞 ${a.phone}`, a.line && `LINE：${a.line}`].filter(Boolean);
-      document.getElementById('bar-contact').textContent = parts.join('　');
+      const contactParts = [a.phone && `📞 ${a.phone}`, a.line && `LINE：${a.line}`].filter(Boolean);
+      document.getElementById('bar-contact').textContent = contactParts.join('　');
       bar.classList.remove('hidden');
+      // 同步更新列印標題
+      const phParts = [a.name, ...contactParts, '賞好賞不動產有限公司'].filter(Boolean);
+      ph.textContent = phParts.join('　｜　');
     } else {
       bar.classList.add('hidden');
+      ph.textContent = '亞灣賞哥 ｜ 賞好賞不動產有限公司';
     }
   }
 
@@ -933,7 +938,8 @@
     const ratio     = document.getElementById('ratio-value').textContent;
     const dtiVal    = document.getElementById('dti-value').textContent;
     const dti60     = document.getElementById('r-dti-60').textContent;
-    return `【房貸試算結果】亞灣賞哥試算\n` +
+    const titleName = ag.name || '亞灣賞哥';
+    return `【房貸試算結果】${titleName}試算\n` +
       `━━━━━━━━━━━━━━\n` +
       `🏠 房屋總價：${price} 萬\n` +
       `💰 頭期款：${down} 萬（${downPct}）\n` +
@@ -996,29 +1002,80 @@
     });
   }
 
+  function printPage() {
+    // 列印前確保 print-header 已更新顧問資訊
+    updateAgentBar();
+    window.print();
+  }
+
+  function buildPdfCapture() {
+    // 建立暫時容器，含完整結果 + 明細表
+    const wrap = document.createElement('div');
+    wrap.style.cssText = `position:absolute;left:-9999px;top:0;width:${document.getElementById('capture-area').offsetWidth}px;background:#F7F5F0;padding:8px;`;
+
+    // clone capture-area（含 print-header，強制顯示）
+    const captureClone = document.getElementById('capture-area').cloneNode(true);
+    captureClone.querySelector('.print-header').style.display = 'block';
+    wrap.appendChild(captureClone);
+
+    // clone 明細表（若已計算）
+    const detailCard = document.getElementById('detail-card');
+    if (!detailCard.classList.contains('hidden')) {
+      const detailClone = detailCard.cloneNode(true);
+      detailClone.querySelector('#detail-wrap').classList.remove('hidden');
+      detailClone.querySelector('.toggle-detail').style.display = 'none';
+      detailClone.style.marginTop = '8px';
+      wrap.appendChild(detailClone);
+    }
+    return wrap;
+  }
+
   function downloadPDF() {
-    const el  = document.getElementById('capture-area');
     const btn = document.querySelector('.btn-pdf');
     btn.textContent = '⏳ 處理中...'; btn.disabled = true;
-    html2canvas(el, { scale: 2, backgroundColor: '#F7F5F0', useCORS: true, logging: false })
+
+    updateAgentBar();
+    const tempEl = buildPdfCapture();
+    document.body.appendChild(tempEl);
+
+    html2canvas(tempEl, { scale: 2, backgroundColor: '#F7F5F0', useCORS: true, logging: false })
       .then(canvas => {
+        document.body.removeChild(tempEl);
         if (isMobile) {
-          // 手機：開新分頁顯示圖片，長按可存到相簿
           const dataUrl = canvas.toDataURL('image/png');
           const w = window.open('', '_blank');
           if (w) {
             w.document.write(`<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>房貸試算結果</title></head><body style="margin:0;background:#222;text-align:center"><p style="color:#FFB700;padding:12px 10px 6px;font-size:15px;font-weight:bold">長按圖片 → 儲存至相簿 📥</p><img src="${dataUrl}" style="max-width:100%;display:block;margin:0 auto"></body></html>`);
           } else {
-            alert('請允許彈出視窗，或改用「截圖」按鈕儲存結果');
+            alert('請允許彈出視窗，或改用截圖功能');
           }
         } else {
-          // 電腦：下載 PDF
           const { jsPDF } = window.jspdf;
           const pdf    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
           const margin = 10;
-          const imgW   = pdf.internal.pageSize.getWidth() - margin * 2;
+          const pageW  = pdf.internal.pageSize.getWidth();
+          const pageH  = pdf.internal.pageSize.getHeight();
+          const imgW   = pageW - margin * 2;
           const imgH   = canvas.height * imgW / canvas.width;
-          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgW, imgH);
+          const pageContentH = pageH - margin * 2;
+          const imgData = canvas.toDataURL('image/png');
+
+          // 多頁處理
+          let remaining = imgH;
+          let page = 0;
+          while (remaining > 0) {
+            if (page > 0) pdf.addPage();
+            const sliceH = Math.min(pageContentH, remaining);
+            const sy     = (imgH - remaining) * (canvas.height / imgH);
+            const sh     = sliceH * (canvas.height / imgH);
+            const sliceCanvas = document.createElement('canvas');
+            sliceCanvas.width  = canvas.width;
+            sliceCanvas.height = sh;
+            sliceCanvas.getContext('2d').drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
+            pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgW, sliceH);
+            remaining -= pageContentH;
+            page++;
+          }
           const date = new Date().toLocaleDateString('zh-TW').replace(/\//g, '');
           pdf.save(`房貸試算_${date}.pdf`);
         }
