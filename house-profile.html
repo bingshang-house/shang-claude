@@ -532,6 +532,9 @@
               <tr><td class="key">土地持分</td><td id="td-land">－</td></tr>
               <tr><td class="key">使用分區</td><td id="td-zone">－</td></tr>
               <tr><td class="key">公告現值</td><td id="td-pub-val">－</td></tr>
+              <tr><td class="key">都市計畫</td><td id="td-urban-plan">－</td></tr>
+              <tr><td class="key">細部計畫</td><td id="td-detail-plan">－</td></tr>
+              <tr><td class="key">建蔽容積</td><td id="td-bcr-far">－</td></tr>
               <tr><td class="key">主建物面積</td><td id="td-main-area">－</td></tr>
               <tr><td class="key">附屬建物</td><td id="td-attached">－</td></tr>
               <tr><td class="key">共用部分</td><td id="td-pub-area">－</td></tr>
@@ -850,6 +853,8 @@
   // ===== 使用分區查詢（高雄市都計 GIS）=====
   const URBAN_PROXY = 'https://kcg-urban-proxy.bingshang1019.workers.dev';
   const PROXY_BASE  = 'http://urbanproxy.kcg.gov.tw/arcgis/rest/services';
+  const MAPGIS2     = 'https://mapgis2.kcg.gov.tw/server/rest/services';
+  const URBAN_MS    = `${PROXY_BASE}/Urban/KcgUrbanData_Alias/MapServer`;
   const DIST_CODE   = {
     '鹽埕區':'01','鼓山區':'02','左營區':'03','楠梓區':'04','三民區':'05',
     '新興區':'06','前金區':'07','苓雅區':'08','前鎮區':'09','旗津區':'10',
@@ -876,32 +881,96 @@
     const el = document.getElementById(`land-zone-${idx}`);
     if (!el) return;
     if (!distCode) { el.textContent = '⚠ 無法判斷行政區'; return; }
-    el.textContent = '⏳ 查詢使用分區中…';
+    el.textContent = '⏳ 查詢中…';
     el.style.color = '#92400e';
     try {
+      // 1. 地段代碼
       const w1 = encodeURIComponent(`DIST='${distCode}' AND KEY03='${sectName}'`);
       const d1 = await proxyFetch(`${PROXY_BASE}/KcgVT/KcgTB/MapServer/4/query?f=json&where=${w1}&returnGeometry=false&outFields=SECT&outSR=3826`);
       if (!d1.features?.length) { el.textContent = '⚠ 找不到地段'; return; }
       const sectCode = d1.features[0].attributes.SECT;
       const parts    = landNo.split('-');
       const landCode = parts[0].padStart(4,'0') + (parts[1]||'0').padStart(4,'0');
+
+      // 2. 使用分區代碼
       const w2 = encodeURIComponent(`ALL_SECT='${sectCode}' AND ALL_LAND='${landCode}'`);
       const d2 = await proxyFetch(`${PROXY_BASE}/KcgVT/KcgTB/MapServer/1/query?f=json&where=${w2}&returnGeometry=false&outFields=ALL_LUSE&outSR=3826`);
       if (!d2.features?.length) { el.textContent = '⚠ 查無分區資料'; return; }
       const luseCode = d2.features[0].attributes.ALL_LUSE;
+
+      // 3. 分區名稱
       const w3 = encodeURIComponent(`LUSE_CODE='${luseCode}'`);
       const d3 = await proxyFetch(`${PROXY_BASE}/KcgVT/KcgTB/MapServer/2/query?f=json&where=${w3}&returnGeometry=false&outFields=LUSE_DES2&outSR=3826`);
       const zoneName = d3.features?.[0]?.attributes?.LUSE_DES2 || '未知';
+
+      // 4. 公告現值/地價
       const w4 = encodeURIComponent(`AA01='${sectCode}' AND AA02+AA03='${landCode}'`);
       const d4 = await proxyFetch(`${PROXY_BASE}/AppData/LFB002_LAND/MapServer/1/query?f=json&where=${w4}&returnGeometry=false&outFields=AA11,AA12&outSR=3826`);
       const pubVal   = d4.features?.[0]?.attributes?.AA11 || 0;
       const pubPrice = d4.features?.[0]?.attributes?.AA12 || 0;
-      _landData[idx].zone     = zoneName;
-      _landData[idx].pubVal   = pubVal;
-      _landData[idx].pubPrice = pubPrice;
+
+      // 5. 取地籍坐標（空間查詢用）
+      let urbanPlan = '', detailPlan = '', bcr = '', far = '';
+      const wG = encodeURIComponent(`AA46='${distCode}' AND AA48='${sectCode}' AND CADA_TEXT='${landNo}'`);
+      const dG = await proxyFetch(`${MAPGIS2}/G97_E_LNPAR_P/MapServer/0/query?f=json&where=${wG}&returnGeometry=true&outFields=AA49&outSR=3826`);
+      if (dG.features?.length && dG.features[0].geometry?.rings?.[0]) {
+        const ring = dG.features[0].geometry.rings[0];
+        const cx = ring.reduce((s,p)=>s+p[0],0)/ring.length;
+        const cy = ring.reduce((s,p)=>s+p[1],0)/ring.length;
+        const spatialQ = new URLSearchParams({
+          f:'json',
+          geometry: JSON.stringify({x:cx,y:cy,spatialReference:{wkid:3826}}),
+          geometryType:'esriGeometryPoint',
+          inSR:'3826',
+          spatialRel:'esriSpatialRelIntersects',
+          returnGeometry:'false',
+          outSR:'3826'
+        });
+
+        // 6. 都市計畫/細部計畫名稱（KS_G layer 16）
+        spatialQ.set('outFields','UPNAME,URBANLEVEL,PUBDATE');
+        const d6 = await proxyFetch(`${URBAN_MS}/16/query?${spatialQ}`);
+        if (d6.features?.length) {
+          const valid = d6.features
+            .filter(f => f.attributes.UPNAME?.trim())
+            .sort((a,b) => (b.attributes.PUBDATE||0)-(a.attributes.PUBDATE||0));
+          const main   = valid.find(f => f.attributes.URBANLEVEL?.includes('主要'));
+          const detail = valid.find(f => f.attributes.URBANLEVEL?.includes('細部'));
+          if (main)   urbanPlan  = main.attributes.UPNAME.trim();
+          if (detail) detailPlan = detail.attributes.UPNAME.trim();
+        }
+
+        // 7. 建蔽率/容積率（KS_C layer 17）
+        spatialQ.set('outFields','NAME,BuildCvg,FloorArea');
+        const d7 = await proxyFetch(`${URBAN_MS}/17/query?${spatialQ}`);
+        if (d7.features?.length) {
+          const ca = d7.features[0].attributes;
+          bcr = ca.BuildCvg || '';
+          far = ca.FloorArea || '';
+        }
+      }
+
+      // 8. 若細部計畫無建蔽容積，從 KS_Plan（主要計畫分區）撈備援
+      if (!bcr && !far) {
+        const w8 = encodeURIComponent(`NAME='${zoneName}'`);
+        const d8 = await proxyFetch(`${URBAN_MS}/13/query?f=json&where=${w8}&returnGeometry=false&outFields=BCRTEXT,FARTEXT&outSR=3826`);
+        if (d8.features?.length) {
+          bcr = d8.features[0].attributes.BCRTEXT || '';
+          far = d8.features[0].attributes.FARTEXT || '';
+        }
+      }
+
+      _landData[idx].zone       = zoneName;
+      _landData[idx].pubVal     = pubVal;
+      _landData[idx].pubPrice   = pubPrice;
+      _landData[idx].urbanPlan  = urbanPlan;
+      _landData[idx].detailPlan = detailPlan;
+      _landData[idx].bcr        = bcr;
+      _landData[idx].far        = far;
+
       let msg = `✓ ${zoneName}`;
       if (pubVal)   msg += `　現值 ${pubVal.toLocaleString()} 元/m²`;
-      if (pubPrice) msg += `　地價 ${pubPrice.toLocaleString()} 元/m²`;
+      if (bcr||far) msg += `　建蔽 ${bcr} 容積 ${far}`;
       el.textContent = msg;
       el.style.color = '#1d4ed8';
       updateCard();
@@ -1165,6 +1234,11 @@
     } else {
       setText('td-pub-val', '－');
     }
+    const firstPlan = landEntries.find(e => e.urbanPlan || e.detailPlan);
+    setText('td-urban-plan', firstPlan?.urbanPlan || '－');
+    setText('td-detail-plan', firstPlan?.detailPlan || '－');
+    const firstBcr = landEntries.find(e => e.bcr || e.far);
+    setText('td-bcr-far', firstBcr ? `建蔽率 ${firstBcr.bcr||'－'}　容積率 ${firstBcr.far||'－'}` : '－');
     // 更新左側總坪數標示
     const totalLbl = document.getElementById('land-total-label');
     if (totalLbl) totalLbl.textContent = landTotal ? `土地持分合計：${landTotal} 坪` : '';
