@@ -932,31 +932,26 @@
           outSR:'3826'
         });
 
-        // 6+7. 都市計畫 + 細部計畫（使用 identify，與 GIS 網站相同機制）
-        const identifyQ = new URLSearchParams({
-          f: 'json',
-          geometry: JSON.stringify({x:cx, y:cy, spatialReference:{wkid:3826}}),
-          geometryType: 'esriGeometryPoint',
-          sr: '3826',
-          layers: 'visible:12,13',
-          tolerance: '1',
-          returnGeometry: 'false',
-          returnFieldName: 'true',
-          imageDisplay: '400,400,96',
-          mapExtent: `${cx-500},${cy-500},${cx+500},${cy+500}`
-        });
-        const dI = await proxyFetch(`${URBAN_MS}/identify?${identifyQ}`);
-        if (dI.results?.length) {
-          for (const r of dI.results) {
-            const a = r.attributes;
-            if (a.URBANNAME !== undefined) {
-              urbanPlan = a.URBANNAME?.trim() || '';
-              bcr = a.BCRTEXT || '';
-              far = a.FARTEXT || '';
-            } else if (a.NAME !== undefined && !detailPlan) {
-              detailPlan = a.NAME?.trim() || '';
-            }
-          }
+        // 6. 都市計畫 / 細部計畫名稱（KS_G layer 16，有 URBANLEVEL 分類）
+        spatialQ.set('outFields','UPNAME,URBANLEVEL,PUBDATE');
+        const d6 = await proxyFetch(`${URBAN_MS}/16/query?${spatialQ}`);
+        if (d6.features?.length) {
+          const valid = d6.features
+            .filter(f => f.attributes.UPNAME?.trim())
+            .sort((a,b) => (b.attributes.PUBDATE||0)-(a.attributes.PUBDATE||0));
+          const main   = valid.find(f => f.attributes.URBANLEVEL?.includes('主要'));
+          const detail = valid.find(f => f.attributes.URBANLEVEL?.includes('細部'));
+          if (main)   urbanPlan  = main.attributes.UPNAME.trim();
+          if (detail) detailPlan = detail.attributes.UPNAME.trim();
+        }
+
+        // 7. 建蔽率 / 容積率（KS_Plan layer 13，直接空間查詢）
+        spatialQ.set('outFields','NAME,BCRTEXT,FARTEXT');
+        const d7 = await proxyFetch(`${URBAN_MS}/13/query?${spatialQ}`);
+        if (d7.features?.length) {
+          const a = d7.features[0].attributes;
+          bcr = a.BCRTEXT || '';
+          far = a.FARTEXT || '';
         }
       }
 
