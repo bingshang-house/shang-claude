@@ -2435,12 +2435,33 @@ ${factsText}
     }
   }
 
-  async function topNRouted(places, loc, n, mode = 'DRIVING') {
+  async function topNRouted(places, loc, n, mode = 'DRIVING', maxMins = 30) {
     const rows = await routeMatrix(loc, places, mode);
     return rows
-      .filter(r => r.mins != null && r.mins <= 30)
+      .filter(r => r.mins != null && r.mins <= maxMins)
       .sort((a, b) => a.mins - b.mins)
       .slice(0, n);
+  }
+
+  // 名稱標準化（用於地點去重，例：「高雄亞灣新創園區」≡「亞灣新創園 Startup Terrace Kaohsiung」）
+  function normalizePlaceName(n) {
+    if (!n) return '';
+    return n
+      .split(/\s+/)[0]         // 去空白後半段（常是英文譯名）
+      .replace(/^高雄市?/, '')  // 去前綴「高雄」「高雄市」
+      .replace(/[（(].*?[）)]/g, '') // 去括號內容
+      .replace(/(園區|中心|廣場|大樓)$/, '') // 去常見尾綴
+      .replace(/區$/, '')
+      .trim();
+  }
+  // 互為子字串 或 標準化後相同 或 標準化後互為子字串 → 視為同一地點
+  function isSamePlace(a, b) {
+    if (!a || !b) return false;
+    if (a.includes(b) || b.includes(a)) return true;
+    const na = normalizePlaceName(a);
+    const nb = normalizePlaceName(b);
+    if (!na || !nb) return false;
+    return na === nb || (na.length >= 3 && (na.includes(nb) || nb.includes(na)));
   }
 
   async function doNearbySearch(silent = false) {
@@ -2497,15 +2518,16 @@ ${factsText}
       // 交流道：只保留名稱含「交流道/IC/入口」的
       const ichValid = interchange.filter(p => /交流道|IC\b|入口/.test(p.displayName || ''));
 
-      // ── 用 Distance Matrix 批次算實際車程（處理旗津過港隧道等跨地形案例）──
+      // ── 用 Distance Matrix 批次算實際路徑（處理旗津過港隧道等跨地形案例）──
       statusEl.textContent = '🚗 計算實際路徑時間中…';
-      const [subwayDR, ichDR, nmDR, dA_DR, dB_DR, devDR] = await Promise.all([
-        topNRouted(subway,     loc, 3, 'DRIVING'),
-        topNRouted(ichValid,   loc, 5, 'DRIVING'),
+      const [subwayDR, busWR, ichDR, nmDR, dA_DR, dB_DR, devDR] = await Promise.all([
+        topNRouted(subway,      loc, 3, 'DRIVING'),
+        topNRouted(bus,         loc, 5, 'WALKING', 15), // 公車站只收 15 分鐘步行內的
+        topNRouted(ichValid,    loc, 5, 'DRIVING'),
         topNRouted(nightmarket, loc, 1, 'DRIVING'),
-        topNRouted(districtA,  loc, 10, 'DRIVING'),
-        topNRouted(districtB,  loc, 10, 'DRIVING'),
-        topNRouted(devPOI,     loc, 10, 'DRIVING'),
+        topNRouted(districtA,   loc, 10, 'DRIVING'),
+        topNRouted(districtB,   loc, 10, 'DRIVING'),
+        topNRouted(devPOI,      loc, 10, 'DRIVING'),
       ]);
 
       // ── 1. 交通機能 ──
@@ -2513,22 +2535,18 @@ ${factsText}
       subwayDR.forEach(({ p, mins, mode }) => {
         trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（${travelText(mins, mode)}）`);
       });
-      const busTop = topN(bus, loc, 3);
-      if (busTop.length)
-        trafficLines.push(`公車站：${busTop.map(({ p }) => p.displayName).join('、')}`);
-      // 交流道名稱去重（「前鎮交流道」vs「中山高速公路前鎮交流道」視為同一）
-      const ichSeen = new Set();
+      if (busWR.length) {
+        const busNames = busWR.slice(0, 3).map(r => `${r.p.displayName}（${travelText(r.mins, r.mode)}）`);
+        trafficLines.push(`公車站：${busNames.join('、')}`);
+      }
+      // 交流道名稱去重
+      const ichSeen = [];
       ichDR.forEach(({ p, mins, mode }) => {
         const name = p.displayName;
         if (!name || name.length < 3) return;
-        let dup = false;
-        for (const seen of ichSeen) {
-          if (seen.includes(name) || name.includes(seen)) { dup = true; break; }
-        }
-        if (dup) return;
-        ichSeen.add(name);
+        if (ichSeen.some(s => isSamePlace(s, name))) return;
+        ichSeen.push(name);
         trafficLines.push(`${name}（${travelText(mins, mode)}）`);
-        if (trafficLines.length >= 6) return;
       });
       document.getElementById('s-traffic').value = trafficLines.slice(0, 6).join('\n');
 
@@ -2553,22 +2571,17 @@ ${factsText}
       }
       document.getElementById('s-life').value = lifeLines.slice(0, 5).join('\n');
 
-      // ── 3. 商圈特色（用 Distance Matrix 排序，不再用直線）──
+      // ── 3. 商圈特色（用 Distance Matrix 排序 + 標準化去重）──
       const locLines = [];
-      const locSeen = new Set();
+      const locSeen = [];
       [...dA_DR, ...dB_DR]
         .sort((a, b) => a.mins - b.mins)
         .forEach(({ p, mins, mode }) => {
           if (locLines.length >= 5) return;
           const name = p.displayName;
           if (!name || name.length < 3) return;
-          // 子字串去重
-          let dup = false;
-          for (const seen of locSeen) {
-            if (seen.includes(name) || name.includes(seen)) { dup = true; break; }
-          }
-          if (dup) return;
-          locSeen.add(name);
+          if (locSeen.some(s => isSamePlace(s, name))) return;
+          locSeen.push(name);
           locLines.push(`${name}（${travelText(mins, mode)}）`);
         });
       // 找不到商圈名 → 退公園（走路直線）
@@ -2580,19 +2593,15 @@ ${factsText}
       }
       document.getElementById('s-location').value = locLines.slice(0, 5).join('\n');
 
-      // ── 4. 重要發展（Distance Matrix + 名稱子字串去重）──
+      // ── 4. 重要發展（Distance Matrix + 標準化去重）──
       const devLines = [];
-      const devSeen = new Set();
+      const devSeen = [];
       devDR.forEach(({ p, mins, mode }) => {
         if (devLines.length >= 2) return;
         const name = p.displayName;
         if (!name || name.length < 3) return;
-        let dup = false;
-        for (const seen of devSeen) {
-          if (seen.includes(name) || name.includes(seen)) { dup = true; break; }
-        }
-        if (dup) return;
-        devSeen.add(name);
+        if (devSeen.some(s => isSamePlace(s, name))) return;
+        devSeen.push(name);
         devLines.push(`${name}（${travelText(mins, mode)}）`);
       });
       const district = deed.district || '';
