@@ -1153,8 +1153,28 @@
       return;
     }
 
-    // 多筆 → 優先找 status='新登錄' 且含「使字第」的
-    let pick = result.list.find(c => c.status === '新登錄' && /使字第/.test(c.license_desc || '')) || result.list[0];
+    // 多筆挑選邏輯：
+    // 1) 若 PDF 有字號，先比對完全一致的候選
+    // 2) 否則挑「使字第」且年份最大的
+    // 3) 都不行，退到年份最大那張（避免拿到最舊的變更案）
+    let pick = null;
+    if (d.licenseParsed) {
+      pick = result.list.find(c => {
+        const lp = parseLicense(c.license_desc);
+        return lp && lp.yy === d.licenseParsed.yy && lp.kind === d.licenseParsed.kind &&
+               lp.no1.replace(/^0+/, '') === d.licenseParsed.no1.replace(/^0+/, '');
+      });
+    }
+    if (!pick) {
+      const useLic = result.list.filter(c => /使字第/.test(c.license_desc || ''));
+      const pool = useLic.length ? useLic : result.list;
+      pool.sort((a, b) => {
+        const ay = parseInt(parseLicense(a.license_desc)?.yy || '0', 10);
+        const by = parseInt(parseLicense(b.license_desc)?.yy || '0', 10);
+        return by - ay;
+      });
+      pick = pool[0];
+    }
     _licSelected = pick.dkey;
     const info = await buildmisDetail(pick.dkey);
     if (!info) {
@@ -1456,10 +1476,13 @@
 
     // 所有權登記日期（建物所有權部 裡的登記日期，不是標示部的第一次登記日）
     {
-      const ownIdx = t.indexOf('建物所有權部');
+      // 放寬：允許「建物所有權部」中間夾空白；無則以「所有權人」位置向前回推
+      let ownIdx = t.search(/建\s*物\s*所\s*有\s*權\s*部/);
+      if (ownIdx < 0) ownIdx = t.search(/所\s*有\s*權\s*人/);
       if (ownIdx >= 0) {
-        const ownSec = t.slice(ownIdx);
-        const ownDateM = ownSec.match(/登記日期\s+民國(\d+)年\s*(\d+)月\s*(\d+)日/);
+        const ownEnd = t.search(/建\s*物\s*他\s*項\s*權\s*利\s*部/);
+        const ownSec = t.slice(ownIdx, ownEnd > ownIdx ? ownEnd : undefined);
+        const ownDateM = ownSec.match(/登\s*記\s*日\s*期\s*民\s*國\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/);
         if (ownDateM) d.ownerRegDate = `民國 ${ownDateM[1]} 年 ${ownDateM[2]} 月 ${ownDateM[3]} 日`;
       }
     }
