@@ -955,8 +955,8 @@
       const loNoM = t.match(/([^\s]{2,6}段(?:[^\s]{1,6}小段)?\s*[\d\-]+)\s*地號/);
       // 面積：「面積 XXXX 平方公尺」（排除「元/平方公尺」）
       const areaM = t.match(/面\s*積\s*([\d]+(?:\.[\d]+)?)\s*平方公尺/);
-      // 持分：「權利範圍 XXXXX分之YYYY」
-      const ratioM = t.match(/[権權]利[範][囲圍]\s*(\d+)分之(\d+)/);
+      // 持分：「權利範圍 XXXXX分之YYYY」（也接受「全部1分之1」「共有XX分之XX」前綴）
+      const ratioM = t.match(/[権權]利[範][囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/);
       if (areaM && ratioM) {
         const total = parseFloat(areaM[1]);
         const denom = parseInt(ratioM[1]);
