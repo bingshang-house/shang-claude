@@ -2433,18 +2433,24 @@ ${factsText}
           fields: ['*'],
         };
         const result = await RouteMatrix.computeRouteMatrix(request);
-        // 回傳可能是 Array / { elements } / sync iterable / async iterable，全部相容
+        // 回傳可能是 Array / { elements } / sync iterable / async iterable / { results } 等
         let elements = [];
         if (Array.isArray(result)) {
           elements = result;
         } else if (result && Array.isArray(result.elements)) {
           elements = result.elements;
+        } else if (result && Array.isArray(result.results)) {
+          elements = result.results;
+        } else if (result && Array.isArray(result.routeMatrixElements)) {
+          elements = result.routeMatrixElements;
         } else if (result && typeof result[Symbol.asyncIterator] === 'function') {
           for await (const el of result) elements.push(el);
         } else if (result && typeof result[Symbol.iterator] === 'function') {
           elements = [...result];
         } else {
-          throw new Error('unknown computeRouteMatrix response shape');
+          // 印出實際形狀供 debug
+          console.log('RouteMatrix raw result:', result, 'keys:', result && Object.keys(result));
+          throw new Error('unknown computeRouteMatrix response shape: ' + (result && Object.keys(result).join(',')));
         }
         for (const el of elements) {
           const place = chunk[el.destinationIndex];
