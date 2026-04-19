@@ -926,14 +926,15 @@
     return null;
   }
 
-  // 「瑞崗段四小段2945-0000」 + nlscSect=1025 → https://maps.nlsc.gov.tw/goland/E/102529450000
+  // 「瑞崗段四小段2945-0000」 + nlscSect=1025 → https://maps.nlsc.gov.tw/T09/mapshow.action?county=E&parno=102529450000
+  // 用 mapshow.action 直接定位（goland 路由是 frameset wrapper，某些情境不觸發內框）
   function nlscGolandUrl(entry) {
     if (!entry?.nlscSect || !entry?.loNo) return null;
     const m = entry.loNo.match(/(\d[\d-]*)\s*$/);
     if (!m) return null;
     const parts = m[1].split('-');
     const land8 = parts[0].padStart(4,'0') + (parts[1]||'0').padStart(4,'0');
-    return `https://maps.nlsc.gov.tw/goland/E/${entry.nlscSect}${land8}`;
+    return `https://maps.nlsc.gov.tw/T09/mapshow.action?county=E&parno=${entry.nlscSect}${land8}`;
   }
 
   function landNoHtml(entry) {
