@@ -2561,12 +2561,13 @@ ${factsText}
 
       statusEl.textContent = '🔎 搜尋周邊設施中…';
 
-      const [subway, busType, busText, convenience, market,
+      const [subway, busType, busText, ferryText, convenience, market,
              shopee, childcare, clinic, bank, nightmarket,
              districtA, districtB, park, devPOI, interchange] = await Promise.all([
         nearbySearch(loc, 'subway_station',    null,           3000),
         nearbySearch(loc, 'bus_station',       null,           1500),
         nearbySearch(loc, null, '公車站 公車站牌 客運站',      1500),
+        nearbySearch(loc, null, '渡輪站 輪渡站 渡船頭',        4000),
         nearbySearch(loc, 'convenience_store', null,            500),
         nearbySearch(loc, null, '傳統市場 菜市場',              1200),
         nearbySearch(loc, null, '蝦皮店到店',                   800),
@@ -2580,6 +2581,8 @@ ${factsText}
         nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  5000),
         nearbySearch(loc, null, '交流道 IC 快速道路交流道',    5000),
       ]);
+      // 渡輪站過濾（避免抓到相關店家）
+      const ferry = ferryText.filter(p => /渡輪|輪渡|渡船|碼頭/.test(p.displayName || ''));
 
       // 公車合併：type 搜尋 + 文字搜尋，去重（place.id 或名稱）
       const busAll = [...busType, ...busText];
@@ -2597,9 +2600,10 @@ ${factsText}
 
       // ── 用 Distance Matrix 批次算實際路徑（處理旗津過港隧道等跨地形案例）──
       statusEl.textContent = '🚗 計算實際路徑時間中…';
-      const [subwayDR, busWR, ichDR, nmDR, dA_DR, dB_DR, devDR] = await Promise.all([
+      const [subwayDR, busWR, ferryDR, ichDR, nmDR, dA_DR, dB_DR, devDR] = await Promise.all([
         topNRouted(subway,      loc, 3, 'DRIVING'),
         topNRouted(bus,         loc, 5, 'WALKING', 20), // 公車站只收 20 分鐘步行內的
+        topNRouted(ferry,       loc, 2, 'DRIVING'),      // 渡輪站（旗津/鼓山案例）
         topNRouted(ichValid,    loc, 5, 'DRIVING'),
         topNRouted(nightmarket, loc, 1, 'DRIVING'),
         topNRouted(districtA,   loc, 10, 'DRIVING'),
@@ -2616,6 +2620,9 @@ ${factsText}
         const busNames = busWR.slice(0, 3).map(r => `${r.p.displayName}（${travelText(r.mins, r.mode)}）`);
         trafficLines.push(`公車站：${busNames.join('、')}`);
       }
+      ferryDR.forEach(({ p, mins, mode }) => {
+        trafficLines.push(`${p.displayName}（${travelText(mins, mode)}）`);
+      });
       // 交流道名稱去重
       const ichSeen = [];
       ichDR.forEach(({ p, mins, mode }) => {
