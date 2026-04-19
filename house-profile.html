@@ -2622,7 +2622,7 @@ ${factsText}
         trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（${travelText(mins, mode)}）`);
       });
       if (busWR.length) {
-        const busNames = busWR.slice(0, 3).map(r => `${r.p.displayName}（${travelText(r.mins, r.mode)}）`);
+        const busNames = busWR.slice(0, 2).map(r => `${r.p.displayName}（${travelText(r.mins, r.mode)}）`);
         trafficLines.push(`公車站：${busNames.join('、')}`);
       }
       ferryDR.forEach(({ p, mins, mode }) => {
