@@ -6,11 +6,26 @@
   <title>房屋銷售介紹產生器</title>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <style>
+    :root {
+      --yc-gold: #FFB700;
+      --yc-dark: #CC8F00;
+      --yc-deep: #7A5500;
+      --yc-light: #FFF8E0;
+      --yc-pale: #FFFBF0;
+      --bg: #F7F5F0;
+      --white: #FFFFFF;
+      --text: #1A1A1A;
+      --text-sub: #666666;
+      --border: #E8E0CC;
+      --radius: 12px;
+      --shadow: 0 2px 16px rgba(0,0,0,0.08);
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Microsoft JhengHei', 'Noto Sans TC', 'PingFang TC', sans-serif;
-      background: #e8e8e8;
+      font-family: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
       font-size: 14px;
       display: flex;
       flex-direction: column;
@@ -19,16 +34,16 @@
 
     /* ===== TOP BAR ===== */
     .top-bar {
-      background: linear-gradient(135deg, #FFC107 0%, #FFB300 100%);
-      color: #8B1A2E;
+      background: var(--yc-gold);
+      color: var(--yc-deep);
       padding: 12px 20px;
       display: flex;
       align-items: center;
       gap: 14px;
       flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(255,167,0,0.25);
+      box-shadow: 0 2px 8px rgba(255,183,0,0.25);
     }
-    .top-title { font-size: 17px; font-weight: 800; color: #8B1A2E; letter-spacing: 2px; }
+    .top-title { font-size: 17px; font-weight: 800; color: #7A5500; letter-spacing: 2px; }
     .btn {
       padding: 8px 20px;
       border: none;
@@ -39,9 +54,9 @@
       font-weight: 700;
       transition: transform 0.15s, box-shadow 0.15s;
     }
-    .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(139,26,46,0.2); }
-    .btn-print  { background: #8B1A2E; color: white; }
-    .btn-reset  { background: rgba(139,26,46,0.12); color: #8B1A2E; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(122,85,0,0.2); }
+    .btn-print  { background: #7A5500; color: white; }
+    .btn-reset  { background: rgba(122,85,0,0.12); color: #7A5500; }
 
     /* ===== MAIN LAYOUT ===== */
     .main {
@@ -54,18 +69,18 @@
     .left-panel {
       width: 360px;
       min-width: 360px;
-      background: #FFF8E1;
+      background: #FFF8E0;
       display: flex;
       flex-direction: column;
       overflow-y: auto;
       max-height: calc(100vh - 48px);
-      border-right: 1px solid #F0D878;
+      border-right: 1px solid #E8E0CC;
     }
 
     /* Upload Zone */
     .upload-zone {
       margin: 14px;
-      border: 2px dashed #FF6B00;
+      border: 2px dashed #CC8F00;
       border-radius: 12px;
       padding: 20px 14px;
       text-align: center;
@@ -75,9 +90,9 @@
       background: #fff;
     }
     .upload-zone:hover, .upload-zone.drag-over {
-      border-color: #FF4E00;
-      background: #FFF5E6;
-      box-shadow: 0 2px 8px rgba(255,107,0,0.15);
+      border-color: #7A5500;
+      background: #FFF8E0;
+      box-shadow: 0 2px 8px rgba(204,143,0,0.15);
     }
     .upload-zone input[type=file] {
       position: absolute;
@@ -86,7 +101,7 @@
       cursor: pointer;
     }
     .upload-icon { font-size: 32px; margin-bottom: 6px; }
-    .upload-text { font-size: 15px; color: #8B1A2E; font-weight: 700; letter-spacing: 1px; }
+    .upload-text { font-size: 15px; color: #7A5500; font-weight: 700; letter-spacing: 1px; }
     .upload-hint { font-size: 12px; color: #999; margin-top: 4px; }
 
     /* Parse Status */
@@ -98,7 +113,7 @@
       font-weight: 600;
       display: none;
     }
-    .parse-status.ok      { background: #FFF5E6; color: #D35400; border: 1px solid #FFD699; display: block; }
+    .parse-status.ok      { background: #FFF8E0; color: #7A5500; border: 1px solid #E8E0CC; display: block; }
     .parse-status.error   { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; display: block; }
     .parse-status.loading { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; display: block; }
 
@@ -106,18 +121,18 @@
     .parsed-summary {
       margin: 0 14px 10px;
       background: #fff;
-      border: 1px solid #F0D878;
+      border: 1px solid #E8E0CC;
       border-radius: 10px;
       padding: 12px 14px;
       display: none;
-      box-shadow: 0 1px 4px rgba(139,26,46,0.06);
+      box-shadow: 0 1px 4px rgba(122,85,0,0.06);
     }
     .parsed-summary.show { display: block; }
-    .parsed-summary .ps-title { font-size: 11px; color: #8B1A2E; margin-bottom: 8px; font-weight: 700; letter-spacing: 1px; }
-    .ps-row { display: flex; justify-content: space-between; font-size: 13px; color: #333; padding: 4px 0; border-bottom: 1px dashed #F3E8B5; }
+    .parsed-summary .ps-title { font-size: 11px; color: #7A5500; margin-bottom: 8px; font-weight: 700; letter-spacing: 1px; }
+    .ps-row { display: flex; justify-content: space-between; font-size: 13px; color: #333; padding: 4px 0; border-bottom: 1px dashed #E8E0CC; }
     .ps-row:last-child { border-bottom: none; }
-    .ps-row .k { color: #8B1A2E; font-weight: 600; }
-    .ps-row .v { color: #FF4E00; font-weight: 700; }
+    .ps-row .k { color: #7A5500; font-weight: 600; }
+    .ps-row .v { color: #CC8F00; font-weight: 700; }
 
     /* Supplement Form */
     .supplement {
@@ -129,12 +144,12 @@
 
     .form-sep {
       font-size: 14px;
-      color: #8B1A2E;
+      color: #7A5500;
       font-weight: 700;
       letter-spacing: 1px;
       padding: 6px 0 6px 10px;
-      border-left: 4px solid #FF6B00;
-      background: linear-gradient(90deg, rgba(255,107,0,0.08) 0%, transparent 100%);
+      border-left: 4px solid #CC8F00;
+      background: linear-gradient(90deg, rgba(204,143,0,0.08) 0%, transparent 100%);
       margin-top: 4px;
       border-radius: 2px;
     }
@@ -148,14 +163,14 @@
     .fg input, .fg textarea, .fg select {
       padding: 8px 11px;
       background: #fff;
-      border: 1px solid #EBD990;
+      border: 1px solid #E8E0CC;
       color: #222;
       border-radius: 6px;
       font-size: 13px;
       font-family: inherit;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .fg input:focus, .fg textarea:focus { outline: none; border-color: #FF6B00; box-shadow: 0 0 0 3px rgba(255,107,0,0.15); }
+    .fg input:focus, .fg textarea:focus { outline: none; border-color: #CC8F00; box-shadow: 0 0 0 3px rgba(204,143,0,0.15); }
     .fg textarea { resize: vertical; min-height: 56px; }
     .fg .unit { font-size: 11px; color: #999; }
 
@@ -165,23 +180,23 @@
     .plan-upload-btn {
       padding: 10px;
       background: #fff;
-      border: 1px dashed #FF6B00;
+      border: 1px dashed #CC8F00;
       border-radius: 6px;
       text-align: center;
       cursor: pointer;
-      color: #FF6B00;
+      color: #CC8F00;
       font-size: 13px;
       font-weight: 700;
       transition: all 0.2s;
       position: relative;
     }
-    .plan-upload-btn:hover { background: #FFF5E6; border-color: #FF4E00; color: #FF4E00; }
+    .plan-upload-btn:hover { background: #FFF8E0; border-color: #7A5500; color: #7A5500; }
     .plan-upload-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
     .plan-name { font-size: 11px; color: #999; margin-top: 3px; }
 
     .btn-update {
       padding: 11px;
-      background: #FF6B00;
+      background: #CC8F00;
       color: white;
       border: none;
       border-radius: 20px;
@@ -193,7 +208,7 @@
       margin-top: 4px;
       letter-spacing: 1px;
     }
-    .btn-update:hover { background: #FF4E00; }
+    .btn-update:hover { background: #7A5500; }
 
     /* ===== RIGHT: A4 WRAPPER ===== */
     .right-panel {
@@ -217,7 +232,7 @@
 
     /* Header + Title 合併區塊 */
     .card-header {
-      background: linear-gradient(135deg, #8B1A2E 0%, #A52344 100%);
+      background: linear-gradient(135deg, #7A5500 0%, #CC8F00 100%);
       color: white;
       padding: 12px 16px 10px;
     }
@@ -226,7 +241,7 @@
       justify-content: space-between;
       align-items: baseline;
       font-size: 10px;
-      color: #FFD699;
+      color: #FFF8E0;
       margin-bottom: 6px;
     }
     .header-doc-title {
@@ -235,83 +250,83 @@
       letter-spacing: 3px;
       margin-bottom: 8px;
     }
-    .header-prop-addr { font-size: 11px; color: #FFE8CC; margin-top: 3px; }
+    .header-prop-addr { font-size: 11px; color: #FFF8E0; margin-top: 3px; }
     .header-company-row {
       margin-top: 8px;
       padding-top: 7px;
-      border-top: 1px solid rgba(255,215,153,.3);
+      border-top: 1px solid rgba(255,248,224,.3);
       font-size: 10px;
-      color: #FFD699;
+      color: #FFF8E0;
     }
 
     /* Price Bar */
     .price-bar {
-      background: #FFFBEB;
-      border-bottom: 3px solid #FF6B00;
+      background: #FFFBF0;
+      border-bottom: 3px solid #CC8F00;
       padding: 8px 14px;
       display: flex;
       align-items: center;
     }
     .price-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
-    .p-label { font-size: 10px; color: #8B1A2E; margin-bottom: 1px; font-weight: 600; }
-    .p-value { font-size: 22px; font-weight: 800; color: #FF4E00; line-height: 1; }
+    .p-label { font-size: 10px; color: #7A5500; margin-bottom: 1px; font-weight: 600; }
+    .p-value { font-size: 22px; font-weight: 800; color: #CC8F00; line-height: 1; }
     .p-unit  { font-size: 10px; color: #999; margin-top: 1px; }
-    .price-divider { width: 1px; height: 38px; background: #F0D878; flex-shrink: 0; }
+    .price-divider { width: 1px; height: 38px; background: #E8E0CC; flex-shrink: 0; }
 
     /* Card Body */
     .card-body { flex: 1; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 
     .section-bar { padding: 4px 10px; font-size: 11px; font-weight: 700; color: white; letter-spacing: 1px; }
-    .bar-blue   { background: #8B1A2E; }
-    .bar-red    { background: #FF6B00; }
-    .bar-green  { background: #C68400; }
-    .bar-purple { background: #A52344; }
+    .bar-blue   { background: #7A5500; }
+    .bar-red    { background: #A88200; }
+    .bar-green  { background: #CC8F00; }
+    .bar-purple { background: #8A6500; }
 
     /* Info + Map */
     .info-map-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-    .info-box { border: 1px solid #F0D878; border-radius: 4px; overflow: hidden; }
+    .info-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
     .info-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    .info-table td { padding: 4px 7px; border-bottom: 1px solid #F3E8B5; }
+    .info-table td { padding: 4px 7px; border-bottom: 1px solid #E8E0CC; }
     .info-table tr:last-child td { border-bottom: none; }
-    .info-table tr:nth-child(even) td:last-child { background: #FFFBEB; }
-    .info-table td.key { background: #8B1A2E; color: white; font-weight: 500; width: 38%; white-space: nowrap; }
+    .info-table tr:nth-child(even) td:last-child { background: #FFFBF0; }
+    .info-table td.key { background: #7A5500; color: white; font-weight: 500; width: 38%; white-space: nowrap; }
 
-    .map-box { border: 1px solid #F0D878; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
+    .map-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
     .map-box iframe { width: 100%; height: 208px; border: none; display: block; }
-    .map-placeholder { height: 208px; background: #FFF8E1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #B88A00; font-size: 11px; gap: 4px; }
+    .map-placeholder { height: 208px; background: #FFF8E0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #7A5500; font-size: 11px; gap: 4px; }
 
     /* Plan + Points */
     .plan-points-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-    .plan-box { border: 1px solid #F0D878; border-radius: 4px; overflow: hidden; }
-    .plan-content { min-height: 140px; display: flex; align-items: center; justify-content: center; background: #FFFBEB; }
+    .plan-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
+    .plan-content { min-height: 140px; display: flex; align-items: center; justify-content: center; background: #FFFBF0; }
     .plan-content img { max-width: 100%; max-height: 140px; object-fit: contain; display: block; }
-    .plan-content .no-img { color: #B88A00; font-size: 11px; text-align: center; }
+    .plan-content .no-img { color: #7A5500; font-size: 11px; text-align: center; }
     .plan-content .no-img .pi { font-size: 28px; display: block; margin-bottom: 4px; }
 
-    .points-box { border: 1px solid #F0D878; border-radius: 4px; overflow: hidden; }
+    .points-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
     .points-list { padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
     .point-item { font-size: 11px; color: #333; display: flex; align-items: flex-start; gap: 5px; line-height: 1.5; }
-    .point-star { color: #FF6B00; flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+    .point-star { color: #CC8F00; flex-shrink: 0; font-size: 11px; margin-top: 1px; }
 
     /* Surroundings */
-    .surr-box { border: 1px solid #F0D878; border-radius: 4px; overflow: hidden; }
+    .surr-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
     .surr-grid { display: grid; grid-template-columns: 1fr 1fr; }
-    .surr-item { padding: 7px 10px; border-right: 1px solid #F3E8B5; border-bottom: 1px solid #F3E8B5; font-size: 12px; }
+    .surr-item { padding: 7px 10px; border-right: 1px solid #E8E0CC; border-bottom: 1px solid #E8E0CC; font-size: 12px; }
     .surr-item:nth-child(even) { border-right: none; }
     .surr-item:nth-child(n+5)  { border-bottom: none; }
     .surr-full { grid-column: 1 / -1; border-right: none; }
-    .surr-label { font-weight: 700; color: #8B1A2E; font-size: 11px; margin-bottom: 4px; }
+    .surr-label { font-weight: 700; color: #7A5500; font-size: 11px; margin-bottom: 4px; }
     .surr-content { color: #333; line-height: 1.7; white-space: pre-wrap; }
 
     /* Description */
-    .desc-box { border: 1px solid #F0D878; border-radius: 4px; overflow: hidden; }
+    .desc-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
     .desc-content { padding: 8px 10px; font-size: 11px; color: #333; line-height: 1.7; white-space: pre-wrap; }
 
     /* Footer */
     .card-footer {
-      background: linear-gradient(135deg, #8B1A2E 0%, #A52344 100%);
+      background: linear-gradient(135deg, #7A5500 0%, #CC8F00 100%);
       color: white;
       padding: 8px 14px;
       display: flex;
@@ -320,21 +335,21 @@
       margin-top: auto;
     }
     .agent-name  { font-size: 17px; font-weight: 700; }
-    .agent-title { font-size: 10px; color: #FFD699; margin-top: 1px; }
+    .agent-title { font-size: 10px; color: #FFF8E0; margin-top: 1px; }
     .agent-right { text-align: right; }
-    .agent-phone { font-size: 17px; font-weight: 800; color: #FFC107; }
-    .agent-fb    { font-size: 10px; color: #FFD699; margin-top: 2px; }
+    .agent-phone { font-size: 17px; font-weight: 800; color: #FFB700; }
+    .agent-fb    { font-size: 10px; color: #FFF8E0; margin-top: 2px; }
 
     /* Pending */
-    .pending { color: #FF6B00; font-style: italic; font-weight: 600; }
+    .pending { color: #CC8F00; font-style: italic; font-weight: 600; }
 
     /* TGOS Settings */
-    .tgos-settings { border:1px solid #F0D878; border-radius:10px; margin:14px 14px 10px; overflow:hidden; background:#fff; }
-    .tgos-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fff; cursor:pointer; font-size:13px; font-weight:700; color:#8B1A2E; }
-    .tgos-header:hover { background:#FFF5E6; }
-    .tgos-body { padding:12px; background:#fff; border-top:1px solid #F3E8B5; }
+    .tgos-settings { border:1px solid #E8E0CC; border-radius:10px; margin:14px 14px 10px; overflow:hidden; background:#fff; }
+    .tgos-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fff; cursor:pointer; font-size:13px; font-weight:700; color:#7A5500; }
+    .tgos-header:hover { background:#FFF8E0; }
+    .tgos-body { padding:12px; background:#fff; border-top:1px solid #E8E0CC; }
     .tgos-badge { font-size:11px; padding:3px 10px; border-radius:12px; font-weight:600; }
-    .tgos-badge.ok  { background:#FFF5E6; color:#FF6B00; }
+    .tgos-badge.ok  { background:#FFF8E0; color:#CC8F00; }
     .tgos-badge.no  { background:#FCE8E8; color:#D32F2F; }
 
     /* ===== PRINT ===== */
@@ -383,7 +398,7 @@
           <label style="font-size:11px;">API Key</label>
           <input type="text" id="gmApiKey" placeholder="填入 Google Maps API Key" style="font-size:11px;">
         </div>
-        <button onclick="saveApiKeys()" style="width:100%;padding:8px;background:#FF6B00;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">儲存全部設定</button>
+        <button onclick="saveApiKeys()" style="width:100%;padding:8px;background:#CC8F00;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">儲存全部設定</button>
       </div>
     </div>
 
@@ -409,8 +424,8 @@
 
       <div class="form-sep">土地資訊</div>
       <div id="land-entries"></div>
-      <button class="btn-sm" onclick="addLandEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #FF6B00;color:#FF6B00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增土地筆</button>
-      <div id="land-total-label" style="font-size:12px;color:#8B1A2E;font-weight:600;"></div>
+      <button class="btn-sm" onclick="addLandEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #CC8F00;color:#CC8F00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增土地筆</button>
+      <div id="land-total-label" style="font-size:12px;color:#7A5500;font-weight:600;"></div>
 
       <div class="form-sep">補充資料</div>
 
@@ -457,7 +472,7 @@
 
       <div class="form-sep">周遭機能（可由 AI 協助填入）</div>
 
-      <button id="btnNearby" onclick="doNearbySearch()" style="width:100%;margin-bottom:10px;padding:10px;background:linear-gradient(135deg,#FF6B00 0%,#FF4E00 100%);color:#fff;border:none;border-radius:22px;cursor:pointer;font-size:14px;font-weight:700;letter-spacing:1px;box-shadow:0 2px 6px rgba(255,107,0,0.3);">🗺️ 自動查詢周邊機能</button>
+      <button id="btnNearby" onclick="doNearbySearch()" style="width:100%;margin-bottom:10px;padding:10px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:22px;cursor:pointer;font-size:14px;font-weight:700;letter-spacing:1px;box-shadow:0 2px 6px rgba(204,143,0,0.3);">🗺️ 自動查詢周邊機能</button>
       <div id="nearby-status" style="font-size:11px;color:#666;margin-bottom:8px;min-height:0;"></div>
 
       <div class="fg">
@@ -771,24 +786,24 @@
     _landData[idx] = preset || { loNo: '', ping: 0, detail: '' };
     const div  = document.createElement('div');
     div.id     = `land-entry-${idx}`;
-    div.style.cssText = 'border:1px solid #F0D878;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 2px 6px rgba(139,26,46,0.08);';
+    div.style.cssText = 'border:1px solid #E8E0CC;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 2px 6px rgba(122,85,0,0.08);';
     div.innerHTML = `
       <div style="display:flex;gap:6px;align-items:flex-start;">
         <div style="flex:1;">
           <label style="font-size:12px;color:#555;font-weight:600;">地號</label>
           <input type="text" id="land-lono-${idx}" placeholder="例：愛群段2945" value="${preset?.loNo||''}"
-            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #EBD990;border-radius:6px;font-size:13px;"
+            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #E8E0CC;border-radius:6px;font-size:13px;"
             oninput="_landData[${idx}].loNo=this.value;updateCard()">
         </div>
         <div style="flex:1;">
           <label style="font-size:12px;color:#555;font-weight:600;">持分坪數</label>
           <input type="number" placeholder="例：3.83" step="0.01" min="0" value="${preset?.ping||''}"
-            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #EBD990;border-radius:6px;font-size:13px;"
+            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #E8E0CC;border-radius:6px;font-size:13px;"
             id="land-ping-${idx}"
             oninput="_landData[${idx}].ping=parseFloat(this.value)||0;updateCard()">
         </div>
         <button onclick="removeLandEntry(${idx})" title="移除"
-          style="background:#8B1A2E;color:#fff;border:none;border-radius:50%;width:28px;height:28px;padding:0;cursor:pointer;margin-top:20px;font-size:13px;flex-shrink:0;">✕</button>
+          style="background:#7A5500;color:#fff;border:none;border-radius:50%;width:28px;height:28px;padding:0;cursor:pointer;margin-top:20px;font-size:13px;flex-shrink:0;">✕</button>
       </div>
       <div style="margin-top:5px;">
         <label style="font-size:12px;color:#555;font-weight:600;">上傳土地謄本 PDF（選填，自動解析）</label>
