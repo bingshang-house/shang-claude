@@ -1572,7 +1572,8 @@
     if (flrTotalM) d.totalFloors = parseInt(flrTotalM[1]);
 
     // 層次 (本戶樓層) — 支援多層次（整棟建物），同時抓每層面積
-    const flrRows = [...t.matchAll(/層次\s*([^\s]{1,6}?)\s*層次面積\s*([\d.]+)\s*平方公尺/g)]
+    // PDF.js 會把「層次面積」「平方公尺」拆成單字，每字間都要 \s*
+    const flrRows = [...t.matchAll(/層\s*次\s+([^\s]{1,6}?)\s*層\s*次\s*面\s*積\s*([\d.]+)\s*平\s*方\s*公\s*尺/g)]
       .map(m => ({ name: m[1].trim(), area: parseFloat(m[2]) }));
     const flrAll = flrRows.map(r => r.name);
     if (flrAll.length > 1) {
@@ -1589,8 +1590,8 @@
       if (addrFlM) d.floor = chFloor(addrFlM[1]) || parseInt(addrFlM[1]);
     }
 
-    // 總面積
-    const areaM = t.match(/總面積\s+([\d.]+)平方公尺/);
+    // 總面積（防 PDF.js 拆字）
+    const areaM = t.match(/總\s*面\s*積\s*([\d.]+)\s*平\s*方\s*公\s*尺/);
     if (areaM) d.mainArea = parseFloat(areaM[1]);
 
     // 建築完成日期
@@ -1788,8 +1789,8 @@
 
     // Info table
     setText('td-floor',    d.isWholeBuilding
-      ? `全棟（共 ${d.totalFloors} 層，${d.floor}F－${d.floorTop}F）`
-      : d.floor ? `${d.floor}F` : '－');
+      ? `全棟（共 ${d.totalFloors} 層）`
+      : d.floor ? (typeof d.floor === 'number' ? `${d.floor}F` : d.floor) : '－');
     setText('td-completion', d.completionRoc
       ? `民國 ${d.completionRoc} 年（屋齡 ${d.age}）`
       : d.age || '－');
