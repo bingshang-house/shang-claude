@@ -267,10 +267,11 @@
       display: flex;
       align-items: center;
     }
-    .price-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
-    .p-label { font-size: 10px; color: #7A5500; margin-bottom: 1px; font-weight: 600; }
-    .p-value { font-size: 22px; font-weight: 800; color: #CC8F00; line-height: 1; }
-    .p-unit  { font-size: 10px; color: #999; margin-top: 1px; }
+    .price-item { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 3px; }
+    .p-label { font-size: 10px; color: #7A5500; font-weight: 600; }
+    .p-value { font-size: 22px; font-weight: 800; color: #CC8F00; line-height: 1; display: inline-flex; align-items: baseline; gap: 3px; }
+    .p-value .p-unit { font-size: 11px; font-weight: 600; color: #888; }
+    .p-sub { font-size: 10px; color: #A88200; font-weight: 500; }
     .price-divider { width: 1px; height: 38px; background: #E8E0CC; flex-shrink: 0; }
 
     /* Card Body */
@@ -574,27 +575,23 @@
 
       <div class="price-bar">
         <div class="price-item">
-          <div class="p-label">售價（含車位）</div>
-          <div class="p-value" id="out-price">－</div>
-          <div class="p-unit">萬元</div>
+          <div class="p-label" id="out-price-label">售價（含車位）</div>
+          <div class="p-value"><span id="out-price">－</span><span class="p-unit">萬元</span></div>
         </div>
         <div class="price-divider"></div>
         <div class="price-item">
           <div class="p-label">不含車位坪數</div>
-          <div class="p-value" id="out-ping">－</div>
-          <div class="p-unit">坪</div>
+          <div class="p-value"><span id="out-ping">－</span><span class="p-unit">坪</span></div>
         </div>
         <div class="price-divider"></div>
         <div class="price-item">
           <div class="p-label">單價（不含車位）</div>
-          <div class="p-value" id="out-unit">－</div>
-          <div class="p-unit">萬／坪</div>
+          <div class="p-value"><span id="out-unit">－</span><span class="p-unit">萬／坪</span></div>
         </div>
         <div class="price-divider"></div>
         <div class="price-item">
           <div class="p-label">含車位總坪</div>
-          <div class="p-value" id="out-ping-total">－</div>
-          <div class="p-unit">坪</div>
+          <div class="p-value"><span id="out-ping-total">－</span><span class="p-unit">坪</span></div>
         </div>
       </div>
 
@@ -1780,6 +1777,9 @@
     document.getElementById('out-ping').textContent       = d.totalNoPark   || '－';
     document.getElementById('out-unit').textContent       = unitPrice;
     document.getElementById('out-ping-total').textContent = d.totalWithPark || '－';
+    document.getElementById('out-price-label').textContent = parkPrice
+      ? `售價（含車位價 ${parkPrice} 萬）`
+      : '售價（含車位）';
 
     // Info table
     setText('td-floor',    d.isWholeBuilding
