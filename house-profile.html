@@ -9,7 +9,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
+      font-family: 'Microsoft JhengHei', 'Noto Sans TC', 'PingFang TC', sans-serif;
       background: #e8e8e8;
       font-size: 14px;
       display: flex;
@@ -19,26 +19,29 @@
 
     /* ===== TOP BAR ===== */
     .top-bar {
-      background: #D41B2C;
+      background: linear-gradient(135deg, #8B1A2E 0%, #A52344 100%);
       color: white;
-      padding: 10px 20px;
+      padding: 12px 20px;
       display: flex;
       align-items: center;
       gap: 14px;
       flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
     }
-    .top-title { font-size: 15px; font-weight: 700; color: #ffffff; letter-spacing: 1px; }
+    .top-title { font-size: 16px; font-weight: 700; color: #ffffff; letter-spacing: 2px; }
     .btn {
-      padding: 7px 18px;
+      padding: 8px 20px;
       border: none;
-      border-radius: 4px;
+      border-radius: 20px;
       cursor: pointer;
       font-size: 13px;
       font-family: inherit;
       font-weight: 700;
+      transition: transform 0.15s, box-shadow 0.15s;
     }
-    .btn-print  { background: white; color: #D41B2C; }
-    .btn-reset  { background: rgba(255,255,255,0.25); color: white; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+    .btn-print  { background: #FF6B00; color: white; }
+    .btn-reset  { background: rgba(255,255,255,0.22); color: white; }
 
     /* ===== MAIN LAYOUT ===== */
     .main {
@@ -51,19 +54,19 @@
     .left-panel {
       width: 360px;
       min-width: 360px;
-      background: #F5F5F7;
+      background: #FFF8E1;
       display: flex;
       flex-direction: column;
       overflow-y: auto;
-      max-height: calc(100vh - 46px);
-      border-right: 1px solid #E0E0E0;
+      max-height: calc(100vh - 48px);
+      border-right: 1px solid #F0D878;
     }
 
     /* Upload Zone */
     .upload-zone {
       margin: 14px;
-      border: 2px dashed #D41B2C;
-      border-radius: 8px;
+      border: 2px dashed #FF6B00;
+      border-radius: 12px;
       padding: 20px 14px;
       text-align: center;
       cursor: pointer;
@@ -72,8 +75,9 @@
       background: #fff;
     }
     .upload-zone:hover, .upload-zone.drag-over {
-      border-color: #a01320;
-      background: #FFF5F5;
+      border-color: #FF4E00;
+      background: #FFF5E6;
+      box-shadow: 0 2px 8px rgba(255,107,0,0.15);
     }
     .upload-zone input[type=file] {
       position: absolute;
@@ -81,19 +85,20 @@
       opacity: 0;
       cursor: pointer;
     }
-    .upload-icon { font-size: 30px; margin-bottom: 6px; }
-    .upload-text { font-size: 14px; color: #222; font-weight: 700; }
+    .upload-icon { font-size: 32px; margin-bottom: 6px; }
+    .upload-text { font-size: 15px; color: #8B1A2E; font-weight: 700; letter-spacing: 1px; }
     .upload-hint { font-size: 12px; color: #999; margin-top: 4px; }
 
     /* Parse Status */
     .parse-status {
       margin: 0 14px 10px;
-      padding: 9px 12px;
-      border-radius: 6px;
+      padding: 10px 14px;
+      border-radius: 8px;
       font-size: 13px;
+      font-weight: 600;
       display: none;
     }
-    .parse-status.ok      { background: #e6f9ef; color: #1a7a42; border: 1px solid #a3e6c0; display: block; }
+    .parse-status.ok      { background: #FFF5E6; color: #D35400; border: 1px solid #FFD699; display: block; }
     .parse-status.error   { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; display: block; }
     .parse-status.loading { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; display: block; }
 
@@ -101,16 +106,18 @@
     .parsed-summary {
       margin: 0 14px 10px;
       background: #fff;
-      border: 1px solid #E8E8E8;
-      border-radius: 6px;
-      padding: 10px 12px;
+      border: 1px solid #F0D878;
+      border-radius: 10px;
+      padding: 12px 14px;
       display: none;
+      box-shadow: 0 1px 4px rgba(139,26,46,0.06);
     }
     .parsed-summary.show { display: block; }
-    .parsed-summary .ps-title { font-size: 11px; color: #999; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    .ps-row { display: flex; justify-content: space-between; font-size: 13px; color: #333; padding: 3px 0; border-bottom: 1px solid #F0F0F0; }
+    .parsed-summary .ps-title { font-size: 11px; color: #8B1A2E; margin-bottom: 8px; font-weight: 700; letter-spacing: 1px; }
+    .ps-row { display: flex; justify-content: space-between; font-size: 13px; color: #333; padding: 4px 0; border-bottom: 1px dashed #F3E8B5; }
     .ps-row:last-child { border-bottom: none; }
-    .ps-row .k { color: #D41B2C; font-weight: 600; }
+    .ps-row .k { color: #8B1A2E; font-weight: 600; }
+    .ps-row .v { color: #FF4E00; font-weight: 700; }
 
     /* Supplement Form */
     .supplement {
@@ -121,13 +128,15 @@
     }
 
     .form-sep {
-      font-size: 13px;
-      color: #D41B2C;
+      font-size: 14px;
+      color: #8B1A2E;
       font-weight: 700;
-      letter-spacing: 0.5px;
-      padding-bottom: 6px;
-      border-bottom: 2px solid #D41B2C;
+      letter-spacing: 1px;
+      padding: 6px 0 6px 10px;
+      border-left: 4px solid #FF6B00;
+      background: linear-gradient(90deg, rgba(255,107,0,0.08) 0%, transparent 100%);
       margin-top: 4px;
+      border-radius: 2px;
     }
 
     .fg {
@@ -135,18 +144,18 @@
       flex-direction: column;
       gap: 4px;
     }
-    .fg label { font-size: 12px; color: #555; font-weight: 500; }
+    .fg label { font-size: 12px; color: #555; font-weight: 600; }
     .fg input, .fg textarea, .fg select {
-      padding: 7px 10px;
+      padding: 8px 11px;
       background: #fff;
-      border: 1px solid #DCDCDC;
+      border: 1px solid #EBD990;
       color: #222;
-      border-radius: 5px;
+      border-radius: 6px;
       font-size: 13px;
       font-family: inherit;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .fg input:focus, .fg textarea:focus { outline: none; border-color: #D41B2C; box-shadow: 0 0 0 2px rgba(212,27,44,0.1); }
+    .fg input:focus, .fg textarea:focus { outline: none; border-color: #FF6B00; box-shadow: 0 0 0 3px rgba(255,107,0,0.15); }
     .fg textarea { resize: vertical; min-height: 56px; }
     .fg .unit { font-size: 11px; color: #999; }
 
@@ -154,36 +163,37 @@
 
     /* Plan upload in left panel */
     .plan-upload-btn {
-      padding: 9px;
+      padding: 10px;
       background: #fff;
-      border: 1px dashed #D41B2C;
-      border-radius: 5px;
+      border: 1px dashed #FF6B00;
+      border-radius: 6px;
       text-align: center;
       cursor: pointer;
-      color: #D41B2C;
+      color: #FF6B00;
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 700;
       transition: all 0.2s;
       position: relative;
     }
-    .plan-upload-btn:hover { background: #FFF5F5; }
+    .plan-upload-btn:hover { background: #FFF5E6; border-color: #FF4E00; color: #FF4E00; }
     .plan-upload-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
     .plan-name { font-size: 11px; color: #999; margin-top: 3px; }
 
     .btn-update {
       padding: 11px;
-      background: #D41B2C;
+      background: #FF6B00;
       color: white;
       border: none;
-      border-radius: 5px;
+      border-radius: 20px;
       cursor: pointer;
       font-size: 14px;
       font-weight: 700;
       font-family: inherit;
       width: 100%;
       margin-top: 4px;
+      letter-spacing: 1px;
     }
-    .btn-update:hover { background: #a01320; }
+    .btn-update:hover { background: #FF4E00; }
 
     /* ===== RIGHT: A4 WRAPPER ===== */
     .right-panel {
@@ -319,13 +329,13 @@
     .pending { color: #e67e22; font-style: italic; }
 
     /* TGOS Settings */
-    .tgos-settings { border:1px solid #E0E0E0; border-radius:6px; margin-bottom:10px; overflow:hidden; background:#fff; }
-    .tgos-header { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; background:#fff; cursor:pointer; font-size:13px; font-weight:600; color:#333; border-bottom:1px solid transparent; }
-    .tgos-header:hover { background:#FFF5F5; }
-    .tgos-body { padding:12px; background:#fff; border-top:1px solid #F0F0F0; }
-    .tgos-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:500; }
-    .tgos-badge.ok  { background:#dcfce7; color:#16a34a; }
-    .tgos-badge.no  { background:#fee2e2; color:#dc2626; }
+    .tgos-settings { border:1px solid #F0D878; border-radius:10px; margin:14px 14px 10px; overflow:hidden; background:#fff; }
+    .tgos-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fff; cursor:pointer; font-size:13px; font-weight:700; color:#8B1A2E; }
+    .tgos-header:hover { background:#FFF5E6; }
+    .tgos-body { padding:12px; background:#fff; border-top:1px solid #F3E8B5; }
+    .tgos-badge { font-size:11px; padding:3px 10px; border-radius:12px; font-weight:600; }
+    .tgos-badge.ok  { background:#FFF5E6; color:#FF6B00; }
+    .tgos-badge.no  { background:#FCE8E8; color:#D32F2F; }
 
     /* ===== PRINT ===== */
     @media print {
@@ -373,7 +383,7 @@
           <label style="font-size:11px;">API Key</label>
           <input type="text" id="gmApiKey" placeholder="填入 Google Maps API Key" style="font-size:11px;">
         </div>
-        <button onclick="saveApiKeys()" style="width:100%;padding:7px;background:#D41B2C;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px;font-weight:600;">儲存全部設定</button>
+        <button onclick="saveApiKeys()" style="width:100%;padding:8px;background:#FF6B00;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">儲存全部設定</button>
       </div>
     </div>
 
@@ -399,8 +409,8 @@
 
       <div class="form-sep">土地資訊</div>
       <div id="land-entries"></div>
-      <button class="btn-sm" onclick="addLandEntry()" style="margin-bottom:6px;padding:7px 12px;background:#fff;border:1px solid #D41B2C;color:#D41B2C;border-radius:5px;cursor:pointer;font-size:13px;font-weight:600;width:100%;">＋ 新增土地筆</button>
-      <div id="land-total-label" style="font-size:12px;color:#555;"></div>
+      <button class="btn-sm" onclick="addLandEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #FF6B00;color:#FF6B00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增土地筆</button>
+      <div id="land-total-label" style="font-size:12px;color:#8B1A2E;font-weight:600;"></div>
 
       <div class="form-sep">補充資料</div>
 
@@ -447,7 +457,7 @@
 
       <div class="form-sep">周遭機能（可由 AI 協助填入）</div>
 
-      <button id="btnNearby" onclick="doNearbySearch()" style="width:100%;margin-bottom:10px;padding:9px;background:#D41B2C;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:700;">🗺️ 自動查詢周邊機能</button>
+      <button id="btnNearby" onclick="doNearbySearch()" style="width:100%;margin-bottom:10px;padding:10px;background:linear-gradient(135deg,#FF6B00 0%,#FF4E00 100%);color:#fff;border:none;border-radius:22px;cursor:pointer;font-size:14px;font-weight:700;letter-spacing:1px;box-shadow:0 2px 6px rgba(255,107,0,0.3);">🗺️ 自動查詢周邊機能</button>
       <div id="nearby-status" style="font-size:11px;color:#666;margin-bottom:8px;min-height:0;"></div>
 
       <div class="fg">
@@ -761,27 +771,27 @@
     _landData[idx] = preset || { loNo: '', ping: 0, detail: '' };
     const div  = document.createElement('div');
     div.id     = `land-entry-${idx}`;
-    div.style.cssText = 'border:1px solid #E0E0E0;border-radius:6px;padding:10px;margin-bottom:8px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.06);';
+    div.style.cssText = 'border:1px solid #F0D878;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 2px 6px rgba(139,26,46,0.08);';
     div.innerHTML = `
       <div style="display:flex;gap:6px;align-items:flex-start;">
         <div style="flex:1;">
-          <label style="font-size:12px;color:#555;font-weight:500;">地號</label>
+          <label style="font-size:12px;color:#555;font-weight:600;">地號</label>
           <input type="text" id="land-lono-${idx}" placeholder="例：愛群段2945" value="${preset?.loNo||''}"
-            style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #DCDCDC;border-radius:5px;font-size:13px;"
+            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #EBD990;border-radius:6px;font-size:13px;"
             oninput="_landData[${idx}].loNo=this.value;updateCard()">
         </div>
         <div style="flex:1;">
-          <label style="font-size:12px;color:#555;font-weight:500;">持分坪數</label>
+          <label style="font-size:12px;color:#555;font-weight:600;">持分坪數</label>
           <input type="number" placeholder="例：3.83" step="0.01" min="0" value="${preset?.ping||''}"
-            style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #DCDCDC;border-radius:5px;font-size:13px;"
+            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #EBD990;border-radius:6px;font-size:13px;"
             id="land-ping-${idx}"
             oninput="_landData[${idx}].ping=parseFloat(this.value)||0;updateCard()">
         </div>
         <button onclick="removeLandEntry(${idx})" title="移除"
-          style="background:#D41B2C;color:#fff;border:none;border-radius:5px;padding:5px 9px;cursor:pointer;margin-top:18px;font-size:13px;">✕</button>
+          style="background:#8B1A2E;color:#fff;border:none;border-radius:50%;width:28px;height:28px;padding:0;cursor:pointer;margin-top:20px;font-size:13px;flex-shrink:0;">✕</button>
       </div>
       <div style="margin-top:5px;">
-        <label style="font-size:12px;color:#555;font-weight:500;">上傳土地謄本 PDF（選填，自動解析）</label>
+        <label style="font-size:12px;color:#555;font-weight:600;">上傳土地謄本 PDF（選填，自動解析）</label>
         <div style="display:flex;gap:6px;align-items:center;">
           <div class="upload-zone" style="flex:1;padding:6px;text-align:center;cursor:pointer;font-size:11px;"
                id="land-zone-${idx}"
