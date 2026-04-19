@@ -1183,35 +1183,40 @@
     });
   }
 
-  // 共用一個 PlacesService，避免重複建立 Map（大幅提升速度）
-  let _gmSvc = null;
-  function getPlacesSvc() {
-    if (_gmSvc) return _gmSvc;
-    const mapDiv = document.getElementById('gm-hidden-map');
-    mapDiv.style.cssText = 'position:absolute;top:-9999px;width:300px;height:300px;';
-    const map = new google.maps.Map(mapDiv, { center: { lat: 22.6, lng: 120.3 }, zoom: 15 });
-    _gmSvc = new google.maps.places.PlacesService(map);
-    return _gmSvc;
-  }
-
-  function nearbySearch(location, types, keyword, radius) {
-    return new Promise(resolve => {
-      const svc = getPlacesSvc();
-      const req = { location, radius: radius || 1000 };
-      if (types)   req.type    = types;
-      if (keyword) req.keyword = keyword;
-      svc.nearbySearch(req, (results, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK) resolve(results || []);
-        else resolve([]);
-      });
-    });
+  // 新版 Places API (2025)：使用 Place.searchNearby / searchByText
+  async function nearbySearch(location, types, keyword, radius) {
+    try {
+      const center = location;
+      if (keyword) {
+        const { places } = await google.maps.places.Place.searchByText({
+          fields: ['displayName', 'location'],
+          query: keyword,
+          locationBias: { center, radius: radius || 3000 },
+          maxResultCount: 5,
+          language: 'zh-TW',
+        });
+        return places || [];
+      } else {
+        const { places } = await google.maps.places.Place.searchNearby({
+          fields: ['displayName', 'location'],
+          locationRestriction: { center, radius: radius || 1000 },
+          includedTypes: [types],
+          maxResultCount: 20,
+          language: 'zh-TW',
+        });
+        return places || [];
+      }
+    } catch (e) {
+      console.warn('nearbySearch:', e.message);
+      return [];
+    }
   }
 
   function calcDist(loc, place) {
     const R = 6371000;
     const lat1 = loc.lat(), lon1 = loc.lng();
-    const lat2 = place.geometry.location.lat();
-    const lon2 = place.geometry.location.lng();
+    const plLoc = place.location;           // 新版用 place.location
+    const lat2 = plLoc.lat(), lon2 = plLoc.lng();
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
@@ -1266,35 +1271,35 @@
       // ── 1. 交通機能 ──
       const trafficLines = [];
       topN(subway, loc, 3).forEach(({ p, d }) =>
-        trafficLines.push(`捷運${p.name.replace(/捷運/g, '')}（步行約 ${walkMin(d)}）`));
+        trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（步行約 ${walkMin(d)}）`));
       const busTop = topN(bus, loc, 3);
       if (busTop.length)
-        trafficLines.push(`公車站：${busTop.map(({ p }) => p.name).join('、')}`);
+        trafficLines.push(`公車站：${busTop.map(({ p }) => p.displayName).join('、')}`);
       trafficLines.push('鄰近中山高速公路前鎮交流道、台 88 快速道路');
       document.getElementById('s-traffic').value = trafficLines.join('\n');
 
       // ── 2. 生活機能 ──
       const lifeLines = [];
       topN(supermarket, loc, 2).forEach(({ p, d }) =>
-        lifeLines.push(`${p.name}（步行約 ${walkMin(d)}）`));
+        lifeLines.push(`${p.displayName}（步行約 ${walkMin(d)}）`));
       topN(convenience, loc, 2).forEach(({ p, d }) =>
-        lifeLines.push(`${p.name}（步行約 ${walkMin(d)}）`));
+        lifeLines.push(`${p.displayName}（步行約 ${walkMin(d)}）`));
       topN(hospital, loc, 1).forEach(({ p, d }) =>
-        lifeLines.push(`${p.name}（車程約 ${walkMin(d)}）`));
+        lifeLines.push(`${p.displayName}（車程約 ${walkMin(d)}）`));
       document.getElementById('s-life').value = lifeLines.join('\n');
 
       // ── 3. 商圈特色 ──
       const locLines = [];
       topN(park, loc, 2).forEach(({ p, d }) =>
-        locLines.push(`${p.name}（步行約 ${walkMin(d)}）`));
+        locLines.push(`${p.displayName}（步行約 ${walkMin(d)}）`));
       topN(mall, loc, 2).forEach(({ p, d }) =>
-        locLines.push(`${p.name}（車程約 ${walkMin(d)}）`));
+        locLines.push(`${p.displayName}（車程約 ${walkMin(d)}）`));
       document.getElementById('s-location').value = locLines.join('\n');
 
       // ── 4. 重要發展 ──
       const devLines = [];
       topN(devPOI, loc, 2).forEach(({ p, d }) =>
-        devLines.push(`${p.name}（車程約 ${walkMin(d)}）`));
+        devLines.push(`${p.displayName}（車程約 ${walkMin(d)}）`));
       const district = deed.district || '';
       if (district.includes('前鎮') || district.includes('苓雅') || district.includes('鼓山')) {
         devLines.push('亞洲新灣區核心範圍，高雄展覽館、港埠旅運中心已營運');
