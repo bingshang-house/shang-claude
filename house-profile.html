@@ -1124,6 +1124,13 @@
     const stairText = stairArr.map(s => `${s.story_code} ${s.usage_code_desc || ''}`).join(' ');
     const hasWaterTank = /中繼/.test(stairText);
 
+    // 所有樓層（供透天顯示每層高度用）
+    const allFloors = stairArr.map(s => ({
+      code: s.story_code || '',
+      height: s.story_height || '',
+      usage: s.usage_code_desc || ''
+    }));
+
     const memoText = (Array.isArray(info.memo_seq) ? info.memo_seq : []).map(m => m.dese || '').join(' ');
     const isGreenBuilding = /綠建築/.test(memoText);
     const hasSolar = /太陽(光電|能發電)|光電/.test(memoText);
@@ -1136,7 +1143,7 @@
       completeDate: info.complete_date || '',
       totalFloors, totalUnits,
       builder: info.bmp01_name || '',
-      thisFloor, hasWaterTank, isGreenBuilding, hasSolar,
+      thisFloor, allFloors, hasWaterTank, isGreenBuilding, hasSolar,
       coverrate: info.coverrate || '',
       spacerate: info.spacerate || '',
       buildheight: info.buildheight || '',
@@ -1325,7 +1332,16 @@
 
     const fhEl = document.getElementById('td-lic-floorheight');
     if (fhEl) {
-      if (p.thisFloor && p.thisFloor.height) {
+      if (deed.isWholeBuilding && p.allFloors && p.allFloors.length) {
+        // 透天：列出每層樓板高度
+        const rows = p.allFloors
+          .filter(f => f.height && f.height !== '0')
+          .map(f => {
+            const label = f.code.replace(/^地上0*(\d+)層/, '$1F').replace(/^地下0*(\d+)層/, 'B$1');
+            return `${label}　${f.height} m${f.usage ? `（${fmtUsage(f.usage)}）` : ''}`;
+          });
+        fhEl.innerHTML = rows.length ? rows.map(escH).join('<br>') : '－';
+      } else if (p.thisFloor && p.thisFloor.height) {
         fhEl.textContent = `${_currentFloor} F　${p.thisFloor.height} m`;
       } else if (_currentFloor) {
         fhEl.textContent = `${_currentFloor} F 資料缺`;
@@ -1334,7 +1350,12 @@
       }
     }
 
-    setText('td-lic-usage', p.thisFloor && p.thisFloor.usage ? fmtUsage(p.thisFloor.usage) : '－');
+    if (deed.isWholeBuilding && p.allFloors && p.allFloors.length) {
+      const usages = [...new Set(p.allFloors.map(f => f.usage).filter(Boolean))];
+      setText('td-lic-usage', usages.length ? usages.map(fmtUsage).join('、') : '－');
+    } else {
+      setText('td-lic-usage', p.thisFloor && p.thisFloor.usage ? fmtUsage(p.thisFloor.usage) : '－');
+    }
     setText('td-lic-watertank', p.hasWaterTank ? '有' : '無');
 
     const greenEl = document.getElementById('td-lic-green');
