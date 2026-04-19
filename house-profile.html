@@ -2314,13 +2314,16 @@ ${factsText}
 
   // 依距離決定步行或開車，並換算正確時間
   // 回傳 { label, mins, text } 或 null（超過30分鐘則不顯示）
+  // 直線距離轉實際通勤時間（加上路網繞行係數，貼近 Google Maps 實際時間）
+  // 走路：straight_m * 1.3（路線係數）/ 83 m/min（5 km/h 實際走速）≈ straight_m / 64
+  // 車程：straight_m * 1.4（路線係數）/ 400 m/min（24 km/h 市區平均含紅綠燈）≈ straight_m / 286
   function travelInfo(meters) {
     if (meters <= 800) {
-      const mins = Math.max(1, Math.round(meters / 67)); // 步行 4km/h
+      const mins = Math.max(1, Math.round(meters / 64));
       if (mins > 30) return null;
       return { label: '步行', mins, text: `步行約 ${mins} 分鐘` };
     } else {
-      const mins = Math.max(1, Math.round(meters / 333)); // 開車 20km/h
+      const mins = Math.max(1, Math.round(meters / 286));
       if (mins > 30) return null;
       return { label: '車程', mins, text: `車程約 ${mins} 分鐘` };
     }
@@ -2355,7 +2358,7 @@ ${factsText}
 
       const [subway, bus, convenience, market,
              shopee, childcare, clinic, bank, nightmarket,
-             districtA, districtB, park, devPOI] = await Promise.all([
+             districtA, districtB, park, devPOI, interchange] = await Promise.all([
         nearbySearch(loc, 'subway_station',    null,           1500),
         nearbySearch(loc, 'bus_station',       null,            800),
         nearbySearch(loc, 'convenience_store', null,            500),
@@ -2369,6 +2372,7 @@ ${factsText}
         nearbySearch(loc, null, '老街 特色街 文創園區 老地名', 2500),
         nearbySearch(loc, 'park',              null,           1000),
         nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  3000),
+        nearbySearch(loc, null, '交流道 高速公路入口 快速道路入口', 2000),
       ]);
 
       // ── 1. 交通機能 ──
@@ -2380,7 +2384,21 @@ ${factsText}
       const busTop = topN(bus, loc, 3);
       if (busTop.length)
         trafficLines.push(`公車站：${busTop.map(({ p }) => p.displayName).join('、')}`);
-      trafficLines.push('鄰近中山高速公路前鎮交流道、台 88 快速道路');
+      // 交流道 / 快速道路入口：只在 2 公里內真的有才顯示，名稱去重
+      const ichSeen = new Set();
+      topN(interchange, loc, 3).forEach(({ p, d }) => {
+        const name = p.displayName;
+        // 跳過太短或重複名稱
+        if (name.length < 3) return;
+        let dup = false;
+        for (const seen of ichSeen) {
+          if (seen.includes(name) || name.includes(seen)) { dup = true; break; }
+        }
+        if (dup) return;
+        ichSeen.add(name);
+        const ti = travelInfo(d);
+        if (ti) trafficLines.push(`${name}（${ti.text}）`);
+      });
       document.getElementById('s-traffic').value = trafficLines.slice(0, 5).join('\n');
 
       // ── 2. 生活機能（每類只取最近一項）──
@@ -2422,11 +2440,21 @@ ${factsText}
       }
       document.getElementById('s-location').value = locLines.slice(0, 5).join('\n');
 
-      // ── 4. 重要發展 ──
+      // ── 4. 重要發展（名稱互為子字串時視為同地點，只留最近的那筆）──
       const devLines = [];
-      topN(devPOI, loc, 2).forEach(({ p, d }) => {
+      const devSeen = new Set();
+      topN(devPOI, loc, 10).forEach(({ p, d }) => {
+        if (devLines.length >= 2) return;
+        const name = p.displayName;
+        if (name.length < 3) return;
+        let dup = false;
+        for (const seen of devSeen) {
+          if (seen.includes(name) || name.includes(seen)) { dup = true; break; }
+        }
+        if (dup) return;
+        devSeen.add(name);
         const ti = travelInfo(d);
-        if (ti) devLines.push(`${p.displayName}（${ti.text}）`);
+        if (ti) devLines.push(`${name}（${ti.text}）`);
       });
       const district = deed.district || '';
       if (district.includes('前鎮') || district.includes('苓雅') || district.includes('鼓山')) {
