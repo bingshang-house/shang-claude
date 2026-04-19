@@ -284,12 +284,12 @@
     /* Surroundings */
     .surr-box { border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
     .surr-grid { display: grid; grid-template-columns: 1fr 1fr; }
-    .surr-item { padding: 6px 9px; border-right: 1px solid #eee; border-bottom: 1px solid #eee; font-size: 10.5px; }
+    .surr-item { padding: 7px 10px; border-right: 1px solid #eee; border-bottom: 1px solid #eee; font-size: 12px; }
     .surr-item:nth-child(even) { border-right: none; }
     .surr-item:nth-child(n+5)  { border-bottom: none; }
     .surr-full { grid-column: 1 / -1; border-right: none; }
-    .surr-label { font-weight: 700; color: #1e8449; font-size: 10px; margin-bottom: 3px; }
-    .surr-content { color: #444; line-height: 1.6; white-space: pre-wrap; }
+    .surr-label { font-weight: 700; color: #1e8449; font-size: 11px; margin-bottom: 4px; }
+    .surr-content { color: #333; line-height: 1.7; white-space: pre-wrap; }
 
     /* Description */
     .desc-box { border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
@@ -429,13 +429,6 @@
           📐 點擊上傳格局圖
         </div>
         <div class="plan-name" id="planName"></div>
-      </div>
-
-      <div class="form-sep">房屋說明</div>
-
-      <div class="fg">
-        <label>屋況說明（裝潢、傢俱、特色…）</label>
-        <textarea id="s-desc" rows="4" placeholder="例：室內全新未住、附贈冷氣、熱水器..." oninput="updateCard()"></textarea>
       </div>
 
       <div class="fg">
@@ -600,10 +593,6 @@
           </div>
         </div>
 
-        <div class="desc-box">
-          <div class="section-bar bar-purple">▌ 房屋說明</div>
-          <div class="desc-content" id="out-desc"><span class="pending">請從左側填入房屋說明。</span></div>
-        </div>
 
       </div>
 
@@ -951,7 +940,6 @@
     const price       = parseFloat(document.getElementById('s-price').value) || 0;
     const parkPrice   = parseFloat(document.getElementById('s-parking-price').value) || 0;
     const layout      = document.getElementById('s-layout').value.trim();
-    const desc        = document.getElementById('s-desc').value.trim();
     const pointsRaw   = document.getElementById('s-points').value;
 
     // Title & address
@@ -1031,16 +1019,6 @@
       setText(`out-${k}`, v ? (v.value.trim() || '－') : '－');
     });
 
-    // Description
-    if (desc) {
-      document.getElementById('out-desc').textContent = desc;
-    } else if (d.address) {
-      document.getElementById('out-desc').innerHTML =
-        `建物門牌 ${escH(d.district||'')}${escH(d.address)}，屋齡 ${d.age||'－'}，` +
-        `主建物 ${d.mainPing} 坪${d.balconyPing ? `、陽台 ${d.balconyPing} 坪` : ''}` +
-        `${d.hasParking ? `、含停車位編號 ${d.parkNo}` : ''}。` +
-        `<span class="pending">【待補充】格局、裝潢、傢俱等詳細說明。</span>`;
-    }
   }
 
   // ===== Plan Image =====
@@ -1297,7 +1275,7 @@
       if (busTop.length)
         trafficLines.push(`公車站：${busTop.map(({ p }) => p.displayName).join('、')}`);
       trafficLines.push('鄰近中山高速公路前鎮交流道、台 88 快速道路');
-      document.getElementById('s-traffic').value = trafficLines.join('\n');
+      document.getElementById('s-traffic').value = trafficLines.slice(0, 5).join('\n');
 
       // ── 2. 生活機能（每類只取最近一項）──
       const lifeLines = [];
@@ -1314,7 +1292,7 @@
       addLife(clinic,       '醫院診所');
       addLife(bank,         '銀行');
       addLife(nightmarket,  '夜市');
-      document.getElementById('s-life').value = lifeLines.join('\n');
+      document.getElementById('s-life').value = lifeLines.slice(0, 5).join('\n');
 
       // ── 3. 商圈特色（以商圈名稱為主，非個別商家）──
       const locLines = [];
@@ -1336,7 +1314,7 @@
           if (ti) locLines.push(`鄰近 ${p.displayName}（${ti.text}）`);
         });
       }
-      document.getElementById('s-location').value = locLines.join('\n');
+      document.getElementById('s-location').value = locLines.slice(0, 5).join('\n');
 
       // ── 4. 重要發展 ──
       const devLines = [];
@@ -1351,7 +1329,7 @@
         devLines.push('捷運黃線規劃通過（預計 2034 年通車），交通建設加持');
         devLines.push('5G AIoT 創新園區持續開發中');
       }
-      document.getElementById('s-develop').value = devLines.join('\n');
+      document.getElementById('s-develop').value = devLines.slice(0, 5).join('\n');
 
       updateCard();
       statusEl.innerHTML = '<span style="color:#16a34a;">✓ 周邊機能查詢完成，可在左側欄位修改</span>';
