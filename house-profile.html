@@ -2461,17 +2461,50 @@ ${factsText}
           console.log('RouteMatrix raw:', raw, 'matrix:', result, 'keys:', result && Object.keys(result), 'proto:', result && Object.getOwnPropertyNames(Object.getPrototypeOf(result)));
           throw new Error('no elements array found');
         }
-        for (const el of elements) {
-          const place = chunk[el.destinationIndex];
+        // 若拿到的是 rows（第一層 Array(1) = 1 origin），裡面每個 row 才包 destinations
+        // 判定方式：item 看起來不像 Element（沒 destinationIndex 也沒 duration/distanceMeters）→ 往下剝一層
+        const looksLikeElement = (it) => it && (it.destinationIndex != null || it.distanceMeters != null || it.duration != null || it.staticDuration != null);
+        if (elements.length && !looksLikeElement(elements[0])) {
+          const first = elements[0];
+          // 找 first 裡面第一個 Array 當作真正的 elements
+          let drilled = null;
+          for (const k of Object.keys(first || {})) {
+            if (Array.isArray(first[k])) { drilled = first[k]; break; }
+          }
+          if (drilled) {
+            console.log('RouteMatrix 剝第二層 ok，由', elements.length, '列 row 展開為', drilled.length, '筆 element');
+            elements = drilled;
+          } else {
+            console.log('RouteMatrix 第一層非 element，內容：', first, 'keys:', Object.keys(first || {}));
+          }
+        }
+        if (elements.length && !looksLikeElement(elements[0])) {
+          console.log('RouteMatrix element 形狀異常：', elements[0], 'keys:', Object.keys(elements[0] || {}));
+        }
+        // 欄位名找不到時自動掃描（處理 minified 欄位）
+        const pickField = (obj, candidates, validate) => {
+          for (const k of candidates) if (obj[k] != null && (!validate || validate(obj[k]))) return obj[k];
+          for (const k of Object.keys(obj || {})) if (validate && validate(obj[k])) return obj[k];
+          return undefined;
+        };
+        for (let i = 0; i < elements.length; i++) {
+          const el = elements[i];
+          if (!el) continue;
+          // destinationIndex：可能是 number 欄位，也可能就用陣列順序
+          let di = pickField(el, ['destinationIndex'], v => typeof v === 'number' && v >= 0 && v < chunk.length);
+          if (di == null) di = i;
+          const place = chunk[di];
           if (!place) continue;
-          const routeOk = !el.condition || el.condition === 'ROUTE_EXISTS';
-          const dur = el.duration ?? el.staticDuration ?? el.travelDuration;
+          const condition = pickField(el, ['condition'], v => typeof v === 'string');
+          const routeOk = !condition || condition === 'ROUTE_EXISTS';
+          const dur = pickField(el, ['duration', 'staticDuration', 'travelDuration'], v => v != null && (typeof v === 'number' || typeof v === 'string' || (typeof v === 'object' && (v.value != null || v.seconds != null))));
+          const dist = pickField(el, ['distanceMeters'], v => typeof v === 'number');
           if (routeOk && dur != null) {
             const secs = parseDurationSeconds(dur);
             rows.push({
               p: place,
               mins: Math.max(1, Math.round(secs / 60)),
-              d: el.distanceMeters != null ? Number(el.distanceMeters) : null,
+              d: dist != null ? Number(dist) : null,
               mode,
             });
           } else {
