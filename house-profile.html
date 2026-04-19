@@ -953,10 +953,10 @@
       const t = fw(raw);
       // 地號：從標題抓「段 XXXX-0000 地號」
       const loNoM = t.match(/([^\s]{2,6}段(?:[^\s]{1,6}小段)?\s*[\d\-]+)\s*地號/);
-      // 面積：「面積 XXXX 平方公尺」（排除「元/平方公尺」）
-      const areaM = t.match(/面\s*積\s*([\d]+(?:\.[\d]+)?)\s*平方公尺/);
-      // 持分：「權利範圍 XXXXX分之YYYY」（也接受「全部1分之1」「共有XX分之XX」前綴）
-      const ratioM = t.match(/[権權]利[範][囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/);
+      // 面積：「面積 XXXX 平方公尺」（排除「元/平方公尺」，防 PDF.js 拆字）
+      const areaM = t.match(/面\s*積\s*([\d]+(?:\.[\d]+)?)\s*平\s*方\s*公\s*尺/);
+      // 持分：「權利範圍 XXXXX分之YYYY」（也接受「全部1分之1」「共有XX分之XX」前綴，防拆字）
+      const ratioM = t.match(/[権權]\s*利\s*[範]\s*[囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/);
       if (areaM && ratioM) {
         const total = parseFloat(areaM[1]);
         const denom = parseInt(ratioM[1]);
@@ -1652,13 +1652,15 @@
     d.rainCoverPing = _rain ? _rain.ping : 0;
 
     // 共有部分 ── indexOf 切段，同時接受繁體「權利範圍」及日文字形「権利範囲」
-    const RATIO_RE = /[権權]利[範][囲圍]\s*(\d+)分之(\d+)/;
+    // PDF.js 可能把「平方公尺」「權利範圍」拆成跨行的單字，regex 每字間都放 \s*
+    const RATIO_RE = /[権權]\s*利\s*[範]\s*[囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/;
+    const SQM_RE   = /([\d]+(?:\.[\d]+)?)\s*平\s*方\s*公\s*尺/;
     const pubIdx = t.indexOf('共有部分');
     if (pubIdx >= 0) {
       const pubSec = t.slice(pubIdx, pubIdx + 600);
       console.log('[共有部分 sec]', pubSec);
       // 面積：直接找「數字 + 平方公尺」（整數或小數皆可，例如 2002 或 7017.05）
-      const pubAreaM = pubSec.match(/([\d]+(?:\.[\d]+)?)\s*平方公尺/);
+      const pubAreaM = pubSec.match(SQM_RE);
       const pubRatioM = pubSec.match(RATIO_RE);
       if (pubAreaM && pubRatioM) {
         const _pt = parseFloat(pubAreaM[1]);
