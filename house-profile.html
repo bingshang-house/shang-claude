@@ -473,6 +473,7 @@
 
       <div class="fg">
         <label>訴求重點（每行一點，最多 6 點）</label>
+        <button type="button" onclick="autoPoints()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">✨ 自動產生訴求重點</button>
         <textarea id="s-points" rows="5" oninput="updateCard()"></textarea>
       </div>
 
@@ -1982,6 +1983,67 @@
   function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
   function setHtml(id, val) { const el = document.getElementById(id); if (el) el.innerHTML  = val; }
   function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // ===== 自動產生訴求重點（結合地段、交通、生活、學區、發展）=====
+  function autoPoints() {
+    const d = deed;
+    // 取各 textarea 首幾項（每行去掉距離說明保留名稱）
+    const grabTop = (id, n = 2) => {
+      const raw = (document.getElementById(id)?.value || '').trim();
+      if (!raw) return [];
+      return raw.split('\n')
+        .map(l => l.trim()).filter(Boolean)
+        .map(l => l.replace(/\s*(步行約|車程約|距離|約)\s*.*$/, '').trim())
+        .filter(Boolean).slice(0, n);
+    };
+    const trafficTop = grabTop('s-traffic', 2);
+    const lifeTop    = grabTop('s-life', 3);
+    const schoolTop  = grabTop('s-school', 2);
+    const locationTop = grabTop('s-location', 2);
+    const developTop  = grabTop('s-develop', 2);
+
+    const floorDesc = d.isWholeBuilding
+      ? `整棟 ${d.totalFloors || ''} 層獨立透天`
+      : d.floor ? `視野開闊的 ${d.floor} 樓景觀戶` : '';
+    const orient = document.getElementById('s-orientation')?.value || '';
+    const orientDesc = (orient && orient !== '不確定') ? `，${orient}採光佳` : '';
+    const ageDesc = d.age === '全新' ? '全新落成成屋' : (d.age ? `屋齡僅 ${d.age}` : '');
+
+    const addr = d.address ? `${d.district || ''}${d.address}` : '本物件';
+
+    const pts = [];
+
+    // 第一句：定位 + 屋況
+    let line1 = `坐落${addr}`;
+    if (floorDesc) line1 += `，${floorDesc}`;
+    if (orientDesc) line1 += orientDesc;
+    if (ageDesc) line1 += `，${ageDesc}`;
+    line1 += '。';
+    pts.push(line1);
+
+    // 第二句：生活 + 交通
+    const life2 = lifeTop.slice(0, 2).join('、');
+    const tra = trafficTop[0] || '';
+    let line2 = '';
+    if (life2) line2 += `生活機能完備，${life2}近在咫尺`;
+    if (tra) line2 += (line2 ? '；' : '') + `交通便利，${tra}通行順暢`;
+    if (line2) pts.push(line2 + '。');
+
+    // 第三句：學區
+    if (schoolTop.length) {
+      pts.push(`鄰近${schoolTop.join('、')}，優質學區加持孩子成長環境。`);
+    }
+
+    // 第四句：商圈 / 發展
+    const ld = [...locationTop, ...developTop].filter(Boolean).slice(0, 2);
+    if (ld.length) {
+      pts.push(`${ld.join('、')}，兼具自住舒適與長期增值潛力。`);
+    }
+
+    const result = pts.join('\n');
+    const ta = document.getElementById('s-points');
+    if (ta) { ta.value = result; updateCard(); }
+  }
 
   // ===== API Key Settings =====
   function getTGOSCredentials() {
