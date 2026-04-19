@@ -911,7 +911,7 @@
 
       // 5. 取地籍坐標（空間查詢用）
       let urbanPlan = '', detailPlan = '', bcr = '', far = '';
-      const wG = encodeURIComponent(`AA46='${distCode}' AND AA48='${sectCode}' AND CADA_TEXT='${landNo}'`);
+      const wG = encodeURIComponent(`AA46N='${data.distName}' AND AA48='${sectCode}' AND CADA_TEXT IN ('${landNo}')`);
       const dG = await proxyFetch(`${MAPGIS2}/G97_E_LNPAR_P/MapServer/0/query?f=json&where=${wG}&returnGeometry=true&outFields=AA49&outSR=3826`);
       if (dG.features?.length && dG.features[0].geometry?.rings?.[0]) {
         const ring = dG.features[0].geometry.rings[0];
