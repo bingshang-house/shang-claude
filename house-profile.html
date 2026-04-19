@@ -404,6 +404,14 @@
           <label style="font-size:11px;">API Key</label>
           <input type="text" id="gmApiKey" placeholder="填入 Google Maps API Key" style="font-size:11px;">
         </div>
+        <div style="font-size:11px;font-weight:600;color:#555;margin:8px 0 4px;">Gemini AI（訴求重點自動產生）</div>
+        <div style="font-size:11px;color:#666;margin-bottom:4px;">
+          申請：<a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#2563eb;">aistudio.google.com</a>（免費）
+        </div>
+        <div class="fg" style="margin-bottom:6px;">
+          <label style="font-size:11px;">API Key</label>
+          <input type="text" id="geminiApiKey" placeholder="填入 Gemini API Key" style="font-size:11px;">
+        </div>
         <button onclick="saveApiKeys()" style="width:100%;padding:8px;background:#CC8F00;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">儲存全部設定</button>
       </div>
     </div>
@@ -1984,65 +1992,74 @@
   function setHtml(id, val) { const el = document.getElementById(id); if (el) el.innerHTML  = val; }
   function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  // ===== 自動產生訴求重點（結合地段、交通、生活、學區、發展）=====
-  function autoPoints() {
+  // ===== 自動產生訴求重點（呼叫 Gemini 2.5 Flash）=====
+  async function autoPoints() {
     const d = deed;
-    // 取各 textarea 首幾項（每行去掉距離說明保留名稱）
-    const grabTop = (id, n = 2) => {
-      const raw = (document.getElementById(id)?.value || '').trim();
-      if (!raw) return [];
-      return raw.split('\n')
-        .map(l => l.trim()).filter(Boolean)
-        .map(l => l.replace(/\s*(步行約|車程約|距離|約)\s*.*$/, '').trim())
-        .filter(Boolean).slice(0, n);
-    };
-    const trafficTop = grabTop('s-traffic', 2);
-    const lifeTop    = grabTop('s-life', 3);
-    const schoolTop  = grabTop('s-school', 2);
-    const locationTop = grabTop('s-location', 2);
-    const developTop  = grabTop('s-develop', 2);
-
-    const floorDesc = d.isWholeBuilding
-      ? `整棟 ${d.totalFloors || ''} 層獨立透天`
-      : d.floor ? `視野開闊的 ${d.floor} 樓景觀戶` : '';
-    const orient = document.getElementById('s-orientation')?.value || '';
-    const orientDesc = (orient && orient !== '不確定') ? `，${orient}採光佳` : '';
-    const ageDesc = d.age === '全新' ? '全新落成成屋' : (d.age ? `屋齡僅 ${d.age}` : '');
-
-    const addr = d.address ? `${d.district || ''}${d.address}` : '本物件';
-
-    const pts = [];
-
-    // 第一句：定位 + 屋況
-    let line1 = `坐落${addr}`;
-    if (floorDesc) line1 += `，${floorDesc}`;
-    if (orientDesc) line1 += orientDesc;
-    if (ageDesc) line1 += `，${ageDesc}`;
-    line1 += '。';
-    pts.push(line1);
-
-    // 第二句：生活 + 交通
-    const life2 = lifeTop.slice(0, 2).join('、');
-    const tra = trafficTop[0] || '';
-    let line2 = '';
-    if (life2) line2 += `生活機能完備，${life2}近在咫尺`;
-    if (tra) line2 += (line2 ? '；' : '') + `交通便利，${tra}通行順暢`;
-    if (line2) pts.push(line2 + '。');
-
-    // 第三句：學區
-    if (schoolTop.length) {
-      pts.push(`鄰近${schoolTop.join('、')}，優質學區加持孩子成長環境。`);
-    }
-
-    // 第四句：商圈 / 發展
-    const ld = [...locationTop, ...developTop].filter(Boolean).slice(0, 2);
-    if (ld.length) {
-      pts.push(`${ld.join('、')}，兼具自住舒適與長期增值潛力。`);
-    }
-
-    const result = pts.join('\n');
     const ta = document.getElementById('s-points');
-    if (ta) { ta.value = result; updateCard(); }
+    if (!ta) return;
+    const btn = event?.target;
+    const origText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '✨ AI 撰寫中…'; }
+
+    try {
+      const val = id => (document.getElementById(id)?.value || '').trim();
+      const facts = {
+        地址: d.address ? `${d.district || ''}${d.address}` : '',
+        樓層: d.isWholeBuilding ? `整棟 ${d.totalFloors || ''} 層透天` : (d.floor ? `${d.floor} 樓` : ''),
+        屋齡: d.age || '',
+        座向: val('s-orientation'),
+        使用分區: (Object.values(_landData).map(e => e.zone).filter(Boolean).join('、')) || '',
+        細部計畫: (Object.values(_landData).map(e => e.detailPlan).filter(Boolean).join('、')) || '',
+        主要用途: d.usage || '',
+        格局: val('s-layout'),
+        停車位: d.hasParking ? `有（${val('s-park-status') || '平面'}）` : '無',
+        交通機能: val('s-traffic'),
+        生活機能: val('s-life'),
+        商圈特色: val('s-location'),
+        重要發展: val('s-develop'),
+        學區: val('s-school'),
+        社區公設: val('s-facilities'),
+      };
+      const factsText = Object.entries(facts)
+        .filter(([, v]) => v && v !== '不確定')
+        .map(([k, v]) => `${k}：${v}`).join('\n');
+
+      const prompt = `你是一位資深不動產經紀人，幫客戶撰寫房屋銷售介紹的「訴求重點」文案。
+根據以下物件資料，寫出約 100 字的銷售亮點文案，要求：
+- 文筆自然流暢，像專業文案而非流水帳，避免機械感
+- 結合地段優勢、交通便利、生活機能成熟、學區資源、未來發展潛力等面向
+- 只突出真正有利的賣點，沒列在資料裡的面向就不要編造
+- 用繁體中文，不要使用 markdown、不要加標題、不要條列符號
+- 直接輸出文案內文，結尾自然收束
+
+物件資料：
+${factsText}`;
+
+      const key = getGeminiKey();
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.8, maxOutputTokens: 400 }
+        })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Gemini API ${res.status}: ${err.slice(0, 200)}`);
+      }
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (!text) throw new Error('Gemini 回傳空白');
+      ta.value = text;
+      updateCard();
+    } catch (e) {
+      alert('自動產生失敗：' + e.message);
+      console.error(e);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+    }
   }
 
   // ===== API Key Settings =====
@@ -2054,17 +2071,21 @@
 
   // Key 已綁定網域限制，放前端安全
   const GM_KEY_DEFAULT = 'AIzaSyCBX2mW_xTbRi2ChASjKSXxpgQsfBGtCTQ';
+  const GEMINI_KEY_DEFAULT = 'AIzaSyDIjbArLgTgT0WdlA5mHPcECdDJiOowBm0';
   function getGMKey() { return localStorage.getItem('gm_apikey') || GM_KEY_DEFAULT; }
+  function getGeminiKey() { return localStorage.getItem('gemini_apikey') || GEMINI_KEY_DEFAULT; }
 
   function saveApiKeys() {
     const tgosAppId  = document.getElementById('tgosAppId').value.trim();
     const tgosApiKey = document.getElementById('tgosApiKey').value.trim();
     const gmKey      = document.getElementById('gmApiKey').value.trim();
+    const geminiKey  = document.getElementById('geminiApiKey').value.trim();
     if (tgosAppId && tgosApiKey) {
       localStorage.setItem('tgos_appid',  tgosAppId);
       localStorage.setItem('tgos_apikey', tgosApiKey);
     }
     if (gmKey) localStorage.setItem('gm_apikey', gmKey);
+    if (geminiKey) localStorage.setItem('gemini_apikey', geminiKey);
     updateTGOSStatus();
     document.getElementById('tgosBody').style.display = 'none';
     alert('✓ API 設定已儲存');
