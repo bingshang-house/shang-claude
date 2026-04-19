@@ -530,6 +530,8 @@
               <tr><td class="key">建築完成</td><td id="td-completion">－</td></tr>
               <tr><td class="key">所有權登記</td><td id="td-own-date">－</td></tr>
               <tr><td class="key">土地持分</td><td id="td-land">－</td></tr>
+              <tr><td class="key">使用分區</td><td id="td-zone">－</td></tr>
+              <tr><td class="key">公告現值</td><td id="td-pub-val">－</td></tr>
               <tr><td class="key">主建物面積</td><td id="td-main-area">－</td></tr>
               <tr><td class="key">附屬建物</td><td id="td-attached">－</td></tr>
               <tr><td class="key">共用部分</td><td id="td-pub-area">－</td></tr>
@@ -786,6 +788,7 @@
           </div>
         </div>
         <div id="land-info-${idx}" style="font-size:10px;color:#16a34a;margin-top:3px;">${preset?.detail||''}</div>
+        <div id="land-zone-${idx}" style="font-size:10px;color:#1d4ed8;margin-top:2px;">${preset?.zone ? '✓ '+preset.zone+(preset.pubVal?'　現值 '+preset.pubVal.toLocaleString()+' 元/m²':'')+(preset.pubPrice?'　地價 '+preset.pubPrice.toLocaleString()+' 元/m²':'') : ''}</div>
       </div>`;
     document.getElementById('land-entries').appendChild(div);
   }
@@ -821,12 +824,15 @@
         const numer = parseInt(ratioM[2]);
         const ping  = p2(sqm2ping(total * numer / denom));
         const loNo  = loNoM ? loNoM[1].replace(/\s/g,'') : '';
-        _landData[idx] = { loNo, ping, detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪` };
+        const distM2 = t.match(/高雄市([^\s]{1,4}區)/);
+        const distName = distM2 ? distM2[1] : (deed.district || '').replace('高雄市','');
+        _landData[idx] = { loNo, ping, detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪`, distName };
         document.getElementById(`land-ping-${idx}`).value = ping;
         document.getElementById(`land-lono-${idx}`).value = loNo;
         document.getElementById(`land-info-${idx}`).textContent = `✓ ${total} m²，持分 ${denom}分之${numer} ≈ ${ping} 坪`;
         document.getElementById(`land-zone-label-${idx}`).textContent = `✓ ${file.name}`;
         updateCard();
+        queryZoning(idx);
       } else {
         document.getElementById(`land-info-${idx}`).textContent = '⚠ 無法辨識，請手動填寫';
         document.getElementById(`land-zone-label-${idx}`).textContent = file.name;
@@ -839,6 +845,71 @@
 
   function getLandTotal() {
     return Object.values(_landData).reduce((s, e) => s + (e.ping || 0), 0);
+  }
+
+  // ===== 使用分區查詢（高雄市都計 GIS）=====
+  const URBAN_PROXY = 'https://kcg-urban-proxy.bingshang1019.workers.dev';
+  const PROXY_BASE  = 'http://urbanproxy.kcg.gov.tw/arcgis/rest/services';
+  const DIST_CODE   = {
+    '鹽埕區':'01','鼓山區':'02','左營區':'03','楠梓區':'04','三民區':'05',
+    '新興區':'06','前金區':'07','苓雅區':'08','前鎮區':'09','旗津區':'10',
+    '小港區':'11','鳳山區':'12','林園區':'13','大寮區':'14','大樹區':'15',
+    '大社區':'16','仁武區':'17','鳥松區':'18','岡山區':'19','橋頭區':'20',
+    '燕巢區':'21','田寮區':'22','阿蓮區':'23','路竹區':'24','湖內區':'25',
+    '茄萣區':'26','永安區':'27','彌陀區':'28','梓官區':'29','旗山區':'30',
+    '美濃區':'31','六龜區':'32','甲仙區':'33'
+  };
+
+  async function proxyFetch(arcgisUrl) {
+    const r = await fetch(`${URBAN_PROXY}/?url=${encodeURIComponent(arcgisUrl)}`);
+    return r.json();
+  }
+
+  async function queryZoning(idx) {
+    const data = _landData[idx];
+    if (!data?.loNo) return;
+    const sectM = data.loNo.match(/^(.+?段(?:.+?小段)?)\s*(\d[\d-]*)/);
+    if (!sectM) return;
+    const sectName = sectM[1].trim();
+    const landNo   = sectM[2].trim();
+    const distCode = DIST_CODE[data.distName || ''];
+    const el = document.getElementById(`land-zone-${idx}`);
+    if (!el) return;
+    if (!distCode) { el.textContent = '⚠ 無法判斷行政區'; return; }
+    el.textContent = '⏳ 查詢使用分區中…';
+    el.style.color = '#92400e';
+    try {
+      const w1 = encodeURIComponent(`DIST='${distCode}' AND KEY03='${sectName}'`);
+      const d1 = await proxyFetch(`${PROXY_BASE}/KcgVT/KcgTB/MapServer/4/query?f=json&where=${w1}&returnGeometry=false&outFields=SECT&outSR=3826`);
+      if (!d1.features?.length) { el.textContent = '⚠ 找不到地段'; return; }
+      const sectCode = d1.features[0].attributes.SECT;
+      const parts    = landNo.split('-');
+      const landCode = parts[0].padStart(4,'0') + (parts[1]||'0').padStart(4,'0');
+      const w2 = encodeURIComponent(`ALL_SECT='${sectCode}' AND ALL_LAND='${landCode}'`);
+      const d2 = await proxyFetch(`${PROXY_BASE}/KcgVT/KcgTB/MapServer/1/query?f=json&where=${w2}&returnGeometry=false&outFields=ALL_LUSE&outSR=3826`);
+      if (!d2.features?.length) { el.textContent = '⚠ 查無分區資料'; return; }
+      const luseCode = d2.features[0].attributes.ALL_LUSE;
+      const w3 = encodeURIComponent(`LUSE_CODE='${luseCode}'`);
+      const d3 = await proxyFetch(`${PROXY_BASE}/KcgVT/KcgTB/MapServer/2/query?f=json&where=${w3}&returnGeometry=false&outFields=LUSE_DES2&outSR=3826`);
+      const zoneName = d3.features?.[0]?.attributes?.LUSE_DES2 || '未知';
+      const w4 = encodeURIComponent(`AA01='${sectCode}' AND AA02+AA03='${landCode}'`);
+      const d4 = await proxyFetch(`${PROXY_BASE}/AppData/LFB002_LAND/MapServer/1/query?f=json&where=${w4}&returnGeometry=false&outFields=AA11,AA12&outSR=3826`);
+      const pubVal   = d4.features?.[0]?.attributes?.AA11 || 0;
+      const pubPrice = d4.features?.[0]?.attributes?.AA12 || 0;
+      _landData[idx].zone     = zoneName;
+      _landData[idx].pubVal   = pubVal;
+      _landData[idx].pubPrice = pubPrice;
+      let msg = `✓ ${zoneName}`;
+      if (pubVal)   msg += `　現值 ${pubVal.toLocaleString()} 元/m²`;
+      if (pubPrice) msg += `　地價 ${pubPrice.toLocaleString()} 元/m²`;
+      el.textContent = msg;
+      el.style.color = '#1d4ed8';
+      updateCard();
+    } catch(e) {
+      el.textContent = '⚠ 查詢失敗';
+      el.style.color = '#dc2626';
+      console.error(e);
+    }
   }
 
   // 初始化第一筆
@@ -1085,6 +1156,15 @@
       landText = landEntries.map(e => `${e.loNo||''}（${e.ping}坪）`).join(' ＋ ') + `　合計 ${landTotal} 坪`;
     }
     setText('td-land', landText);
+    const zones = landEntries.map(e => e.zone).filter(Boolean);
+    setText('td-zone', zones.length ? zones.join(' ／ ') : '－');
+    const pubVals = landEntries.filter(e => e.pubVal);
+    if (pubVals.length) {
+      const v = pubVals[0];
+      setText('td-pub-val', `現值 ${(v.pubVal||0).toLocaleString()} 元/m²　地價 ${(v.pubPrice||0).toLocaleString()} 元/m²`);
+    } else {
+      setText('td-pub-val', '－');
+    }
     // 更新左側總坪數標示
     const totalLbl = document.getElementById('land-total-label');
     if (totalLbl) totalLbl.textContent = landTotal ? `土地持分合計：${landTotal} 坪` : '';
