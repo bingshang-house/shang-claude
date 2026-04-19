@@ -957,17 +957,22 @@
           outSR:'3826'
         });
 
-        // 6. 都市計畫 / 細部計畫名稱（KS_G layer 16，有 URBANLEVEL 分類）
+        // 6a. 主要計畫名稱（KS_G layer 16，用 URBANLEVEL 篩主要）
         spatialQ.set('outFields','UPNAME,URBANLEVEL,PUBDATE');
         const d6 = await proxyFetch(`${URBAN_MS}/16/query?${spatialQ}`);
         if (d6.features?.length) {
           const valid = d6.features
             .filter(f => f.attributes.UPNAME?.trim())
             .sort((a,b) => (b.attributes.PUBDATE||0)-(a.attributes.PUBDATE||0));
-          const main   = valid.find(f => f.attributes.URBANLEVEL?.includes('主要'));
-          const detail = valid.find(f => f.attributes.URBANLEVEL?.includes('細部'));
-          if (main)   urbanPlan  = main.attributes.UPNAME.trim();
-          if (detail) detailPlan = detail.attributes.UPNAME.trim();
+          const main = valid.find(f => f.attributes.URBANLEVEL?.includes('主要'));
+          if (main) urbanPlan = main.attributes.UPNAME.trim();
+        }
+
+        // 6b. 細部計畫區名（KS4_PlanD layer 22，NAME 欄位直接拿基底細部計畫名）
+        spatialQ.set('outFields','NAME,DPID');
+        const dDP = await proxyFetch(`${URBAN_MS}/22/query?${spatialQ}`);
+        if (dDP.features?.length) {
+          detailPlan = dDP.features[0].attributes.NAME?.trim() || '';
         }
 
         // 7. 建蔽率 / 容積率（KS_Plan layer 13，直接空間查詢）
