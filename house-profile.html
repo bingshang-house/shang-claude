@@ -315,6 +315,10 @@
     .points-list { padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
     .point-item { font-size: 11px; color: #333; display: flex; align-items: flex-start; gap: 5px; line-height: 1.5; }
     .point-star { color: #CC8F00; flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+    .point-line { padding: 1px 0; line-height: 1.6; font-size: 11.5px; color: #333; white-space: pre-wrap; word-break: break-word; }
+    .point-line.is-heading { font-size: 13px; font-weight: 800; color: #7A5500; text-align: center; padding: 4px 0; letter-spacing: 1px; }
+    .point-line.is-bullet  { font-weight: 700; color: #CC8F00; margin-top: 4px; }
+    .point-gap { height: 6px; }
 
     /* Surroundings */
     .surr-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
@@ -483,8 +487,8 @@
       <div class="fg">
         <label>訴求重點（每行一點，最多 6 點）</label>
         <button type="button" onclick="autoPoints()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">✨ AI 改寫文案（Gemini）</button>
-        <textarea id="s-points" rows="5" oninput="_pointsTouched=true; updateCard()"></textarea>
-        <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">預設依物件資料自動帶出；想要更自然文筆再按上方 AI 改寫</div>
+        <textarea id="s-points" rows="12" oninput="_pointsTouched=true; updateCard()" style="line-height:1.55;"></textarea>
+        <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">預設依物件資料自動帶出結構化版面；想要有溫度的生活場景文案再按上方 AI 改寫</div>
       </div>
 
       <div class="form-sep">重要備註補充</div>
@@ -1919,12 +1923,34 @@
         style="width:100%;height:208px;border:none;display:block;"></iframe>`;
     }
 
-    // Selling points
-    const lines = pointsRaw.split('\n').map(l => l.trim()).filter(l => l);
+    // Selling points — 偵測結構化輸出（含 ✅ 或主標題 emoji）→ 保留多行版面；否則照舊 ★ bullet
     const pDiv = document.getElementById('out-points');
-    pDiv.innerHTML = lines.length
-      ? lines.slice(0,6).map(l => `<div class="point-item"><span class="point-star">★</span><span>${escH(l)}</span></div>`).join('')
-      : '<div class="point-item"><span class="point-star">★</span><span class="pending">請填入訴求重點</span></div>';
+    const rawBlock = pointsRaw.replace(/\r\n/g, '\n');
+    const blockLines = rawBlock.split('\n').map(l => l.trimEnd());
+    while (blockLines.length && !blockLines[0].trim()) blockLines.shift();
+    while (blockLines.length && !blockLines[blockLines.length-1].trim()) blockLines.pop();
+    const nonEmpty = blockLines.filter(l => l.trim());
+    const isStructured = blockLines.some(l => /^(✅|🏡|🌳|✨|🌟|🌲|📌)/.test(l.trim()));
+
+    if (!nonEmpty.length) {
+      pDiv.innerHTML = '<div class="point-item"><span class="point-star">★</span><span class="pending">請填入訴求重點</span></div>';
+    } else if (isStructured) {
+      pDiv.innerHTML = blockLines.slice(0, 40).map(l => {
+        const t = l.trim();
+        if (!t) return '<div class="point-gap"></div>';
+        // 主標題：兩端都有相同 emoji 裝飾、或純 emoji 頭尾的短標題
+        if (/^[🏡🌳✨🌟🌲🏠][🏡🌳✨🌟🌲🏠]?\s*.{2,16}\s*[🏡🌳✨🌟🌲🏠][🏡🌳✨🌟🌲🏠]?$/.test(t)) {
+          return `<div class="point-line is-heading">${escH(t)}</div>`;
+        }
+        // ✅ 開頭 bullet 標題
+        if (t.startsWith('✅')) {
+          return `<div class="point-line is-bullet">${escH(t)}</div>`;
+        }
+        return `<div class="point-line">${escH(t)}</div>`;
+      }).join('');
+    } else {
+      pDiv.innerHTML = nonEmpty.slice(0,6).map(l => `<div class="point-item"><span class="point-star">★</span><span>${escH(l)}</span></div>`).join('');
+    }
 
     // Surroundings
     ['traffic','life','location','develop','school'].forEach(k => {
@@ -2026,12 +2052,18 @@
     el.style.color = exhausted ? '#c00' : '#888';
   }
 
-  // ===== 內建模板 fallback（AI 超額或失敗時使用）=====
+  // 地址砍到路段（移除門牌號碼，例如「瑞隆路591號」→「瑞隆路」）
+  function addrToRoad(fullAddr) {
+    if (!fullAddr) return '';
+    return fullAddr.split(/\d+號/)[0].replace(/\s+/g, '').trim();
+  }
+
+  // ===== 內建模板 fallback（AI 超額或失敗時使用，結構化版面貼近 AI 輸出）=====
   function autoPointsTemplate(d) {
     const val = id => (document.getElementById(id)?.value || '').trim();
     const district = d.district || '';
-    const address  = d.address || '';
-    const loc      = val('s-location');
+    const road     = d.address ? addrToRoad(d.address) : '';
+    const location = (district + road).trim();
     const traffic  = val('s-traffic');
     const life     = val('s-life');
     const school   = val('s-school');
@@ -2040,28 +2072,26 @@
     const age      = d.age;
     const orient   = val('s-orientation');
     const zone     = (Object.values(_landData).map(e => e.zone).filter(Boolean)[0]) || '';
+    const locInfo  = val('s-location');
 
-    const sentences = [];
-    const addr = `${district}${address}`.trim();
-    if (addr) {
-      sentences.push(loc ? `座落於${addr}，位處${loc}，地段條件優越` : `座落於${addr}，地段條件優越`);
+    const bullets = [];
+    if (location) {
+      const extra = locInfo ? `　${locInfo.split('\n').filter(Boolean)[0]}` : '';
+      bullets.push(`✅ 📍 地段位置\n${location}${extra}`);
     }
-    const comfort = [];
-    if (traffic) comfort.push(traffic);
-    if (life)    comfort.push(life);
-    if (comfort.length) sentences.push(`${comfort.join('、')}，日常生活便利無虞`);
-    if (school)  sentences.push(`鄰近${school}，學區資源完整，照顧子女就學所需`);
-    if (develop) sentences.push(`${develop}，後市增值潛力可期`);
+    if (traffic) bullets.push(`✅ 🚌 交通機能\n${traffic.split('\n').filter(Boolean).slice(0,3).join('、')}`);
+    if (life)    bullets.push(`✅ 🛒 生活機能\n${life.split('\n').filter(Boolean).slice(0,4).join('、')}`);
+    if (school)  bullets.push(`✅ 🎓 學區資源\n${school}`);
+    if (develop) bullets.push(`✅ 🏗️ 區域發展\n${develop.split('\n').filter(Boolean).slice(0,3).join('、')}`);
     const selfBits = [];
-    if (age)    selfBits.push(`屋齡${age}年`);
+    if (age)    selfBits.push(`屋齡 ${age} 年`);
     if (layout) selfBits.push(layout);
     if (orient && orient !== '不確定') selfBits.push(orient);
-    if (zone && !selfBits.length) selfBits.push(zone);
-    if (selfBits.length) sentences.push(`${selfBits.join('、')}，格局方正適合自住或置產`);
-    if (!sentences.length) sentences.push('本物件地段、機能、學區條件兼備，誠摯推薦給有需求的買家');
-    let text = sentences.join('；') + '。';
-    if (text.length > 140) text = text.slice(0, 135) + '…';
-    return text;
+    if (zone)   selfBits.push(zone);
+    if (selfBits.length) bullets.push(`✅ 🏠 物件條件\n${selfBits.join('、')}`);
+
+    if (!bullets.length) return '物件資料待補充，請上傳謄本或填入相關欄位後再重新產生';
+    return `🏡🏡 房屋亮點 🏡🏡\n\n` + bullets.join('\n\n');
   }
 
   // ===== 自動產生訴求重點（呼叫 Gemini 2.5 Flash）=====
@@ -2086,8 +2116,11 @@
 
     try {
       const val = id => (document.getElementById(id)?.value || '').trim();
+      const roadAddr = d.address
+        ? addrToRoad(`${d.district || ''}${d.address}`)
+        : (d.district || '');
       const facts = {
-        地址: d.address ? `${d.district || ''}${d.address}` : '',
+        地段: roadAddr,
         樓層: d.isWholeBuilding ? `整棟 ${d.totalFloors || ''} 層透天` : (d.floor ? `${d.floor} 樓` : ''),
         屋齡: d.age || '',
         座向: val('s-orientation'),
@@ -2107,25 +2140,48 @@
         .filter(([, v]) => v && v !== '不確定')
         .map(([k, v]) => `${k}：${v}`).join('\n');
 
-      const prompt = `你是房仲，用白話口語幫客戶說明這間房子的特色，像朋友在介紹房子那樣自然地講。
+      const prompt = `你是奧美、麥肯廣告等級的不動產文案大師，幫業主寫房屋銷售文案。通過語言和視覺的轉換，把基本資料包裝成有溫度、貼近生活、讓讀者能想見日常場景的故事。
 
-寫作要求：
-- 約 100 字，2 到 4 句話，直接講事實跟實用優點
-- 只講資料裡有的事實，沒提到的面向不要編造（例如沒給學區就不要寫「學區好」）
-- 像朋友聊天，不要像廣告
-- 結尾就自然收，不要喊「歡迎來看」「誠摯推薦」「成家首選」之類的尾巴
-- 繁體中文，不要 markdown、不要條列、不要標題
+# 文案結構
+第一行是主標題，用 2-3 個同類表情符號裝飾，例如：
+🏡🏡 房屋亮點 🏡🏡
+（或 ✨✨ 優質特色 ✨✨、🌟🌟 精選賣點 🌟🌟、🌳🌳 優質好宅 🌳🌳 擇一）
 
-嚴禁使用的行銷詞（會扣分）：
-最佳選擇、完美宅邸、宜居首選、生活篇章、舒心、愜意、精緻、典藏、尊榮、匠心、璀璨、綻放、都會脈動、城市心臟、生活機能一應俱全、應有盡有、坐擁、盡享、臻於、打造、開啟、擘劃、未來可期、增值潛力無限、交通四通八達
+主標題下方空一行，接著列出 4 到 6 個特色重點。
+每個重點兩行：
+- 第一行：✅ + 一個能反映該重點的表情符號 + 標題短句（例：「✅ 📍 地段精華・通勤無感」）
+- 第二行：描述兩到三句住在這裡的實際生活場景（不要寫「想像」二字，直接描述），把資料轉化為日常感覺。
 
-建議寫法示範（不要照抄，只學語氣）：
-「這間位在○○路，走 5 分鐘就到捷運○○站，通勤方便。旁邊有○○國小、○○市場，生活很便利。屋齡 5 年，三房兩廳，適合小家庭。」
+每個重點之間空一行。不要用 ---、===、======= 分隔線。不要用 markdown 標題 # ##。
+
+# 語氣與用字
+- 繁體中文，活潑、專業，有溫度，像奧美文案
+- 負面形容轉正面：老公寓→有歷史韻味的社區、小坪數→精巧俐落宅、屋齡高→累積生活故事的老屋…
+- 避免空泛 AI 腔、避免這些老套行銷詞：最佳選擇、完美宅邸、宜居首選、典藏、匠心、璀璨、盡享、坐擁、開啟、成家首選、誠摯邀約、未來可期、增值潛力無限、交通四通八達、生活機能一應俱全、應有盡有、擘劃、打造
+
+# 規則
+- 地段已限定到路段，直接使用資料裡的地段，不要補門牌號碼、不要拼湊具體建案名
+- 只使用資料裡有的事實，沒提到的面向不要編造（例如資料沒寫學區就不要寫學區好）
+- 不要加總結收尾，最後一個重點寫完就結束
+- 主標題 + 每個重點開頭的 emoji 各 1 組即可，內文不要每句塞 emoji
+
+# 語氣範例（學語氣不要照抄文字）
+
+🏡🏡 房屋亮點 🏡🏡
+
+✅ 📍 地段精華・走路就是日常
+捷運站 5 分鐘腳程，早晨不用跟車潮搶時間。下班後拐進巷弄買杯手搖，回家路程就是一段輕鬆的散步。
+
+✅ 🛒 菜市場與超商都在轉角
+巷口有 7-11，步行 5 分鐘到傳統市場。平日傍晚繞去買把青菜，週末早起挑條新鮮的魚，日子過得踏實又從容。
+
+✅ 🎓 學區資源讓接送變簡單
+○○國小走路 8 分鐘到，早上送完小孩回家還能喝杯咖啡。放學時間家長們在校門口聊兩句，小孩書包一扔就去公園玩。
 
 物件資料：
 ${factsText}
 
-直接輸出文案內文。`;
+直接輸出完整文案，不要加任何前言、說明或結語。`;
 
       const key = getGeminiKey();
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
@@ -2135,8 +2191,8 @@ ${factsText}
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.5,
-            maxOutputTokens: 1024,
+            temperature: 0.7,
+            maxOutputTokens: 2048,
             thinkingConfig: { thinkingBudget: 0 }
           }
         })
