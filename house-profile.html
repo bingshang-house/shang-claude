@@ -948,26 +948,43 @@
   // ===== buildmis 建築執照存根查詢（高雄市） =====
   const BUILDMIS_BASE = 'https://buildmis.kcg.gov.tw/bupic/pages/jsapi';
 
+  // Cloudflare Worker 打 buildmis 有時 522（上游超時），需要重試
+  async function _retryFetch(u, init, parseOk) {
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await fetch(u, init);
+        if (r.ok) {
+          try { return await parseOk(r); } catch (e) { lastErr = e; }
+        } else {
+          lastErr = new Error('http ' + r.status);
+        }
+      } catch (e) { lastErr = e; }
+      if (attempt < 2) await new Promise(res => setTimeout(res, 600 + attempt * 800));
+    }
+    console.warn('buildmis retry exhausted', lastErr);
+    return null;
+  }
+
   async function buildmisQuery(params) {
     const u = `${URBAN_PROXY}/?url=${encodeURIComponent(`${BUILDMIS_BASE}/querylic`)}`;
-    const r = await fetch(u, {
+    const init = {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(params).toString(),
-    });
-    if (!r.ok) return [];
-    try { return await r.json(); } catch { return []; }
+    };
+    const json = await _retryFetch(u, init, r => r.json());
+    return Array.isArray(json) ? json : [];
   }
 
   async function buildmisDetail(dkey) {
     const u = `${URBAN_PROXY}/?url=${encodeURIComponent(`${BUILDMIS_BASE}/getLicenseInfo`)}`;
-    const r = await fetch(u, {
+    const init = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: dkey }),
-    });
-    if (!r.ok) return null;
-    try { return await r.json(); } catch { return null; }
+    };
+    return await _retryFetch(u, init, r => r.json());
   }
 
   async function buildmisSections(zip) {
@@ -1149,6 +1166,8 @@
 
     _licCandidates = result.list;
     if (!result.list.length) {
+      // 若之前已成功載入過細項，不要洗掉畫面（可能只是 522 短暫抖動）
+      if (_licCache?.info) return;
       setLicDetailAll(result.via === 'license' ? '字號查無細項' : '未查到');
       return;
     }
@@ -1178,6 +1197,8 @@
     _licSelected = pick.dkey;
     const info = await buildmisDetail(pick.dkey);
     if (!info) {
+      // 同理：有舊成功快取就不洗
+      if (_licCache?.info) return;
       setLicDetailAll('載入細項失敗');
       return;
     }
