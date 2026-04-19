@@ -1567,8 +1567,8 @@
     const matM = t.match(/主要建材\s+(.+?)(?=\s{2,}|層數|層次|$)/m);
     if (matM) d.material = matM[1].trim();
 
-    // 層數
-    const flrTotalM = t.match(/層數\s+0*(\d+)層/);
+    // 層數（防 PDF.js 拆字）
+    const flrTotalM = t.match(/層\s*數\s*0*(\d+)\s*層/);
     if (flrTotalM) d.totalFloors = parseInt(flrTotalM[1]);
 
     // 層次 (本戶樓層) — 支援多層次（整棟建物），同時抓每層面積
