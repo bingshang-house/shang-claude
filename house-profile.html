@@ -1256,7 +1256,8 @@
       statusEl.textContent = '🔎 搜尋周邊設施中…';
 
       const [subway, bus, convenience, market,
-             shopee, childcare, clinic, mall, park, devPOI] = await Promise.all([
+             shopee, childcare, clinic, bank, nightmarket,
+             mall, park, devPOI] = await Promise.all([
         nearbySearch(loc, 'subway_station',    null,           1500),
         nearbySearch(loc, 'bus_station',       null,            800),
         nearbySearch(loc, 'convenience_store', null,            500),
@@ -1264,6 +1265,8 @@
         nearbySearch(loc, null, '蝦皮店到店',                   800),
         nearbySearch(loc, null, '公共托育 公托 幼兒園',         1000),
         nearbySearch(loc, 'hospital',          null,           1200),
+        nearbySearch(loc, 'bank',              null,            800),
+        nearbySearch(loc, null, '夜市',                        2000),
         nearbySearch(loc, 'shopping_mall',     null,           2000),
         nearbySearch(loc, 'park',              null,           1000),
         nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  3000),
@@ -1285,11 +1288,13 @@
         const top = topN(results, loc, 1);
         if (top.length) lifeLines.push(`${label}：${top[0].p.displayName}（步行約 ${walkMin(top[0].d)}）`);
       };
-      addLife(convenience, '超商');
-      addLife(market,      '傳統市場');
-      addLife(shopee,      '蝦皮店到店');
-      addLife(childcare,   '公托幼兒園');
-      addLife(clinic,      '醫院診所');
+      addLife(convenience,  '超商');
+      addLife(market,       '傳統市場');
+      addLife(shopee,       '蝦皮店到店');
+      addLife(childcare,    '公托幼兒園');
+      addLife(clinic,       '醫院診所');
+      addLife(bank,         '銀行');
+      addLife(nightmarket,  '夜市');
       document.getElementById('s-life').value = lifeLines.join('\n');
 
       // ── 3. 商圈特色 ──
