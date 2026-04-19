@@ -412,6 +412,7 @@
           <label style="font-size:11px;">API Key</label>
           <input type="text" id="geminiApiKey" placeholder="填入 Gemini API Key" style="font-size:11px;">
         </div>
+        <div id="gemini-usage-badge" style="font-size:11px;color:#888;margin-bottom:8px;">今日 AI 用量：0/240</div>
         <button onclick="saveApiKeys()" style="width:100%;padding:8px;background:#CC8F00;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">儲存全部設定</button>
       </div>
     </div>
@@ -1992,6 +1993,79 @@
   function setHtml(id, val) { const el = document.getElementById(id); if (el) el.innerHTML  = val; }
   function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+  // ===== Gemini 用量管控（免費 250 req/day，設 240 留安全邊距）=====
+  const GEMINI_DAILY_LIMIT = 240;
+  function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function getGeminiUsage() {
+    try {
+      const raw = JSON.parse(localStorage.getItem('gemini_usage') || '{}');
+      const t = todayStr();
+      if (raw.date !== t) return { date: t, count: 0 };
+      return { date: raw.date, count: raw.count || 0 };
+    } catch { return { date: todayStr(), count: 0 }; }
+  }
+  function bumpGeminiUsage(delta = 1) {
+    const u = getGeminiUsage();
+    u.count += delta;
+    localStorage.setItem('gemini_usage', JSON.stringify(u));
+    return u;
+  }
+  function exhaustGeminiUsage() {
+    const u = { date: todayStr(), count: GEMINI_DAILY_LIMIT };
+    localStorage.setItem('gemini_usage', JSON.stringify(u));
+  }
+  function updateGeminiUsageBadge() {
+    const el = document.getElementById('gemini-usage-badge');
+    if (!el) return;
+    const u = getGeminiUsage();
+    const exhausted = u.count >= GEMINI_DAILY_LIMIT;
+    el.textContent = exhausted
+      ? `今日 AI 額度已用完（${u.count}/${GEMINI_DAILY_LIMIT}），明天重置`
+      : `今日 AI 用量：${u.count}/${GEMINI_DAILY_LIMIT}`;
+    el.style.color = exhausted ? '#c00' : '#888';
+  }
+
+  // ===== 內建模板 fallback（AI 超額或失敗時使用）=====
+  function autoPointsTemplate(d) {
+    const val = id => (document.getElementById(id)?.value || '').trim();
+    const district = d.district || '';
+    const address  = d.address || '';
+    const loc      = val('s-location');
+    const traffic  = val('s-traffic');
+    const life     = val('s-life');
+    const school   = val('s-school');
+    const develop  = val('s-develop');
+    const layout   = val('s-layout');
+    const age      = d.age;
+    const orient   = val('s-orientation');
+    const zone     = (Object.values(_landData).map(e => e.zone).filter(Boolean)[0]) || '';
+
+    const sentences = [];
+    const addr = `${district}${address}`.trim();
+    if (addr) {
+      sentences.push(loc ? `座落於${addr}，位處${loc}，地段條件優越` : `座落於${addr}，地段條件優越`);
+    }
+    const comfort = [];
+    if (traffic) comfort.push(traffic);
+    if (life)    comfort.push(life);
+    if (comfort.length) sentences.push(`${comfort.join('、')}，日常生活便利無虞`);
+    if (school)  sentences.push(`鄰近${school}，學區資源完整，照顧子女就學所需`);
+    if (develop) sentences.push(`${develop}，後市增值潛力可期`);
+    const selfBits = [];
+    if (age)    selfBits.push(`屋齡${age}年`);
+    if (layout) selfBits.push(layout);
+    if (orient && orient !== '不確定') selfBits.push(orient);
+    if (zone && !selfBits.length) selfBits.push(zone);
+    if (selfBits.length) sentences.push(`${selfBits.join('、')}，格局方正適合自住或置產`);
+    if (!sentences.length) sentences.push('本物件地段、機能、學區條件兼備，誠摯推薦給有需求的買家');
+    let text = sentences.join('；') + '。';
+    if (text.length > 140) text = text.slice(0, 135) + '…';
+    return text;
+  }
+
   // ===== 自動產生訴求重點（呼叫 Gemini 2.5 Flash）=====
   async function autoPoints() {
     const d = deed;
@@ -1999,6 +2073,17 @@
     if (!ta) return;
     const btn = event?.target;
     const origText = btn ? btn.textContent : '';
+
+    // 超過每日免費額度 → 直接走模板
+    const usage = getGeminiUsage();
+    if (usage.count >= GEMINI_DAILY_LIMIT) {
+      ta.value = autoPointsTemplate(d);
+      updateCard();
+      updateGeminiUsageBadge();
+      alert(`今日 AI 額度已用完（${usage.count}/${GEMINI_DAILY_LIMIT}），改用內建模板產生文案。明天會自動重置。`);
+      return;
+    }
+
     if (btn) { btn.disabled = true; btn.textContent = '✨ AI 撰寫中…'; }
 
     try {
@@ -2046,6 +2131,15 @@ ${factsText}`;
         })
       });
       if (!res.ok) {
+        // 429 = 超過 Google 端的 quota（通常是 RPM 或當日限制）→ 鎖住當日額度，退模板
+        if (res.status === 429) {
+          exhaustGeminiUsage();
+          updateGeminiUsageBadge();
+          ta.value = autoPointsTemplate(d);
+          updateCard();
+          alert('Gemini 已達免費額度上限（Google 端回報 429），已改用內建模板產生文案，明天會自動重置。');
+          return;
+        }
         const err = await res.text();
         throw new Error(`Gemini API ${res.status}: ${err.slice(0, 200)}`);
       }
@@ -2053,9 +2147,14 @@ ${factsText}`;
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
       if (!text) throw new Error('Gemini 回傳空白');
       ta.value = text;
+      bumpGeminiUsage(1);
+      updateGeminiUsageBadge();
       updateCard();
     } catch (e) {
-      alert('自動產生失敗：' + e.message);
+      // 網路或其他錯誤 → 退模板，讓使用者還是拿得到文案
+      ta.value = autoPointsTemplate(d);
+      updateCard();
+      alert('AI 產生失敗，已改用內建模板：' + e.message);
       console.error(e);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = origText; }
@@ -2378,6 +2477,7 @@ ${factsText}`;
   // Init
   updateCard();
   updateTGOSStatus();
+  updateGeminiUsageBadge();
 
   // ===== School District Lookup =====
   // Format: each entry = { e: [國小名稱,...], j: [國中名稱,...] }
