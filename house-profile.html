@@ -2471,15 +2471,7 @@ ${factsText}
           for (const k of Object.keys(first || {})) {
             if (Array.isArray(first[k])) { drilled = first[k]; break; }
           }
-          if (drilled) {
-            console.log('RouteMatrix 剝第二層 ok，由', elements.length, '列 row 展開為', drilled.length, '筆 element');
-            elements = drilled;
-          } else {
-            console.log('RouteMatrix 第一層非 element，內容：', first, 'keys:', Object.keys(first || {}));
-          }
-        }
-        if (elements.length && !looksLikeElement(elements[0])) {
-          console.log('RouteMatrix element 形狀異常：', elements[0], 'keys:', Object.keys(elements[0] || {}));
+          if (drilled) elements = drilled;
         }
         // 讀 element：用 proto 上公開 getter（durationMillis / distanceMeters / condition），
         // destinationIndex 沒有就用陣列 index
@@ -2573,8 +2565,8 @@ ${factsText}
              shopee, childcare, clinic, bank, nightmarket,
              districtA, districtB, park, devPOI, interchange] = await Promise.all([
         nearbySearch(loc, 'subway_station',    null,           3000),
-        nearbySearch(loc, 'bus_station',       null,           1000),
-        nearbySearch(loc, null, '公車站 公車站牌 客運站',      1000),
+        nearbySearch(loc, 'bus_station',       null,           1500),
+        nearbySearch(loc, null, '公車站 公車站牌 客運站',      1500),
         nearbySearch(loc, 'convenience_store', null,            500),
         nearbySearch(loc, null, '傳統市場 菜市場',              1200),
         nearbySearch(loc, null, '蝦皮店到店',                   800),
@@ -2586,7 +2578,7 @@ ${factsText}
         nearbySearch(loc, null, '老街 特色街 文創園區 老地名', 4000),
         nearbySearch(loc, 'park',              null,           1000),
         nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  5000),
-        nearbySearch(loc, null, '交流道 IC 快速道路交流道',    3000),
+        nearbySearch(loc, null, '交流道 IC 快速道路交流道',    5000),
       ]);
 
       // 公車合併：type 搜尋 + 文字搜尋，去重（place.id 或名稱）
@@ -2607,7 +2599,7 @@ ${factsText}
       statusEl.textContent = '🚗 計算實際路徑時間中…';
       const [subwayDR, busWR, ichDR, nmDR, dA_DR, dB_DR, devDR] = await Promise.all([
         topNRouted(subway,      loc, 3, 'DRIVING'),
-        topNRouted(bus,         loc, 5, 'WALKING', 15), // 公車站只收 15 分鐘步行內的
+        topNRouted(bus,         loc, 5, 'WALKING', 20), // 公車站只收 20 分鐘步行內的
         topNRouted(ichValid,    loc, 5, 'DRIVING'),
         topNRouted(nightmarket, loc, 1, 'DRIVING'),
         topNRouted(districtA,   loc, 10, 'DRIVING'),
