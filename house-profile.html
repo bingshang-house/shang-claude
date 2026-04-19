@@ -1030,9 +1030,9 @@
     };
   }
 
-  // 從謄本資料拆出查詢條件。依優先序：字號 → 地址 → (地號需使用者手動)
+  // 從謄本資料拆出查詢條件。優先序：字號（有就鎖定，不退地址）→ 地址 → 地號
   async function fetchLicenseCandidates(d) {
-    // 1) 字號
+    // 1) 字號：PDF 裡有就直接用這個，不 fallback 地址（避免挑到錯的舊案）
     if (d.licenseParsed && d.licenseParsed.yy && d.licenseParsed.kind) {
       const list = await buildmisQuery({
         qrytyp: 1,
@@ -1040,9 +1040,9 @@
         lic_kind: d.licenseParsed.kind,
         lic_no1: d.licenseParsed.no1,
       });
-      if (list.length) return { via: 'license', list };
+      return { via: 'license', list };
     }
-    // 2) 地址
+    // 2) 沒字號才查地址
     if (d.address && d.district) {
       const distName = d.district.replace(/^高雄市/, '');
       const zip = KCG_ZIP[distName];
@@ -1136,8 +1136,8 @@
       return;
     }
 
-    // 字號/地址都沒查到 → 試土地地號（取第一筆）
-    if (!result.list.length) {
+    // 只有在「沒字號」情況才退地號（有字號就信字號，不要退）
+    if (result.via !== 'license' && !result.list.length) {
       const firstLand = Object.values(_landData).find(e => e.loNo && e.distName);
       if (firstLand) {
         try {
@@ -1149,7 +1149,7 @@
 
     _licCandidates = result.list;
     if (!result.list.length) {
-      setLicDetailAll('未查到');
+      setLicDetailAll(result.via === 'license' ? '字號查無細項' : '未查到');
       return;
     }
 
