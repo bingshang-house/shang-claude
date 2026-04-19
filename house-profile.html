@@ -1571,8 +1571,10 @@
     const flrTotalM = t.match(/層數\s+0*(\d+)層/);
     if (flrTotalM) d.totalFloors = parseInt(flrTotalM[1]);
 
-    // 層次 (本戶樓層) — 支援多層次（整棟建物）
-    const flrAll = [...t.matchAll(/層次\s*([^\s層次面積]{1,6}?)\s*層次面積/g)].map(m => m[1].trim());
+    // 層次 (本戶樓層) — 支援多層次（整棟建物），同時抓每層面積
+    const flrRows = [...t.matchAll(/層次\s*([^\s]{1,6}?)\s*層次面積\s*([\d.]+)\s*平方公尺/g)]
+      .map(m => ({ name: m[1].trim(), area: parseFloat(m[2]) }));
+    const flrAll = flrRows.map(r => r.name);
     if (flrAll.length > 1) {
       d.isWholeBuilding = true;
       d.floor = chFloor(flrAll[0]);
@@ -1580,6 +1582,7 @@
     } else if (flrAll.length === 1) {
       d.floor = chFloor(flrAll[0]);
     }
+    d.floorBreakdown = flrRows.map(r => ({ ...r, ping: sqm2ping(r.area) }));
     // fallback：從地址抓樓層（例如「十三樓之12」）
     if (!d.floor && d.address) {
       const addrFlM = d.address.match(/([一二三四五六七八九十百千]+|\d+)樓/);
@@ -1817,9 +1820,16 @@
     // 更新左側總坪數標示
     const totalLbl = document.getElementById('land-total-label');
     if (totalLbl) totalLbl.textContent = landTotal ? `土地持分合計：${landTotal} 坪` : '';
-    setText('td-main-area', d.mainPing
-      ? `${d.mainPing} 坪（${d.mainArea} m²）`
-      : '－');
+    {
+      let mainHtml = d.mainPing ? `${d.mainPing} 坪（${d.mainArea} m²）` : '－';
+      if (d.floorBreakdown && d.floorBreakdown.length > 1) {
+        const parts = d.floorBreakdown.map(r =>
+          `${escH(r.name)} ${p2(r.ping)} 坪（${r.area} m²）`
+        ).join('<br>');
+        mainHtml = `<div>${mainHtml}</div><div style="margin-top:3px;font-size:10px;color:#7A5500;line-height:1.5;">${parts}</div>`;
+      }
+      setHtml('td-main-area', mainHtml);
+    }
     setText('td-attached', d.attachedBuildings && d.attachedBuildings.length
       ? d.attachedBuildings.map(a => `${a.purpose} ${a.ping} 坪（${a.area} m²）`).join('、')
       : '無');
