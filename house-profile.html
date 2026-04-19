@@ -1228,6 +1228,20 @@
     return mins <= 1 ? '1 分鐘' : `${mins} 分鐘`;
   }
 
+  // 依距離決定步行或開車，並換算正確時間
+  // 回傳 { label, mins, text } 或 null（超過30分鐘則不顯示）
+  function travelInfo(meters) {
+    if (meters <= 800) {
+      const mins = Math.max(1, Math.round(meters / 67)); // 步行 4km/h
+      if (mins > 30) return null;
+      return { label: '步行', mins, text: `步行約 ${mins} 分鐘` };
+    } else {
+      const mins = Math.max(1, Math.round(meters / 333)); // 開車 20km/h
+      if (mins > 30) return null;
+      return { label: '車程', mins, text: `車程約 ${mins} 分鐘` };
+    }
+  }
+
   function topN(places, loc, n) {
     return places
       .map(p => ({ p, d: calcDist(loc, p) }))
@@ -1275,8 +1289,10 @@
 
       // ── 1. 交通機能 ──
       const trafficLines = [];
-      topN(subway, loc, 3).forEach(({ p, d }) =>
-        trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（步行約 ${walkMin(d)}）`));
+      topN(subway, loc, 3).forEach(({ p, d }) => {
+        const ti = travelInfo(d);
+        if (ti) trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（${ti.text}）`);
+      });
       const busTop = topN(bus, loc, 3);
       if (busTop.length)
         trafficLines.push(`公車站：${busTop.map(({ p }) => p.displayName).join('、')}`);
@@ -1287,7 +1303,9 @@
       const lifeLines = [];
       const addLife = (results, label) => {
         const top = topN(results, loc, 1);
-        if (top.length) lifeLines.push(`${label}：${top[0].p.displayName}（步行約 ${walkMin(top[0].d)}）`);
+        if (!top.length) return;
+        const ti = travelInfo(top[0].d);
+        if (ti) lifeLines.push(`${label}：${top[0].p.displayName}（${ti.text}）`);
       };
       addLife(convenience,  '超商');
       addLife(market,       '傳統市場');
@@ -1303,25 +1321,29 @@
       // 合併兩批結果，去除重複，取距離最近的前 3 個
       const districtAll = [...districtA, ...districtB];
       const districtSeen = new Set();
-      topN(districtAll, loc, 6).forEach(({ p, d }) => {
+      topN(districtAll, loc, 10).forEach(({ p, d }) => {
         const name = p.displayName;
-        // 過濾掉明顯不是商圈的結果（太短或含特定字）
-        if (districtSeen.has(name)) return;
-        if (name.length < 3) return;
+        if (districtSeen.has(name) || name.length < 3) return;
+        const ti = travelInfo(d);
+        if (!ti) return; // 超過 30 分鐘不顯示
         districtSeen.add(name);
-        locLines.push(`${name}（${d <= 600 ? '步行' : '車程'}約 ${walkMin(d)}）`);
+        locLines.push(`${name}（${ti.text}）`);
       });
       // 若 Google 找不到商圈名，加上附近公園作為地區特色補充
       if (locLines.length === 0) {
-        topN(park, loc, 2).forEach(({ p, d }) =>
-          locLines.push(`鄰近 ${p.displayName}（步行約 ${walkMin(d)}）`));
+        topN(park, loc, 2).forEach(({ p, d }) => {
+          const ti = travelInfo(d);
+          if (ti) locLines.push(`鄰近 ${p.displayName}（${ti.text}）`);
+        });
       }
       document.getElementById('s-location').value = locLines.join('\n');
 
       // ── 4. 重要發展 ──
       const devLines = [];
-      topN(devPOI, loc, 2).forEach(({ p, d }) =>
-        devLines.push(`${p.displayName}（車程約 ${walkMin(d)}）`));
+      topN(devPOI, loc, 2).forEach(({ p, d }) => {
+        const ti = travelInfo(d);
+        if (ti) devLines.push(`${p.displayName}（${ti.text}）`);
+      });
       const district = deed.district || '';
       if (district.includes('前鎮') || district.includes('苓雅') || district.includes('鼓山')) {
         devLines.push('亞洲新灣區核心範圍，高雄展覽館、港埠旅運中心已營運');
