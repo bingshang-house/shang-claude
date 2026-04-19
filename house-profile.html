@@ -1257,7 +1257,7 @@
 
       const [subway, bus, convenience, market,
              shopee, childcare, clinic, bank, nightmarket,
-             mall, park, devPOI] = await Promise.all([
+             districtA, districtB, park, devPOI] = await Promise.all([
         nearbySearch(loc, 'subway_station',    null,           1500),
         nearbySearch(loc, 'bus_station',       null,            800),
         nearbySearch(loc, 'convenience_store', null,            500),
@@ -1267,7 +1267,8 @@
         nearbySearch(loc, 'hospital',          null,           1200),
         nearbySearch(loc, 'bank',              null,            800),
         nearbySearch(loc, null, '夜市',                        2000),
-        nearbySearch(loc, 'shopping_mall',     null,           2000),
+        nearbySearch(loc, null, '商圈',                        2500),
+        nearbySearch(loc, null, '老街 特色街 文創園區 老地名', 2500),
         nearbySearch(loc, 'park',              null,           1000),
         nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  3000),
       ]);
@@ -1297,12 +1298,24 @@
       addLife(nightmarket,  '夜市');
       document.getElementById('s-life').value = lifeLines.join('\n');
 
-      // ── 3. 商圈特色 ──
+      // ── 3. 商圈特色（以商圈名稱為主，非個別商家）──
       const locLines = [];
-      topN(park, loc, 2).forEach(({ p, d }) =>
-        locLines.push(`${p.displayName}（步行約 ${walkMin(d)}）`));
-      topN(mall, loc, 2).forEach(({ p, d }) =>
-        locLines.push(`${p.displayName}（車程約 ${walkMin(d)}）`));
+      // 合併兩批結果，去除重複，取距離最近的前 3 個
+      const districtAll = [...districtA, ...districtB];
+      const districtSeen = new Set();
+      topN(districtAll, loc, 6).forEach(({ p, d }) => {
+        const name = p.displayName;
+        // 過濾掉明顯不是商圈的結果（太短或含特定字）
+        if (districtSeen.has(name)) return;
+        if (name.length < 3) return;
+        districtSeen.add(name);
+        locLines.push(`${name}（${d <= 600 ? '步行' : '車程'}約 ${walkMin(d)}）`);
+      });
+      // 若 Google 找不到商圈名，加上附近公園作為地區特色補充
+      if (locLines.length === 0) {
+        topN(park, loc, 2).forEach(({ p, d }) =>
+          locLines.push(`鄰近 ${p.displayName}（步行約 ${walkMin(d)}）`));
+      }
       document.getElementById('s-location').value = locLines.join('\n');
 
       // ── 4. 重要發展 ──
