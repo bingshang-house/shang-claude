@@ -812,16 +812,9 @@
       // 地號：從標題抓「段 XXXX-0000 地號」
       const loNoM = t.match(/([^\s]{2,6}段(?:[^\s]{1,6}小段)?\s*[\d\-]+)\s*地號/);
       // 面積：「面積 XXXX 平方公尺」（排除「元/平方公尺」）
-      const areaM = t.match(/面積\s*([\d]+(?:\.[\d]+)?)\s*平方公尺/);
+      const areaM = t.match(/面\s*積\s*([\d]+(?:\.[\d]+)?)\s*平方公尺/);
       // 持分：「權利範圍 XXXXX分之YYYY」
       const ratioM = t.match(/[権權]利[範][囲圍]\s*(\d+)分之(\d+)/);
-      if (!areaM || !ratioM) {
-        const preview = t.slice(0, 800).replace(/\n/g,' ');
-        document.getElementById(`land-info-${idx}`).textContent =
-          `⚠ 無法辨識｜areaM:${areaM?areaM[1]:'✗'} ratioM:${ratioM?ratioM[1]+'/'+ratioM[2]:'✗'} | 文字預覽：${preview}`;
-        document.getElementById(`land-zone-label-${idx}`).textContent = file.name;
-        return;
-      }
       if (areaM && ratioM) {
         const total = parseFloat(areaM[1]);
         const denom = parseInt(ratioM[1]);
