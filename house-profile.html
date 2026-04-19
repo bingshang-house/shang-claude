@@ -2433,24 +2433,33 @@ ${factsText}
           fields: ['*'],
         };
         const raw = await RouteMatrix.computeRouteMatrix(request);
-        // 實測回傳 { matrix: ... }，matrix 本身或其 elements 才是 iterable
+        // 實測回傳 { matrix: DH }，DH 內部用 minified 私有欄位存陣列（例如 mh）
+        // 優先試 public getter；getter 不在 Object.keys 裡，要用屬性存取而非 hasOwn 判斷
         const result = raw && raw.matrix != null ? raw.matrix : raw;
-        let elements = [];
-        if (Array.isArray(result)) {
-          elements = result;
-        } else if (result && Array.isArray(result.elements)) {
-          elements = result.elements;
-        } else if (result && Array.isArray(result.results)) {
-          elements = result.results;
-        } else if (result && Array.isArray(result.routeMatrixElements)) {
-          elements = result.routeMatrixElements;
-        } else if (result && typeof result[Symbol.asyncIterator] === 'function') {
-          for await (const el of result) elements.push(el);
-        } else if (result && typeof result[Symbol.iterator] === 'function') {
-          elements = [...result];
-        } else {
-          console.log('RouteMatrix raw result:', raw, 'matrix:', result, 'matrix keys:', result && Object.keys(result));
-          throw new Error('unknown computeRouteMatrix response shape: ' + (result && Object.keys(result).join(',')));
+        let elements = null;
+        const tryKeys = ['elements', 'results', 'routeMatrixElements', 'rows', 'items', 'data'];
+        for (const k of tryKeys) {
+          const v = result && result[k];
+          if (Array.isArray(v)) { elements = v; break; }
+        }
+        if (!elements) {
+          if (Array.isArray(result)) elements = result;
+          else if (result && typeof result[Symbol.asyncIterator] === 'function') {
+            elements = [];
+            for await (const el of result) elements.push(el);
+          } else if (result && typeof result[Symbol.iterator] === 'function') {
+            elements = [...result];
+          }
+        }
+        if (!elements) {
+          // fallback：自動掃第一個 Array（處理 minified 私有欄位如 mh）
+          for (const k of Object.keys(result || {})) {
+            if (Array.isArray(result[k])) { elements = result[k]; break; }
+          }
+        }
+        if (!elements) {
+          console.log('RouteMatrix raw:', raw, 'matrix:', result, 'keys:', result && Object.keys(result), 'proto:', result && Object.getOwnPropertyNames(Object.getPrototypeOf(result)));
+          throw new Error('no elements array found');
         }
         for (const el of elements) {
           const place = chunk[el.destinationIndex];
