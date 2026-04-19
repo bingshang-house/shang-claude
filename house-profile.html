@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>房屋銷售介紹產生器</title>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
+      background: #c8c8c8;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ===== TOP BAR ===== */
+    .top-bar {
+      background: #1c2b3a;
+      color: white;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+    .top-title { font-size: 14px; font-weight: 700; color: #ecf0f1; }
+    .btn {
+      padding: 7px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+      font-weight: 700;
+    }
+    .btn-print  { background: #e74c3c; color: white; }
+    .btn-reset  { background: #7f8c8d; color: white; }
+
+    /* ===== MAIN LAYOUT ===== */
+    .main {
+      display: flex;
+      flex: 1;
+      gap: 0;
+    }
+
+    /* ===== LEFT PANEL ===== */
+    .left-panel {
+      width: 320px;
+      min-width: 320px;
+      background: #1c2b3a;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      max-height: calc(100vh - 44px);
+    }
+
+    /* Upload Zone */
+    .upload-zone {
+      margin: 14px;
+      border: 2px dashed #4a6278;
+      border-radius: 8px;
+      padding: 20px 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: #3498db;
+      background: rgba(52,152,219,0.08);
+    }
+    .upload-zone input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .upload-icon { font-size: 28px; margin-bottom: 6px; }
+    .upload-text { font-size: 13px; color: #ecf0f1; font-weight: 700; }
+    .upload-hint { font-size: 10px; color: #7f8c8d; margin-top: 4px; }
+
+    /* Parse Status */
+    .parse-status {
+      margin: 0 14px 10px;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      display: none;
+    }
+    .parse-status.ok      { background: #1e8449; color: white; display: block; }
+    .parse-status.error   { background: #922b21; color: white; display: block; }
+    .parse-status.loading { background: #2980b9; color: white; display: block; }
+
+    /* Parsed Preview (collapsed summary) */
+    .parsed-summary {
+      margin: 0 14px 10px;
+      background: #243447;
+      border-radius: 4px;
+      padding: 8px 10px;
+      display: none;
+    }
+    .parsed-summary.show { display: block; }
+    .parsed-summary .ps-title { font-size: 10px; color: #7f8c8d; margin-bottom: 6px; text-transform: uppercase; }
+    .ps-row { display: flex; justify-content: space-between; font-size: 11px; color: #bdc3c7; padding: 2px 0; border-bottom: 1px solid #2c3e50; }
+    .ps-row:last-child { border-bottom: none; }
+    .ps-row .k { color: #85c1e9; }
+
+    /* Supplement Form */
+    .supplement {
+      padding: 0 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .form-sep {
+      font-size: 10px;
+      color: #7f8c8d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #2c3e50;
+      margin-top: 4px;
+    }
+
+    .fg {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .fg label { font-size: 10px; color: #95a5a6; }
+    .fg input, .fg textarea, .fg select {
+      padding: 6px 8px;
+      background: #243447;
+      border: 1px solid #2c3e50;
+      color: #ecf0f1;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    .fg input:focus, .fg textarea:focus { outline: none; border-color: #3498db; }
+    .fg textarea { resize: vertical; min-height: 52px; }
+    .fg .unit { font-size: 10px; color: #7f8c8d; }
+
+    .fg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    /* Plan upload in left panel */
+    .plan-upload-btn {
+      padding: 8px;
+      background: #243447;
+      border: 1px dashed #4a6278;
+      border-radius: 4px;
+      text-align: center;
+      cursor: pointer;
+      color: #85c1e9;
+      font-size: 11px;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .plan-upload-btn:hover { border-color: #3498db; background: rgba(52,152,219,0.1); }
+    .plan-upload-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .plan-name { font-size: 10px; color: #7f8c8d; margin-top: 3px; }
+
+    .btn-update {
+      padding: 10px;
+      background: #27ae60;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: inherit;
+      width: 100%;
+      margin-top: 4px;
+    }
+    .btn-update:hover { background: #1e8449; }
+
+    /* ===== RIGHT: A4 WRAPPER ===== */
+    .right-panel {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    /* ===== A4 CARD ===== */
+    .a4-card {
+      width: 210mm;
+      min-height: 297mm;
+      background: white;
+      box-shadow: 0 6px 30px rgba(0,0,0,0.35);
+      display: flex;
+      flex-direction: column;
+      align-self: flex-start;
+    }
+
+    /* Header + Title 合併區塊 */
+    .card-header {
+      background: #154360;
+      color: white;
+      padding: 12px 16px 10px;
+    }
+    .header-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 10px;
+      color: #aed6f1;
+      margin-bottom: 6px;
+    }
+    .header-doc-title {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      margin-bottom: 8px;
+    }
+    .header-prop-addr { font-size: 11px; color: #d6eaf8; margin-top: 3px; }
+    .header-company-row {
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px solid rgba(255,255,255,.2);
+      font-size: 10px;
+      color: #aed6f1;
+    }
+
+    /* Price Bar */
+    .price-bar {
+      background: #fefefe;
+      border-bottom: 3px solid #c0392b;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+    }
+    .price-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
+    .p-label { font-size: 10px; color: #888; margin-bottom: 1px; }
+    .p-value { font-size: 22px; font-weight: 700; color: #c0392b; line-height: 1; }
+    .p-unit  { font-size: 10px; color: #999; margin-top: 1px; }
+    .price-divider { width: 1px; height: 38px; background: #e0e0e0; flex-shrink: 0; }
+
+    /* Card Body */
+    .card-body { flex: 1; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+
+    .section-bar { padding: 3px 8px; font-size: 11px; font-weight: 700; color: white; }
+    .bar-blue   { background: #154360; }
+    .bar-red    { background: #922b21; }
+    .bar-green  { background: #1e8449; }
+    .bar-purple { background: #6c3483; }
+
+    /* Info + Map */
+    .info-map-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .info-box { border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
+    .info-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .info-table td { padding: 4px 7px; border-bottom: 1px solid #e8e8e8; }
+    .info-table tr:last-child td { border-bottom: none; }
+    .info-table tr:nth-child(even) td:last-child { background: #f5f9ff; }
+    .info-table td.key { background: #1a6fa8; color: white; font-weight: 500; width: 38%; white-space: nowrap; }
+
+    .map-box { border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; }
+    .map-box iframe { width: 100%; height: 208px; border: none; display: block; }
+    .map-placeholder { height: 208px; background: #ecf0f1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #aaa; font-size: 11px; gap: 4px; }
+
+    /* Plan + Points */
+    .plan-points-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .plan-box { border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
+    .plan-content { min-height: 140px; display: flex; align-items: center; justify-content: center; background: #f5f5f5; }
+    .plan-content img { max-width: 100%; max-height: 140px; object-fit: contain; display: block; }
+    .plan-content .no-img { color: #bbb; font-size: 11px; text-align: center; }
+    .plan-content .no-img .pi { font-size: 28px; display: block; margin-bottom: 4px; }
+
+    .points-box { border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
+    .points-list { padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
+    .point-item { font-size: 11px; color: #2c3e50; display: flex; align-items: flex-start; gap: 5px; line-height: 1.5; }
+    .point-star { color: #c0392b; flex-shrink: 0; font-size: 10px; margin-top: 1px; }
+
+    /* Surroundings */
+    .surr-box { border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
+    .surr-grid { display: grid; grid-template-columns: 1fr 1fr; }
+    .surr-item { padding: 6px 9px; border-right: 1px solid #eee; border-bottom: 1px solid #eee; font-size: 10.5px; }
+    .surr-item:nth-child(even) { border-right: none; }
+    .surr-item:nth-child(n+5)  { border-bottom: none; }
+    .surr-full { grid-column: 1 / -1; border-right: none; }
+    .surr-label { font-weight: 700; color: #1e8449; font-size: 10px; margin-bottom: 3px; }
+    .surr-content { color: #444; line-height: 1.6; white-space: pre-wrap; }
+
+    /* Description */
+    .desc-box { border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
+    .desc-content { padding: 8px 10px; font-size: 11px; color: #333; line-height: 1.7; white-space: pre-wrap; }
+
+    /* Footer */
+    .card-footer {
+      background: #154360;
+      color: white;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: auto;
+    }
+    .agent-name  { font-size: 17px; font-weight: 700; }
+    .agent-title { font-size: 10px; color: #85c1e9; margin-top: 1px; }
+    .agent-right { text-align: right; }
+    .agent-phone { font-size: 17px; font-weight: 700; color: #f39c12; }
+    .agent-fb    { font-size: 10px; color: #85c1e9; margin-top: 2px; }
+
+    /* Pending */
+    .pending { color: #e67e22; font-style: italic; }
+
+    /* TGOS Settings */
+    .tgos-settings { border:1px solid #ddd; border-radius:6px; margin-bottom:10px; overflow:hidden; }
+    .tgos-header { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:#f8faff; cursor:pointer; font-size:12px; font-weight:600; color:#333; }
+    .tgos-header:hover { background:#eef2ff; }
+    .tgos-body { padding:10px; background:#fff; }
+    .tgos-badge { font-size:10px; padding:2px 6px; border-radius:10px; font-weight:500; }
+    .tgos-badge.ok  { background:#dcfce7; color:#16a34a; }
+    .tgos-badge.no  { background:#fee2e2; color:#dc2626; }
+
+    /* ===== PRINT ===== */
+    @media print {
+      body { background: white; }
+      .top-bar, .left-panel { display: none !important; }
+      .right-panel { padding: 0; overflow: visible; }
+      .a4-card { box-shadow: none; width: 100%; min-height: auto; }
+      @page { size: A4 portrait; margin: 6mm; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <span class="top-title">🏠 房屋銷售介紹產生器</span>
+  <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
+  <button class="btn btn-reset" onclick="resetAll()">重置</button>
+</div>
+
+<div class="main">
+
+  <!-- ===== LEFT PANEL ===== -->
+  <div class="left-panel">
+
+    <!-- API Settings -->
+    <div class="tgos-settings" id="tgosSettings">
+      <div class="tgos-header" onclick="toggleTGOS()">
+        <span>⚙️ API 金鑰設定</span>
+        <span id="tgosStatus" class="tgos-badge">未設定</span>
+      </div>
+      <div class="tgos-body" id="tgosBody" style="display:none;">
+        <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px;">TGOS（地址→里鄰）</div>
+        <div style="font-size:11px;color:#666;margin-bottom:4px;">
+          申請：<a href="https://api.tgos.tw" target="_blank" style="color:#2563eb;">api.tgos.tw</a>（免費）
+        </div>
+        <div class="fg-row" style="margin-bottom:4px;">
+          <div class="fg"><label style="font-size:11px;">AppID</label>
+            <input type="text" id="tgosAppId" placeholder="填入 AppID" style="font-size:11px;"></div>
+          <div class="fg"><label style="font-size:11px;">APIKey</label>
+            <input type="text" id="tgosApiKey" placeholder="填入 APIKey" style="font-size:11px;"></div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:#555;margin:8px 0 4px;">Google Maps（周邊機能查詢）</div>
+        <div class="fg" style="margin-bottom:6px;">
+          <label style="font-size:11px;">API Key</label>
+          <input type="text" id="gmApiKey" placeholder="填入 Google Maps API Key" style="font-size:11px;">
+        </div>
+        <button onclick="saveApiKeys()" style="width:100%;padding:5px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">儲存全部設定</button>
+      </div>
+    </div>
+
+    <!-- PDF Upload -->
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" accept="application/pdf" onchange="handlePdfUpload(event)" id="pdfInput">
+      <div class="upload-icon">📄</div>
+      <div class="upload-text">上傳電子謄本 PDF</div>
+      <div class="upload-hint">點擊或拖放檔案至此</div>
+    </div>
+
+    <!-- Parse Status -->
+    <div class="parse-status" id="parseStatus"></div>
+
+    <!-- Parsed Summary -->
+    <div class="parsed-summary" id="parsedSummary">
+      <div class="ps-title">解析結果</div>
+      <div id="psRows"></div>
+    </div>
+
+    <!-- Supplement Form -->
+    <div class="supplement">
+
+      <div class="form-sep">補充資料</div>
+
+      <div class="fg-row">
+        <div class="fg">
+          <label>售價（含車位）萬元</label>
+          <input type="number" id="s-price" placeholder="例：1156" oninput="updateCard()">
+        </div>
+        <div class="fg">
+          <label>車位售價 萬元</label>
+          <input type="number" id="s-parking-price" placeholder="例：100" oninput="updateCard()">
+        </div>
+      </div>
+
+      <div class="fg">
+        <label>格局（例：2 房 2 廳 1 衛）</label>
+        <input type="text" id="s-layout" placeholder="2 房 2 廳 1 衛" oninput="updateCard()">
+      </div>
+
+      <div class="fg-row">
+        <div class="fg">
+          <label>停車位狀況</label>
+          <input type="text" id="s-park-status" placeholder="例：平面式、坡道機械式" oninput="updateCard()">
+        </div>
+        <div class="fg">
+          <label>機車位</label>
+          <input type="text" id="s-moto" placeholder="例：有／無／2 位" oninput="updateCard()">
+        </div>
+      </div>
+
+      <div class="fg">
+        <label>格局圖</label>
+        <div class="plan-upload-btn" onclick="document.getElementById('planInput').click()">
+          <input type="file" id="planInput" accept="image/*" onchange="loadPlan(event)">
+          📐 點擊上傳格局圖
+        </div>
+        <div class="plan-name" id="planName"></div>
+      </div>
+
+      <div class="form-sep">房屋說明</div>
+
+      <div class="fg">
+        <label>屋況說明（裝潢、傢俱、特色…）</label>
+        <textarea id="s-desc" rows="4" placeholder="例：室內全新未住、附贈冷氣、熱水器..." oninput="updateCard()"></textarea>
+      </div>
+
+      <div class="fg">
+        <label>訴求重點（每行一點，最多 6 點）</label>
+        <textarea id="s-points" rows="5" oninput="updateCard()"></textarea>
+      </div>
+
+      <div class="form-sep">周遭機能（可由 AI 協助填入）</div>
+
+      <button id="btnNearby" onclick="doNearbySearch()" style="width:100%;margin-bottom:10px;padding:8px;background:#16a34a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">🗺️ 自動查詢周邊機能</button>
+      <div id="nearby-status" style="font-size:11px;color:#666;margin-bottom:8px;min-height:0;"></div>
+
+      <div class="fg">
+        <label>🚌 交通機能</label>
+        <textarea id="s-traffic" rows="3" oninput="updateCard()"></textarea>
+      </div>
+      <div class="fg">
+        <label>🛒 生活機能</label>
+        <textarea id="s-life" rows="3" oninput="updateCard()"></textarea>
+      </div>
+      <div class="fg">
+        <label>🏪 商圈特色</label>
+        <textarea id="s-location" rows="3" oninput="updateCard()"></textarea>
+      </div>
+      <div class="fg">
+        <label>🏗️ 重要發展</label>
+        <textarea id="s-develop" rows="3" oninput="updateCard()"></textarea>
+      </div>
+      <div class="fg">
+        <label>🏫 學區查詢</label>
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <input type="text" id="s-village" placeholder="里（例：瑞隆里）" style="flex:2;" oninput="onVillageInput()">
+          <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;">
+          <button onclick="doLookupSchool()" style="white-space:nowrap;padding:4px 8px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">查詢</button>
+        </div>
+        <div id="school-result" style="font-size:12px;color:#444;margin-bottom:6px;min-height:0;"></div>
+        <textarea id="s-school" rows="2" oninput="updateCard()" placeholder="查詢後自動填入，或手動輸入"></textarea>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Hidden map for Places API -->
+  <div id="gm-hidden-map" style="display:none;width:1px;height:1px;"></div>
+
+  <!-- ===== RIGHT: A4 CARD ===== -->
+  <div class="right-panel">
+    <div class="a4-card">
+
+      <div class="card-header">
+        <div class="header-top-row">
+          <span>不動產銷售資料表</span>
+          <span id="out-date"></span>
+        </div>
+        <div class="header-doc-title" id="out-title">請上傳謄本 PDF</div>
+        <div class="header-company-row">
+          賞好賞不動產有限公司　｜　高雄市苓雅區中華四路122號　｜　經紀人：江炳賞　114年高市字第01680號
+        </div>
+      </div>
+
+      <div class="price-bar">
+        <div class="price-item">
+          <div class="p-label">售價（含車位）</div>
+          <div class="p-value" id="out-price">－</div>
+          <div class="p-unit">萬元</div>
+        </div>
+        <div class="price-divider"></div>
+        <div class="price-item">
+          <div class="p-label">不含車位坪數</div>
+          <div class="p-value" id="out-ping">－</div>
+          <div class="p-unit">坪</div>
+        </div>
+        <div class="price-divider"></div>
+        <div class="price-item">
+          <div class="p-label">單價（不含車位）</div>
+          <div class="p-value" id="out-unit">－</div>
+          <div class="p-unit">萬／坪</div>
+        </div>
+        <div class="price-divider"></div>
+        <div class="price-item">
+          <div class="p-label">含車位總坪</div>
+          <div class="p-value" id="out-ping-total">－</div>
+          <div class="p-unit">坪</div>
+        </div>
+      </div>
+
+      <div class="card-body">
+
+        <div class="info-map-row">
+          <div class="info-box">
+            <div class="section-bar bar-blue">▌ 物件資料</div>
+            <table class="info-table">
+              <tr><td class="key">樓　層</td><td id="td-floor">－</td></tr>
+              <tr><td class="key">建築完成</td><td id="td-completion">－</td></tr>
+              <tr><td class="key">所有權登記</td><td id="td-own-date">－</td></tr>
+              <tr><td class="key">主建物面積</td><td id="td-main-area">－</td></tr>
+              <tr><td class="key">附屬建物</td><td id="td-attached">－</td></tr>
+              <tr><td class="key">共用部分</td><td id="td-pub-area">－</td></tr>
+              <tr><td class="key">總坪數</td><td id="td-total-area">－</td></tr>
+              <tr><td class="key">主要用途</td><td id="td-use">－</td></tr>
+              <tr><td class="key">建　材</td><td id="td-mat">－</td></tr>
+              <tr><td class="key">格　局</td><td id="td-layout"><span class="pending">待補充</span></td></tr>
+              <tr><td class="key">車　位</td><td id="td-park">－</td></tr>
+              <tr><td class="key">停車狀況</td><td id="td-park-status">－</td></tr>
+              <tr><td class="key">機車位</td><td id="td-moto">－</td></tr>
+              <tr><td class="key">抵押設定</td><td id="td-mortgage">－</td></tr>
+              <tr><td class="key">使用執照</td><td id="td-lic">－</td></tr>
+              <tr><td class="key">車位售價</td><td id="td-park-price">－</td></tr>
+            </table>
+          </div>
+
+          <div class="map-box">
+            <div class="section-bar bar-blue">▌ 位置圖</div>
+            <div id="out-map">
+              <div class="map-placeholder">
+                <span style="font-size:28px">🗺️</span>
+                <span>上傳 PDF 後自動帶入地圖</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="plan-points-row">
+          <div class="plan-box">
+            <div class="section-bar bar-blue">▌ 格局參考圖</div>
+            <div class="plan-content" id="planPreview">
+              <div class="no-img"><span class="pi">📐</span>請從左側上傳格局圖</div>
+            </div>
+          </div>
+
+          <div class="points-box">
+            <div class="section-bar bar-red">▌ 訴求重點</div>
+            <div class="points-list" id="out-points">
+              <div class="point-item"><span class="point-star">★</span><span class="pending">請從左側填入訴求重點</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="surr-box">
+          <div class="section-bar bar-green">▌ 周遭機能分析</div>
+          <div class="surr-grid">
+            <div class="surr-item">
+              <div class="surr-label">🚌 交通機能</div>
+              <div class="surr-content" id="out-traffic">－</div>
+            </div>
+            <div class="surr-item">
+              <div class="surr-label">🛒 生活機能</div>
+              <div class="surr-content" id="out-life">－</div>
+            </div>
+            <div class="surr-item">
+              <div class="surr-label">🏪 商圈特色</div>
+              <div class="surr-content" id="out-location">－</div>
+            </div>
+            <div class="surr-item">
+              <div class="surr-label">🏗️ 重要發展</div>
+              <div class="surr-content" id="out-develop">－</div>
+            </div>
+            <div class="surr-item surr-full">
+              <div class="surr-label">🏫 學　　區</div>
+              <div class="surr-content" id="out-school">－</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="desc-box">
+          <div class="section-bar bar-purple">▌ 房屋說明</div>
+          <div class="desc-content" id="out-desc"><span class="pending">請從左側填入房屋說明。</span></div>
+        </div>
+
+      </div>
+
+      <div class="card-footer">
+        <div>
+          <div class="agent-name">江炳賞（亞灣賞哥）</div>
+          <div class="agent-title">高雄前鎮・亞洲新灣區房產顧問</div>
+        </div>
+        <div class="agent-right">
+          <div class="agent-phone">0971-115207</div>
+          <div class="agent-fb">fb.com/BingShangHouse</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== PDF.js Worker =====
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  // ===== State =====
+  let deed = {};
+
+  // ===== Init date =====
+  (function() {
+    const d = new Date();
+    document.getElementById('out-date').textContent =
+      `製表日期：${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  })();
+
+  // ===== Drag & Drop =====
+  const zone = document.getElementById('uploadZone');
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') processPdf(f);
+  });
+
+  // ===== PDF Upload =====
+  function handlePdfUpload(e) {
+    const f = e.target.files[0];
+    if (f) processPdf(f);
+  }
+
+  async function processPdf(file) {
+    setStatus('loading', '解析中…');
+    try {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const tc   = await page.getTextContent();
+        fullText += tc.items.map(it => it.str).join(' ') + '\n';
+      }
+      deed = parseDeed(fullText);
+      deed._raw = fullText;
+      showParsedSummary(deed);
+      autoFillPoints(deed);
+      updateCard();
+      setStatus('ok', `✓ 解析完成：${file.name}`);
+
+      // Auto school lookup: try TGOS first, fallback to deed village
+      const vEl = document.getElementById('s-village');
+      if (!vEl.value.trim()) {
+        const fullAddr = (deed.district || '') + (deed.address || '');
+        if (fullAddr && getTGOSCredentials()) {
+          setStatus('loading', '🔍 正在查詢里鄰資訊…');
+          try {
+            const geo = await tgosGeocode(fullAddr);
+            if (geo && geo.village) {
+              vEl.value = geo.village;
+              document.getElementById('s-neighbor').value = geo.neighbor || '';
+              doLookupSchool();
+              setStatus('ok', `✓ 解析完成，學區已自動查詢（${geo.village}${geo.neighbor ? ' ' + geo.neighbor + '鄰' : ''}）`);
+            } else if (deed.village) {
+              vEl.value = deed.village;
+              doLookupSchool();
+              setStatus('ok', `✓ 解析完成（學區以謄本里名查詢）`);
+            }
+          } catch (e) {
+            if (deed.village) { vEl.value = deed.village; doLookupSchool(); }
+            setStatus('ok', `✓ 解析完成（TGOS 查詢失敗，已用謄本里名）`);
+          }
+        } else if (deed.village) {
+          vEl.value = deed.village;
+          doLookupSchool();
+        }
+      }
+
+      // 自動查詢周邊機能（背景執行，不阻塞主流程）
+      doNearbySearch(true);
+
+    } catch (err) {
+      setStatus('error', '解析失敗，請確認為文字型 PDF');
+      console.error(err);
+    }
+  }
+
+  // ===== Parser =====
+  const PING = 1 / 3.30579;
+
+  function fw(s) {
+    return String(s).replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  }
+
+  function p2(n) { return Math.round(n * 100) / 100; }
+  function sqm2ping(m) { return p2(m * PING); }
+
+  function shortBank(name) {
+    if (!name) return '';
+    return name
+      .replace(/^保證責任/, '')
+      .replace(/商業銀行$/, '')
+      .replace(/地區農會$/, '農會')
+      .replace(/股份有限公司$/, '')
+      .trim();
+  }
+
+  function rocAge(rocStr) {
+    const yr = parseInt(rocStr) + 1911;
+    const age = new Date().getFullYear() - yr;
+    return age <= 0 ? '全新' : `${age} 年`;
+  }
+
+  const CH_FLOOR = {
+    '一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,
+    '十':10,'十一':11,'十二':12,'十三':13,'十四':14,'十五':15,
+    '十六':16,'十七':17,'十八':18,'十九':19,'二十':20,
+    '二十一':21,'二十二':22,'二十三':23,'二十四':24,'二十五':25,
+    '三十':30
+  };
+
+  function chFloor(s) {
+    const c = s.replace(/層.*/, '').trim();
+    return CH_FLOOR[c] || c;
+  }
+
+  function parseDeed(raw) {
+    const t = fw(raw);
+    const d = {};
+
+    // 建物門牌
+    const addrM = t.match(/建物門牌\s+(.+?)(?=\s{2,}|建物坐落|$)/m);
+    if (addrM) d.address = addrM[1].trim();
+
+    // 轄區 (高雄市XX區)
+    const distM = t.match(/高雄市([^區 ]+區)/);
+    if (distM) d.district = `高雄市${distM[1]}`;
+
+    // 里名（從地址或建物坐落抓取）
+    const villageM = t.match(/([^\s區]{1,4}里)/);
+    if (villageM) d.village = villageM[1];
+
+    // 主要用途
+    const useM = t.match(/主要用途\s+(.+?)(?=\s{2,}|主要建材|$)/m);
+    if (useM) d.usage = useM[1].trim();
+
+    // 主要建材
+    const matM = t.match(/主要建材\s+(.+?)(?=\s{2,}|層數|層次|$)/m);
+    if (matM) d.material = matM[1].trim();
+
+    // 層數
+    const flrTotalM = t.match(/層數\s+0*(\d+)層/);
+    if (flrTotalM) d.totalFloors = parseInt(flrTotalM[1]);
+
+    // 層次 (本戶樓層) — 支援多層次（整棟建物）
+    const flrAll = [...t.matchAll(/層次\s*([^\s層次面積]{1,6}?)\s*層次面積/g)].map(m => m[1].trim());
+    if (flrAll.length > 1) {
+      d.isWholeBuilding = true;
+      d.floor = chFloor(flrAll[0]);
+      d.floorTop = chFloor(flrAll[flrAll.length - 1]);
+    } else if (flrAll.length === 1) {
+      d.floor = chFloor(flrAll[0]);
+    }
+    // fallback：從地址抓樓層（例如「十三樓之12」）
+    if (!d.floor && d.address) {
+      const addrFlM = d.address.match(/([一二三四五六七八九十百千]+|\d+)樓/);
+      if (addrFlM) d.floor = chFloor(addrFlM[1]) || parseInt(addrFlM[1]);
+    }
+
+    // 總面積
+    const areaM = t.match(/總面積\s+([\d.]+)平方公尺/);
+    if (areaM) d.mainArea = parseFloat(areaM[1]);
+
+    // 建築完成日期
+    const ageM = t.match(/建築完成日期\s+民國(\d+)年(?:(\d+)月)?/);
+    if (ageM) { d.completionRoc = parseInt(ageM[1]); d.age = rocAge(ageM[1]); }
+
+    // 所有權登記日期
+    const ownDateM = t.match(/登記日期\s+民國(\d+)年\s*(\d+)月\s*(\d+)日/);
+    if (ownDateM) d.ownerRegDate = `民國 ${ownDateM[1]} 年 ${ownDateM[2]} 月 ${ownDateM[3]} 日`;
+
+    // ===== 附屬建物（全部動態解析）=====
+    d.attachedBuildings = [];
+    {
+      const attachStart = t.indexOf('附屬建物');
+      const attachEnd   = t.indexOf('共有部分');
+      if (attachStart >= 0) {
+        const sec = t.slice(attachStart, attachEnd > attachStart ? attachEnd : attachStart + 500);
+        console.log('[附屬建物 sec]', sec);
+        const SKIP = new Set(['附屬建物','用途','面積','層次','建物','主要','標示','坐落','層數','總面積','建築']);
+        const seen = new Set();
+
+        // 格式A：每行有「平方公尺」→ 中文名稱 + 數字 + 平方公尺
+        const reA = /([^\s（）【】\d,，。\n]{1,8})\s+(?:面\s*積\s+)?([\d.]+)\s*平方公尺/g;
+        // 格式B：欄標題有「面積（平方公尺）」，資料列只有「中文名稱  小數」
+        const reB = /([^\s（）【】\d,，。\n]{2,6})\s+([\d]+\.[\d]+)/g;
+
+        const tryAdd = (purpose, areaStr) => {
+          const p = purpose.trim().replace(/[附屬建物用途面積建築]/g, '').trim();
+          if (p.length < 1 || SKIP.has(p) || seen.has(p)) return;
+          const area = parseFloat(areaStr);
+          if (area <= 0 || area > 500) return;
+          seen.add(p);
+          d.attachedBuildings.push({ purpose: p, area, ping: sqm2ping(area) });
+        };
+
+        let m;
+        while ((m = reA.exec(sec)) !== null) tryAdd(m[1], m[2]);
+        // 若格式A沒抓到任何東西，再用格式B
+        if (d.attachedBuildings.length === 0) {
+          while ((m = reB.exec(sec)) !== null) tryAdd(m[1], m[2]);
+        }
+      }
+    }
+    // 向後相容：保留個別欄位
+    const _bal  = d.attachedBuildings.find(a => a.purpose.match(/陽[台臺]/));
+    const _rain = d.attachedBuildings.find(a => a.purpose.includes('雨遮'));
+    d.balcony       = _bal  ? _bal.area  : 0;
+    d.balconyPing   = _bal  ? _bal.ping  : 0;
+    d.rainCover     = _rain ? _rain.area : 0;
+    d.rainCoverPing = _rain ? _rain.ping : 0;
+
+    // 共有部分 ── indexOf 切段，同時接受繁體「權利範圍」及日文字形「権利範囲」
+    const RATIO_RE = /[権權]利[範][囲圍]\s*(\d+)分之(\d+)/;
+    const pubIdx = t.indexOf('共有部分');
+    if (pubIdx >= 0) {
+      const pubSec = t.slice(pubIdx, pubIdx + 600);
+      console.log('[共有部分 sec]', pubSec);
+      // 面積：直接找「數字 + 平方公尺」（整數或小數皆可，例如 2002 或 7017.05）
+      const pubAreaM = pubSec.match(/([\d]+(?:\.[\d]+)?)\s*平方公尺/);
+      const pubRatioM = pubSec.match(RATIO_RE);
+      if (pubAreaM && pubRatioM) {
+        const _pt = parseFloat(pubAreaM[1]);
+        if (_pt > 10) {
+          d.pubTotal = _pt;
+          d.pubDenom = parseInt(pubRatioM[1]);
+          d.pubNumer = parseInt(pubRatioM[2]);
+          d.pubArea  = d.pubTotal * d.pubNumer / d.pubDenom;
+        }
+      }
+    }
+
+    // 停車位 ── 在共有部分之後找「含停車位」或「停車位」
+    d.hasParking = false;
+    {
+      const parkSearch = pubIdx >= 0 ? t.slice(pubIdx) : t;
+      // 找「含停車位」或緊接在公設後的「停車位」段落
+      let parkIdx = parkSearch.indexOf('含停車位');
+      if (parkIdx < 0) parkIdx = parkSearch.indexOf('停車位編號');
+      if (parkIdx >= 0) {
+        const parkSec    = parkSearch.slice(parkIdx, parkIdx + 300);
+        console.log('[停車位 sec]', parkSec);
+        const parkNoM    = parkSec.match(/編\s*號\s+(\S+)/);
+        const parkRatioM = parkSec.match(RATIO_RE);
+        if (parkRatioM) {
+          d.parkNo     = parkNoM ? parkNoM[1] : '－';
+          d.parkDenom  = parseInt(parkRatioM[1]);
+          d.parkNumer  = parseInt(parkRatioM[2]);
+          d.hasParking = true;
+          if (d.pubTotal) d.parkArea = d.pubTotal * d.parkNumer / d.parkDenom;
+        }
+      }
+    }
+
+    // 抵押
+    if (t.includes('最高限額抵押權')) {
+      d.hasMortgage = true;
+      const amtM = t.match(/擔保債權總金額\s+新台幣([\d,]+)元/);
+      if (amtM) d.mortgageAmt = parseInt(amtM[1].replace(/,/g, ''));
+      const bankM = t.match(/權利人\s+(.+?)(?:\s{2,}|\s*統一編號|\n|$)/);
+      if (bankM) d.mortgageBank = bankM[1].trim();
+    } else {
+      d.hasMortgage = false;
+    }
+
+    // 使用執照（只取字號，不含後續說明文字）
+    const licM = t.match(/使用執照字號[：:]\s*[（(]([^）)]+)[）)]\s*(\S+號)/);
+    if (licM) d.license = `（${licM[1]}）${licM[2]}`;
+
+    // ===== 計算坪數 =====
+    d.mainPing = d.mainArea ? sqm2ping(d.mainArea) : 0;
+
+    // 附屬建物總坪數（所有項目加總）
+    d.attachedPing = p2(d.attachedBuildings.reduce((s, a) => s + a.ping, 0));
+    // 向後相容
+    d.balconyPing   = _bal  ? _bal.ping  : 0;
+    d.rainCoverPing = _rain ? _rain.ping : 0;
+
+    if (d.pubArea) {
+      if (d.hasParking && d.parkArea) {
+        d.pubOnlyArea = d.pubArea - d.parkArea;
+        d.parkPing    = sqm2ping(d.parkArea);
+      } else {
+        d.pubOnlyArea = d.pubArea;
+        d.parkPing    = 0;
+      }
+      d.pubOnlyPing = sqm2ping(d.pubOnlyArea);
+    } else {
+      d.pubOnlyPing = 0;
+      d.parkPing    = 0;
+    }
+
+    // 不含車位 = 主建物 + 所有附屬建物 + 公設
+    d.totalNoPark   = p2(d.mainPing + d.attachedPing + d.pubOnlyPing);
+    d.totalWithPark = p2(d.totalNoPark + d.parkPing);
+
+    return d;
+  }
+
+  // ===== Auto-fill Points =====
+  function autoFillPoints(d) {
+    const pts = document.getElementById('s-points');
+    if (pts.value.trim()) return; // 使用者已填，不覆蓋
+    const lines = [];
+    if (d.age === '全新') lines.push('全新成屋即可入住，屋況全新免裝潢');
+    if (d.floor >= 10)   lines.push(`${d.floor} 樓高樓層，視野開闊採光充足`);
+    if (d.hasParking)    lines.push('含平面停車位，停車免煩惱');
+    lines.push('緊鄰亞洲新灣區，NVIDIA 算力中心、5G AIoT 園區進駐，增值潛力強');
+    lines.push('捷運黃線規劃通過前鎮區（2034 年通車），交通建設題材加持');
+    lines.push('產權完整單獨所有，交易安心透明');
+    pts.value = lines.join('\n');
+  }
+
+  // ===== Update Card =====
+  function updateCard() {
+    const d = deed;
+    const price       = parseFloat(document.getElementById('s-price').value) || 0;
+    const parkPrice   = parseFloat(document.getElementById('s-parking-price').value) || 0;
+    const layout      = document.getElementById('s-layout').value.trim();
+    const desc        = document.getElementById('s-desc').value.trim();
+    const pointsRaw   = document.getElementById('s-points').value;
+
+    // Title & address
+    if (d.address) {
+      const floorStr = d.floor ? ` ${d.floor} 樓` : '';
+      const tags = [d.age === '全新' ? '全新成屋' : '', d.hasParking ? '含車位' : ''].filter(Boolean).join('｜');
+      document.getElementById('out-title').textContent =
+        `${d.district || '高雄市前鎮區'}${d.address}${tags ? '　' + tags : ''}`;
+    }
+
+    // Price
+    const noParPrice = price && parkPrice ? price - parkPrice : 0;
+    const unitPrice  = (noParPrice > 0 && d.totalNoPark > 0)
+      ? (noParPrice / d.totalNoPark).toFixed(2) : '－';
+
+    document.getElementById('out-price').textContent      = price      || '－';
+    document.getElementById('out-ping').textContent       = d.totalNoPark   || '－';
+    document.getElementById('out-unit').textContent       = unitPrice;
+    document.getElementById('out-ping-total').textContent = d.totalWithPark || '－';
+
+    // Info table
+    setText('td-floor',    d.isWholeBuilding
+      ? `全棟（共 ${d.totalFloors} 層，${d.floor}F－${d.floorTop}F）`
+      : d.floor ? `${d.floor}F` : '－');
+    setText('td-completion', d.completionRoc
+      ? `民國 ${d.completionRoc} 年（屋齡 ${d.age}）`
+      : d.age || '－');
+    setText('td-own-date', d.ownerRegDate || '－');
+    setText('td-main-area', d.mainPing
+      ? `${d.mainPing} 坪（${d.mainArea} m²）`
+      : '－');
+    setText('td-attached', d.attachedBuildings && d.attachedBuildings.length
+      ? d.attachedBuildings.map(a => `${a.purpose} ${a.ping} 坪（${a.area} m²）`).join('、')
+      : '無');
+    setText('td-pub-area', d.pubOnlyPing
+      ? `${d.pubOnlyPing} 坪（${p2(d.pubOnlyArea)} m²）`
+      : '無');
+    setText('td-total-area', d.totalNoPark
+      ? `${d.totalNoPark} 坪${d.totalWithPark && d.hasParking ? `（含車位 ${d.totalWithPark} 坪）` : ''}`
+      : '－');
+    setText('td-use',      d.usage || '－');
+    setText('td-mat',      d.material || '－');
+    setHtml('td-layout',   layout ? escH(layout) : '<span class="pending">待補充</span>');
+    const parkStatus = document.getElementById('s-park-status').value.trim();
+    const moto       = document.getElementById('s-moto').value.trim();
+    setText('td-park',        d.hasParking ? `有（編號 ${d.parkNo}，${p2(d.parkPing)} 坪）` : '無');
+    setText('td-park-status', parkStatus || (d.hasParking ? '請補充停車位類型' : '－'));
+    setText('td-moto',        moto || '－');
+    setText('td-mortgage', d.hasMortgage
+      ? `有（${[d.mortgageAmt ? Math.round(d.mortgageAmt/10000)+'萬' : '', shortBank(d.mortgageBank)].filter(Boolean).join('，')}）`
+      : '無');
+    setText('td-lic',      d.license || '－');
+    setText('td-park-price', parkPrice
+      ? `${parkPrice} 萬（不含車位售價 ${noParPrice} 萬）`
+      : '－');
+
+    // Map
+    const mapDiv = document.getElementById('out-map');
+    if (d.district && d.address) {
+      const street = d.address.replace(/[一二三四五六七八九十]+樓.*$/, '').replace(/\d+樓.*$/, '').trim();
+      const q = encodeURIComponent(`${d.district}${street}`);
+      mapDiv.innerHTML = `<iframe src="https://maps.google.com/maps?q=${q}&output=embed&z=16"
+        allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+        style="width:100%;height:208px;border:none;display:block;"></iframe>`;
+    }
+
+    // Selling points
+    const lines = pointsRaw.split('\n').map(l => l.trim()).filter(l => l);
+    const pDiv = document.getElementById('out-points');
+    pDiv.innerHTML = lines.length
+      ? lines.slice(0,6).map(l => `<div class="point-item"><span class="point-star">★</span><span>${escH(l)}</span></div>`).join('')
+      : '<div class="point-item"><span class="point-star">★</span><span class="pending">請填入訴求重點</span></div>';
+
+    // Surroundings
+    ['traffic','life','location','develop','school'].forEach(k => {
+      const v = document.getElementById(`s-${k}`);
+      setText(`out-${k}`, v ? (v.value.trim() || '－') : '－');
+    });
+
+    // Description
+    if (desc) {
+      document.getElementById('out-desc').textContent = desc;
+    } else if (d.address) {
+      document.getElementById('out-desc').innerHTML =
+        `建物門牌 ${escH(d.district||'')}${escH(d.address)}，屋齡 ${d.age||'－'}，` +
+        `主建物 ${d.mainPing} 坪${d.balconyPing ? `、陽台 ${d.balconyPing} 坪` : ''}` +
+        `${d.hasParking ? `、含停車位編號 ${d.parkNo}` : ''}。` +
+        `<span class="pending">【待補充】格局、裝潢、傢俱等詳細說明。</span>`;
+    }
+  }
+
+  // ===== Plan Image =====
+  function loadPlan(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('planName').textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('planPreview').innerHTML =
+        `<img src="${ev.target.result}" alt="格局圖">`;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ===== Parsed Summary =====
+  function showParsedSummary(d) {
+    const attachedRows = (d.attachedBuildings || []).map(a => [`附屬・${a.purpose}`, `${a.ping} 坪`]);
+    const rows = [
+      ['地址',    d.address || '－'],
+      ['屋齡',    d.age     || '－'],
+      ['主建物',  d.mainPing ? `${d.mainPing} 坪` : '－'],
+      ...attachedRows,
+      ['公設',    d.pubOnlyPing ? `${d.pubOnlyPing} 坪` : '無'],
+      ['不含車位', d.totalNoPark  ? `${d.totalNoPark} 坪` : '－'],
+      ['車位',    d.hasParking ? `${d.parkPing} 坪（#${d.parkNo}）` : '無'],
+      ['含車位',  d.totalWithPark ? `${d.totalWithPark} 坪` : '－'],
+      ['抵押',    d.hasMortgage ? `有（${d.mortgageAmt ? Math.round(d.mortgageAmt/10000)+'萬' : ''}）` : '無'],
+    ];
+    document.getElementById('psRows').innerHTML =
+      rows.map(([k,v]) => `<div class="ps-row"><span class="k">${k}</span><span>${v}</span></div>`).join('');
+    document.getElementById('parsedSummary').classList.add('show');
+  }
+
+  // ===== Status =====
+  function setStatus(type, msg) {
+    const el = document.getElementById('parseStatus');
+    el.className = `parse-status ${type}`;
+    el.textContent = msg;
+  }
+
+  // ===== Reset =====
+  function resetAll() {
+    if (!confirm('確定重置全部資料？')) return;
+    deed = {};
+    document.querySelectorAll('.left-panel input[type=text], .left-panel input[type=number], .left-panel textarea').forEach(el => el.value = '');
+    document.getElementById('parsedSummary').classList.remove('show');
+    document.getElementById('parseStatus').className = 'parse-status';
+    document.getElementById('planPreview').innerHTML =
+      '<div class="no-img"><span class="pi">📐</span>請從左側上傳格局圖</div>';
+    document.getElementById('planName').textContent = '';
+    updateCard();
+  }
+
+  // ===== Helpers =====
+  function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+  function setHtml(id, val) { const el = document.getElementById(id); if (el) el.innerHTML  = val; }
+  function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // ===== API Key Settings =====
+  function getTGOSCredentials() {
+    const appId  = localStorage.getItem('tgos_appid');
+    const apiKey = localStorage.getItem('tgos_apikey');
+    return (appId && apiKey) ? { appId, apiKey } : null;
+  }
+
+  // Key 已綁定網域限制，放前端安全
+  const GM_KEY_DEFAULT = 'AIzaSyB9hptsp0DzFhb7NabsceZApvBsgWHdr5c';
+  function getGMKey() { return localStorage.getItem('gm_apikey') || GM_KEY_DEFAULT; }
+
+  function saveApiKeys() {
+    const tgosAppId  = document.getElementById('tgosAppId').value.trim();
+    const tgosApiKey = document.getElementById('tgosApiKey').value.trim();
+    const gmKey      = document.getElementById('gmApiKey').value.trim();
+    if (tgosAppId && tgosApiKey) {
+      localStorage.setItem('tgos_appid',  tgosAppId);
+      localStorage.setItem('tgos_apikey', tgosApiKey);
+    }
+    if (gmKey) localStorage.setItem('gm_apikey', gmKey);
+    updateTGOSStatus();
+    document.getElementById('tgosBody').style.display = 'none';
+    alert('✓ API 設定已儲存');
+  }
+
+  function updateTGOSStatus() {
+    const badge = document.getElementById('tgosStatus');
+    const cred  = getTGOSCredentials();
+    const gmKey = getGMKey();
+    const ok    = cred || gmKey;
+    if (ok) {
+      badge.textContent = '✓ 已設定';
+      badge.className   = 'tgos-badge ok';
+    } else {
+      badge.textContent = '未設定';
+      badge.className   = 'tgos-badge no';
+    }
+    if (cred) {
+      document.getElementById('tgosAppId').value  = cred.appId;
+      document.getElementById('tgosApiKey').value = cred.apiKey;
+    }
+    if (gmKey) document.getElementById('gmApiKey').value = gmKey;
+  }
+
+  function toggleTGOS() {
+    const body = document.getElementById('tgosBody');
+    body.style.display = body.style.display === 'none' ? 'block' : 'none';
+  }
+
+  // ===== Google Maps API =====
+  let gmLoaded = false;
+  let gmLoadPromise = null;
+
+  function loadGoogleMaps() {
+    const key = getGMKey();
+    if (!key) return Promise.reject(new Error('尚未設定 Google Maps API Key'));
+    if (gmLoaded && window.google && google.maps) return Promise.resolve();
+    if (gmLoadPromise) return gmLoadPromise;
+    gmLoadPromise = new Promise((resolve, reject) => {
+      window.__gmCallback = () => { gmLoaded = true; resolve(); };
+      const s = document.createElement('script');
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places&callback=__gmCallback&loading=async`;
+      s.onerror = () => { gmLoadPromise = null; reject(new Error('Google Maps 載入失敗')); };
+      document.head.appendChild(s);
+    });
+    return gmLoadPromise;
+  }
+
+  // 去除地址中的樓層資訊（只需門牌號）
+  function stripFloor(addr) {
+    return addr.replace(/(\d+號).*$/, '$1').trim();
+  }
+
+  function gmGeocode(address) {
+    return new Promise((resolve, reject) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address: stripFloor(address) }, (results, status) => {
+        if (status === 'OK' && results.length > 0) resolve(results[0].geometry.location);
+        else reject(new Error(`Geocode 失敗：${status}`));
+      });
+    });
+  }
+
+  // 共用一個 PlacesService，避免重複建立 Map（大幅提升速度）
+  let _gmSvc = null;
+  function getPlacesSvc() {
+    if (_gmSvc) return _gmSvc;
+    const mapDiv = document.getElementById('gm-hidden-map');
+    mapDiv.style.cssText = 'position:absolute;top:-9999px;width:300px;height:300px;';
+    const map = new google.maps.Map(mapDiv, { center: { lat: 22.6, lng: 120.3 }, zoom: 15 });
+    _gmSvc = new google.maps.places.PlacesService(map);
+    return _gmSvc;
+  }
+
+  function nearbySearch(location, types, keyword, radius) {
+    return new Promise(resolve => {
+      const svc = getPlacesSvc();
+      const req = { location, radius: radius || 1000 };
+      if (types)   req.type    = types;
+      if (keyword) req.keyword = keyword;
+      svc.nearbySearch(req, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK) resolve(results || []);
+        else resolve([]);
+      });
+    });
+  }
+
+  function calcDist(loc, place) {
+    const R = 6371000;
+    const lat1 = loc.lat(), lon1 = loc.lng();
+    const lat2 = place.geometry.location.lat();
+    const lon2 = place.geometry.location.lng();
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+  }
+
+  function walkMin(meters) {
+    const mins = Math.round(meters / 67); // 步行約 4km/h
+    return mins <= 1 ? '1 分鐘' : `${mins} 分鐘`;
+  }
+
+  function topN(places, loc, n) {
+    return places
+      .map(p => ({ p, d: calcDist(loc, p) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, n);
+  }
+
+  async function doNearbySearch(silent = false) {
+    const addr = (deed.district || '') + (deed.address || '');
+    if (!addr) {
+      if (!silent) alert('請先上傳謄本 PDF，解析地址後再查詢');
+      return;
+    }
+
+    const btn = document.getElementById('btnNearby');
+    const statusEl = document.getElementById('nearby-status');
+    btn.disabled = true;
+    btn.textContent = '🔍 查詢中…';
+    statusEl.textContent = '正在載入 Google Maps…';
+
+    try {
+      await loadGoogleMaps();
+      statusEl.textContent = '📍 定位地址中…';
+      const loc = await gmGeocode(addr);
+
+      statusEl.textContent = '🔎 搜尋周邊設施中…';
+
+      // 精簡為 8 次查詢（共用 PlacesService，大幅加速）
+      const [subway, bus, supermarket, convenience,
+             hospital, mall, park, devPOI] = await Promise.all([
+        nearbySearch(loc, 'subway_station',    null,  1500),
+        nearbySearch(loc, 'bus_station',       null,   800),
+        nearbySearch(loc, 'supermarket',       null,   800),
+        nearbySearch(loc, 'convenience_store', null,   500),
+        nearbySearch(loc, 'hospital',          null,  1200),
+        nearbySearch(loc, 'shopping_mall',     null,  2000),
+        nearbySearch(loc, 'park',              null,  1000),
+        nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區', 3000),
+      ]);
+
+      // ── 1. 交通機能 ──
+      const trafficLines = [];
+      topN(subway, loc, 3).forEach(({ p, d }) =>
+        trafficLines.push(`捷運${p.name.replace(/捷運/g, '')}（步行約 ${walkMin(d)}）`));
+      const busTop = topN(bus, loc, 3);
+      if (busTop.length)
+        trafficLines.push(`公車站：${busTop.map(({ p }) => p.name).join('、')}`);
+      trafficLines.push('鄰近中山高速公路前鎮交流道、台 88 快速道路');
+      document.getElementById('s-traffic').value = trafficLines.join('\n');
+
+      // ── 2. 生活機能 ──
+      const lifeLines = [];
+      topN(supermarket, loc, 2).forEach(({ p, d }) =>
+        lifeLines.push(`${p.name}（步行約 ${walkMin(d)}）`));
+      topN(convenience, loc, 2).forEach(({ p, d }) =>
+        lifeLines.push(`${p.name}（步行約 ${walkMin(d)}）`));
+      topN(hospital, loc, 1).forEach(({ p, d }) =>
+        lifeLines.push(`${p.name}（車程約 ${walkMin(d)}）`));
+      document.getElementById('s-life').value = lifeLines.join('\n');
+
+      // ── 3. 商圈特色 ──
+      const locLines = [];
+      topN(park, loc, 2).forEach(({ p, d }) =>
+        locLines.push(`${p.name}（步行約 ${walkMin(d)}）`));
+      topN(mall, loc, 2).forEach(({ p, d }) =>
+        locLines.push(`${p.name}（車程約 ${walkMin(d)}）`));
+      document.getElementById('s-location').value = locLines.join('\n');
+
+      // ── 4. 重要發展 ──
+      const devLines = [];
+      topN(devPOI, loc, 2).forEach(({ p, d }) =>
+        devLines.push(`${p.name}（車程約 ${walkMin(d)}）`));
+      const district = deed.district || '';
+      if (district.includes('前鎮') || district.includes('苓雅') || district.includes('鼓山')) {
+        devLines.push('亞洲新灣區核心範圍，高雄展覽館、港埠旅運中心已營運');
+        devLines.push('NVIDIA 台灣算力中心進駐，帶動 AI 產業聚落');
+        devLines.push('捷運黃線規劃通過（預計 2034 年通車），交通建設加持');
+        devLines.push('5G AIoT 創新園區持續開發中');
+      }
+      document.getElementById('s-develop').value = devLines.join('\n');
+
+      updateCard();
+      statusEl.innerHTML = '<span style="color:#16a34a;">✓ 周邊機能查詢完成，可在左側欄位修改</span>';
+
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:#dc2626;">✗ 查詢失敗：${err.message}</span>`;
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🗺️ 重新查詢周邊機能';
+    }
+  }
+
+  // ===== TGOS Geocoding =====
+  let tgosLoaded = false;
+  let tgosLoadPromise = null;
+
+  function loadTGOSScript(appId, apiKey) {
+    if (tgosLoaded && window.TGOS) return Promise.resolve();
+    if (tgosLoadPromise) return tgosLoadPromise;
+    tgosLoadPromise = new Promise((resolve, reject) => {
+      const existing = document.getElementById('tgos-sdk');
+      if (existing) existing.remove();
+      const s = document.createElement('script');
+      s.id      = 'tgos-sdk';
+      s.charset = 'utf-8';
+      s.src     = `https://api.tgos.tw/TGOS_API/tgos?ver=2&AppID=${encodeURIComponent(appId)}&APIKey=${encodeURIComponent(apiKey)}`;
+      s.onload  = () => { tgosLoaded = true; resolve(); };
+      s.onerror = () => { tgosLoadPromise = null; reject(new Error('TGOS SDK 載入失敗')); };
+      document.head.appendChild(s);
+    });
+    return tgosLoadPromise;
+  }
+
+  async function tgosGeocode(address) {
+    const cred = getTGOSCredentials();
+    if (!cred) return null;
+    await loadTGOSScript(cred.appId, cred.apiKey);
+    if (!window.TGOS || !TGOS.TGLocateService) throw new Error('TGOS SDK 未就緒');
+    return new Promise((resolve) => {
+      const locator = new TGOS.TGLocateService();
+      const req = new TGOS.TGLocatorRequest();
+      req.address = address;
+      locator.locateTWD97(req, (results, status) => {
+        if (status === TGOS.TGLocatorStatus.OK && results && results.length > 0) {
+          const ac = results[0].addressComponents;
+          resolve({
+            village:  ac.village  || ac.town_village || '',
+            neighbor: ac.neighborhood ? parseInt(ac.neighborhood) : 0,
+          });
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  // Init
+  updateCard();
+  updateTGOSStatus();
+
+  // ===== School District Lookup =====
+  // Format: each entry = { e: [國小名稱,...], j: [國中名稱,...] }
+  // For 鄰-conditional rules: { ranges: [[min,max],...], e/j: [...] }
+  // 共同學區 = multiple schools in same level array
+  const SD = {
+    // ── 前鎮區 ──
+    '前鎮里':  { e:['前鎮國小'], j:['興仁國中'] },
+    '興仁里':  { e:['前鎮國小'], j:['興仁國中'] },
+    '興化里':  { e:['前鎮國小'], j:['前鎮國中','興仁國中'] },  // 1-8鄰自由(興仁)，其餘前鎮國中
+    '鎮中里':  { e:['前鎮國小'], j:['興仁國中'] },
+    '鎮北里':  { e:['前鎮國小'], j:['興仁國中'] },   // 18鄰屬獅甲國中，其餘興仁
+    '鎮東里':  { e:['前鎮國小'], j:['興仁國中'] },
+    '鎮陽里':  { e:['前鎮國小'], j:['興仁國中'] },
+    '鎮榮里':  { e:['前鎮國小'], j:['興仁國中'] },
+    '鎮昌里':  { e:['鎮昌國小'], j:['興仁國中'] },
+    '鎮海里':  { e:['鎮昌國小'], j:['興仁國中'] },
+    '仁愛里':  { e:['仁愛國小'], j:['前鎮國中'] },
+    '明道里':  { e:['仁愛國小'], j:['前鎮國中'] },
+    '明禮里':  { e:['仁愛國小'], j:['前鎮國中'] },
+    '信義里':  { e:['仁愛國小'], j:['前鎮國中','興仁國中'] },  // 1-17,19-20鄰前鎮；18,21-24鄰興仁
+    '德昌里':  { e:['仁愛國小'], j:['前鎮國中'] },
+    '信德里':  {
+      ranges: [
+        { r:[[1,1],[3,16],[18,19],[21,21]], e:['仁愛國小'] },
+        { r:[[17,17],[22,33]],              e:['鎮昌國小'] },
+      ],
+      j:['前鎮國中','興仁國中']
+    },
+    '平昌里':  { e:['鎮昌國小'], j:['前鎮國中'] },
+    '平等里':  { e:['鎮昌國小'], j:['前鎮國中'] },
+    '明正里':  { e:['明正國小'], j:['前鎮國中'] },
+    '明孝里':  {
+      ranges: [
+        { r:[[1,18]],  e:['明正國小'] },
+        { r:[[19,28]], e:['佛公國小'] },
+      ],
+      j:['前鎮國中']
+    },
+    '明義里':  { e:['明正國小'], j:['前鎮國中'] },
+    '草衙里':  {
+      ranges: [
+        { r:[[1,20]],  e:['明正國小'] },
+        { r:[[21,44]], e:['佛公國小'] },
+      ],
+      j:['前鎮國中']
+    },
+    '忠純里':  { e:['獅甲國小'], j:['獅甲國中'] },
+    '忠誠里':  {
+      ranges: [
+        { r:[[1,16]],  e:['獅甲國小'] },
+        { r:[[18,24]], e:['瑞祥國小'] },
+      ],
+      j:['獅甲國中']  // 18-24鄰與瑞祥高中國中部自由
+    },
+    '建隆里':  { e:['獅甲國小'], j:['獅甲國中'] },
+    '振興里':  { e:['獅甲國小'], j:['獅甲國中'] },
+    '良和里':  {
+      ranges: [
+        { r:[[1,2]],   e:['獅甲國小'] },
+        { r:[[3,31]],  e:['復興國小'] },
+      ],
+      j:['獅甲國中']
+    },
+    '西山里':  { e:['復興國小'], j:['獅甲國中'] },
+    '西甲里':  {
+      ranges: [
+        { r:[[1,5],[15,23]],  e:['復興國小'] },
+        { r:[[6,14],[24,24]], e:['愛群國小'] },
+      ],
+      j:['獅甲國中']
+    },
+    '民權里':  {
+      ranges: [
+        { r:[[1,16]],  e:['民權國小'] },
+        { r:[[17,23]], e:['復興國小','民權國小'] },  // 自由
+      ],
+      j:['獅甲國中']
+    },
+    '忠孝里':  { e:['愛群國小'], j:['獅甲國中','光華國中'] },  // 自由
+    '盛興里':  { e:['愛群國小'], j:['獅甲國中'] },  // 與苓雅國中自由
+    '盛豐里':  { e:['愛群國小'], j:['獅甲國中'] },
+    '興中里':  { e:['愛群國小'], j:['獅甲國中'] },
+    '興東里':  {
+      ranges: [
+        { r:[[1,11]],  e:['愛群國小'] },
+        { r:[[12,27]], e:['民權國小'] },
+      ],
+      j:['獅甲國中','光華國中']  // 自由
+    },
+    '興邦里':  {
+      ranges: [
+        { r:[[1,20]], e:['瑞祥國小','鎮昌國小'] },  // 部分屬鎮昌
+        { r:[[21,99]], e:['瑞祥國小'] },
+      ],
+      j:['獅甲國中']
+    },
+    '復國里':  { e:['光華國小'], j:['獅甲國中','光華國中'] },  // 自由
+    '竹中里':  { e:['光華國小'], j:['光華國中'] },
+    '竹北里':  { e:['光華國小'], j:['光華國中'] },  // 與英明國中自由
+    '竹西里':  {
+      ranges: [
+        { r:[[1,13],[15,19]], e:['樂群國小'] },
+        { r:[[14,14],[20,26]], e:['光華國小','民權國小'] },
+        { r:[[27,29]], e:['民權國小'] },
+      ],
+      j:['光華國中']
+    },
+    '竹內里':  { e:['樂群國小'], j:['光華國中'] },
+    '竹東里':  { e:['樂群國小'], j:['光華國中'] },
+    '竹南里':  {
+      ranges: [
+        { r:[[1,2],[4,27]], e:['樂群國小'] },
+        { r:[[3,3]],        e:['樂群國小'] },
+        { r:[[28,36]],      e:['民權國小'] },
+      ],
+      j:['光華國中']
+    },
+    '瑞北里':  { e:['樂群國小'], j:['瑞豐國中'] },
+    '瑞西里':  { e:['樂群國小'], j:['瑞豐國中'] },
+    '瑞竹里':  {
+      ranges: [
+        { r:[[1,7],[12,15]], e:['樂群國小'] },
+        { r:[[8,8],[10,11],[16,16]], e:['瑞祥國小'] },
+      ],
+      j:['光華國中','瑞祥高中國中部']  // 自由
+    },
+    '瑞文里':  { e:['瑞豐國小'], j:['瑞豐國中'] },
+    '瑞昌里':  { e:['瑞豐國小'], j:['瑞豐國中'] },
+    '瑞崗里':  { e:['瑞豐國小'], j:['瑞豐國中','瑞祥高中國中部'] },  // 自由
+    '瑞華里':  { e:['瑞豐國小'], j:['瑞豐國中'] },
+    '瑞隆里':  {
+      ranges: [
+        { r:[[2,18],[23,99]], e:['瑞豐國小'], j:['瑞豐國中','瑞祥高中國中部'] },
+        { r:[[1,1]],          e:['瑞豐國小','正義國小'], j:['瑞豐國中','瑞祥高中國中部'] },  // 自由
+        { r:[[19,22]],        e:['瑞豐國小'], j:['瑞豐國中','五甲國中','瑞祥高中國中部'] },  // 三校自由
+      ]
+    },
+    '瑞誠里':  { e:['瑞豐國小'], j:['瑞豐國中'] },
+    '瑞興里':  { e:['瑞豐國小'], j:['瑞豐國中'] },
+    '瑞平里':  { e:['瑞祥國小'], j:['瑞祥高中國中部'] },  // 與五甲國中自由
+    '瑞和里':  { e:['瑞祥國小'], j:['瑞祥高中國中部'] },
+    '瑞東里':  { e:['瑞祥國小'], j:['瑞祥高中國中部'] },
+    '瑞南里':  {
+      ranges: [
+        { r:[[27,32]], e:['瑞祥國小'] },
+      ],
+      j:['瑞祥高中國中部']
+    },
+    '瑞祥里':  { e:['瑞祥國小'], j:['瑞祥高中國中部'] },
+    '瑞豐里':  { e:['瑞祥國小'], j:['瑞祥高中國中部'] },
+  };
+
+  // Check if neighbor falls in any of the ranges [[min,max],...]
+  function inRanges(n, ranges) {
+    return ranges.some(([lo, hi]) => n >= lo && n <= hi);
+  }
+
+  function lookupSchool(village, neighbor) {
+    const entry = SD[village];
+    if (!entry) return null;
+    const nb = parseInt(neighbor) || 0;
+
+    // If entry has per-range rules
+    if (entry.ranges) {
+      // Find all matching ranges
+      const matched = entry.ranges.filter(rule => {
+        if (!nb) return true;  // no neighbor specified: show all
+        return rule.r && inRanges(nb, rule.r);
+      });
+      if (matched.length === 0 && nb) {
+        // try fallback to base entry e/j
+        return { e: entry.e || [], j: entry.j || [] };
+      }
+      // Merge all matched e/j
+      const e = [...new Set(matched.flatMap(r => r.e || []))];
+      const j = [...new Set(matched.flatMap(r => r.j || entry.j || []))];
+      return { e, j };
+    }
+
+    return { e: entry.e || [], j: entry.j || [] };
+  }
+
+  function doLookupSchool() {
+    const village  = document.getElementById('s-village').value.trim();
+    const neighbor = document.getElementById('s-neighbor').value.trim();
+    const resEl    = document.getElementById('school-result');
+
+    if (!village) { resEl.innerHTML = '<span style="color:#e11">請輸入里名</span>'; return; }
+
+    const result = lookupSchool(village, neighbor);
+    if (!result) {
+      resEl.innerHTML = `<span style="color:#999">查無「${village}」資料（目前僅收錄前鎮區）</span>`;
+      return;
+    }
+
+    const fmt = arr => arr.length > 1
+      ? arr.join('、') + '（共同學區，可自由選擇）'
+      : arr[0] || '－';
+
+    const eText = fmt(result.e);
+    const jText = fmt(result.j);
+    resEl.innerHTML =
+      `<div>🏫 國小：<strong>${eText}</strong></div>` +
+      `<div>🏫 國中：<strong>${jText}</strong></div>`;
+
+    const schoolText = `國小：${result.e.join('、')}${result.e.length > 1 ? '（共同學區）' : ''}\n國中：${result.j.join('、')}${result.j.length > 1 ? '（共同學區）' : ''}`;
+    document.getElementById('s-school').value = schoolText;
+    updateCard();
+  }
+
+  function onVillageInput() {
+    // clear result when user changes village
+    document.getElementById('school-result').innerHTML = '';
+  }
+</script>
+
+</body>
+</html>
