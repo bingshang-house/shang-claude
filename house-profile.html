@@ -2432,8 +2432,9 @@ ${factsText}
           travelMode,
           fields: ['*'],
         };
-        const result = await RouteMatrix.computeRouteMatrix(request);
-        // 回傳可能是 Array / { elements } / sync iterable / async iterable / { results } 等
+        const raw = await RouteMatrix.computeRouteMatrix(request);
+        // 實測回傳 { matrix: ... }，matrix 本身或其 elements 才是 iterable
+        const result = raw && raw.matrix != null ? raw.matrix : raw;
         let elements = [];
         if (Array.isArray(result)) {
           elements = result;
@@ -2448,8 +2449,7 @@ ${factsText}
         } else if (result && typeof result[Symbol.iterator] === 'function') {
           elements = [...result];
         } else {
-          // 印出實際形狀供 debug
-          console.log('RouteMatrix raw result:', result, 'keys:', result && Object.keys(result));
+          console.log('RouteMatrix raw result:', raw, 'matrix:', result, 'matrix keys:', result && Object.keys(result));
           throw new Error('unknown computeRouteMatrix response shape: ' + (result && Object.keys(result).join(',')));
         }
         for (const el of elements) {
