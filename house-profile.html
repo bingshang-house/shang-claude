@@ -2370,11 +2370,10 @@ ${factsText}
 
   // 依距離決定步行或開車，並換算正確時間
   // 回傳 { label, mins, text } 或 null（超過30分鐘則不顯示）
-  // 直線距離轉實際通勤時間（加上路網繞行係數，貼近 Google Maps 實際時間）
-  // 走路：straight_m * 1.3（路線係數）/ 83 m/min（5 km/h 實際走速）≈ straight_m / 64
-  // 車程：straight_m * 1.4（路線係數）/ 400 m/min（24 km/h 市區平均含紅綠燈）≈ straight_m / 286
+  // 直線距離轉實際通勤時間（短距離走路才用此；長距離/車程一律走 Distance Matrix）
+  // 走路：直線 × 1.3 / 5 km/h ≈ meters / 64
   function travelInfo(meters) {
-    if (meters <= 800) {
+    if (meters <= 1200) {
       const mins = Math.max(1, Math.round(meters / 64));
       if (mins > 30) return null;
       return { label: '步行', mins, text: `步行約 ${mins} 分鐘` };
@@ -2385,10 +2384,62 @@ ${factsText}
     }
   }
 
+  function travelText(mins, mode) {
+    const label = mode === 'DRIVING' ? '車程' : '步行';
+    return `${label}約 ${mins} 分鐘`;
+  }
+
   function topN(places, loc, n) {
     return places
       .map(p => ({ p, d: calcDist(loc, p) }))
       .sort((a, b) => a.d - b.d)
+      .slice(0, n);
+  }
+
+  // Distance Matrix：拿實際路徑時間（處理旗津過港隧道、高速公路繞行等直線算不對的案例）
+  async function routeMatrix(origin, places, mode) {
+    if (!places || !places.length) return [];
+    const travelMode = google.maps.TravelMode[mode]; // DRIVING / WALKING
+    try {
+      const service = new google.maps.DistanceMatrixService();
+      // Distance Matrix 每次最多 25 destinations
+      const chunks = [];
+      for (let i = 0; i < places.length; i += 25) chunks.push(places.slice(i, i + 25));
+      const rows = [];
+      for (const chunk of chunks) {
+        const res = await new Promise((resolve, reject) => {
+          service.getDistanceMatrix({
+            origins: [origin],
+            destinations: chunk.map(p => p.location),
+            travelMode,
+            unitSystem: google.maps.UnitSystem.METRIC,
+          }, (r, s) => s === 'OK' ? resolve(r) : reject(new Error('DM:' + s)));
+        });
+        res.rows[0].elements.forEach((el, i) => {
+          rows.push({
+            p: chunk[i],
+            mins: el.status === 'OK' ? Math.max(1, Math.round(el.duration.value / 60)) : null,
+            d: el.status === 'OK' ? el.distance.value : null,
+            mode,
+          });
+        });
+      }
+      return rows;
+    } catch (e) {
+      console.warn('routeMatrix 失敗，退直線距離估算：', e.message);
+      const factor = mode === 'WALKING' ? 64 : 286;
+      return places.map(p => {
+        const d = calcDist(origin, p);
+        return { p, mins: Math.max(1, Math.round(d / factor)), d, mode, fallback: true };
+      });
+    }
+  }
+
+  async function topNRouted(places, loc, n, mode = 'DRIVING') {
+    const rows = await routeMatrix(loc, places, mode);
+    return rows
+      .filter(r => r.mins != null && r.mins <= 30)
+      .sort((a, b) => a.mins - b.mins)
       .slice(0, n);
   }
 
@@ -2412,52 +2463,77 @@ ${factsText}
 
       statusEl.textContent = '🔎 搜尋周邊設施中…';
 
-      const [subway, bus, convenience, market,
+      const [subway, busType, busText, convenience, market,
              shopee, childcare, clinic, bank, nightmarket,
              districtA, districtB, park, devPOI, interchange] = await Promise.all([
-        nearbySearch(loc, 'subway_station',    null,           1500),
-        nearbySearch(loc, 'bus_station',       null,            800),
+        nearbySearch(loc, 'subway_station',    null,           3000),
+        nearbySearch(loc, 'bus_station',       null,           1000),
+        nearbySearch(loc, null, '公車站 公車站牌 客運站',      1000),
         nearbySearch(loc, 'convenience_store', null,            500),
-        nearbySearch(loc, null, '傳統市場 菜市場',              1000),
+        nearbySearch(loc, null, '傳統市場 菜市場',              1200),
         nearbySearch(loc, null, '蝦皮店到店',                   800),
         nearbySearch(loc, null, '公共托育 公托 幼兒園',         1000),
         nearbySearch(loc, 'hospital',          null,           1200),
         nearbySearch(loc, 'bank',              null,            800),
-        nearbySearch(loc, null, '夜市',                        2000),
-        nearbySearch(loc, null, '商圈',                        2500),
-        nearbySearch(loc, null, '老街 特色街 文創園區 老地名', 2500),
+        nearbySearch(loc, null, '夜市',                        3000),
+        nearbySearch(loc, null, '商圈',                        4000),
+        nearbySearch(loc, null, '老街 特色街 文創園區 老地名', 4000),
         nearbySearch(loc, 'park',              null,           1000),
-        nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  3000),
-        nearbySearch(loc, null, '交流道 高速公路入口 快速道路入口', 2000),
+        nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  5000),
+        nearbySearch(loc, null, '交流道 IC 快速道路交流道',    3000),
+      ]);
+
+      // 公車合併：type 搜尋 + 文字搜尋，去重（place.id 或名稱）
+      const busAll = [...busType, ...busText];
+      const busSeen = new Set();
+      const bus = [];
+      for (const p of busAll) {
+        const key = p.id || p.displayName;
+        if (!key || busSeen.has(key)) continue;
+        busSeen.add(key);
+        bus.push(p);
+      }
+
+      // 交流道：只保留名稱含「交流道/IC/入口」的
+      const ichValid = interchange.filter(p => /交流道|IC\b|入口/.test(p.displayName || ''));
+
+      // ── 用 Distance Matrix 批次算實際車程（處理旗津過港隧道等跨地形案例）──
+      statusEl.textContent = '🚗 計算實際路徑時間中…';
+      const [subwayDR, ichDR, nmDR, dA_DR, dB_DR, devDR] = await Promise.all([
+        topNRouted(subway,     loc, 3, 'DRIVING'),
+        topNRouted(ichValid,   loc, 5, 'DRIVING'),
+        topNRouted(nightmarket, loc, 1, 'DRIVING'),
+        topNRouted(districtA,  loc, 10, 'DRIVING'),
+        topNRouted(districtB,  loc, 10, 'DRIVING'),
+        topNRouted(devPOI,     loc, 10, 'DRIVING'),
       ]);
 
       // ── 1. 交通機能 ──
       const trafficLines = [];
-      topN(subway, loc, 3).forEach(({ p, d }) => {
-        const ti = travelInfo(d);
-        if (ti) trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（${ti.text}）`);
+      subwayDR.forEach(({ p, mins, mode }) => {
+        trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（${travelText(mins, mode)}）`);
       });
       const busTop = topN(bus, loc, 3);
       if (busTop.length)
         trafficLines.push(`公車站：${busTop.map(({ p }) => p.displayName).join('、')}`);
-      // 交流道 / 快速道路入口：只在 2 公里內真的有才顯示，名稱去重
+      // 交流道名稱去重（「前鎮交流道」vs「中山高速公路前鎮交流道」視為同一）
       const ichSeen = new Set();
-      topN(interchange, loc, 3).forEach(({ p, d }) => {
+      ichDR.forEach(({ p, mins, mode }) => {
         const name = p.displayName;
-        // 跳過太短或重複名稱
-        if (name.length < 3) return;
+        if (!name || name.length < 3) return;
         let dup = false;
         for (const seen of ichSeen) {
           if (seen.includes(name) || name.includes(seen)) { dup = true; break; }
         }
         if (dup) return;
         ichSeen.add(name);
-        const ti = travelInfo(d);
-        if (ti) trafficLines.push(`${name}（${ti.text}）`);
+        trafficLines.push(`${name}（${travelText(mins, mode)}）`);
+        if (trafficLines.length >= 6) return;
       });
-      document.getElementById('s-traffic').value = trafficLines.slice(0, 5).join('\n');
+      document.getElementById('s-traffic').value = trafficLines.slice(0, 6).join('\n');
 
       // ── 2. 生活機能（每類只取最近一項）──
+      // 夜市改用 Distance Matrix 結果（跨區情況會準），其他走路類維持直線估算
       const lifeLines = [];
       const addLife = (results, label) => {
         const top = topN(results, loc, 1);
@@ -2471,23 +2547,31 @@ ${factsText}
       addLife(childcare,    '公托幼兒園');
       addLife(clinic,       '醫院診所');
       addLife(bank,         '銀行');
-      addLife(nightmarket,  '夜市');
+      if (nmDR.length) {
+        const nm = nmDR[0];
+        lifeLines.push(`夜市：${nm.p.displayName}（${travelText(nm.mins, nm.mode)}）`);
+      }
       document.getElementById('s-life').value = lifeLines.slice(0, 5).join('\n');
 
-      // ── 3. 商圈特色（以商圈名稱為主，非個別商家）──
+      // ── 3. 商圈特色（用 Distance Matrix 排序，不再用直線）──
       const locLines = [];
-      // 合併兩批結果，去除重複，取距離最近的前 3 個
-      const districtAll = [...districtA, ...districtB];
-      const districtSeen = new Set();
-      topN(districtAll, loc, 10).forEach(({ p, d }) => {
-        const name = p.displayName;
-        if (districtSeen.has(name) || name.length < 3) return;
-        const ti = travelInfo(d);
-        if (!ti) return; // 超過 30 分鐘不顯示
-        districtSeen.add(name);
-        locLines.push(`${name}（${ti.text}）`);
-      });
-      // 若 Google 找不到商圈名，加上附近公園作為地區特色補充
+      const locSeen = new Set();
+      [...dA_DR, ...dB_DR]
+        .sort((a, b) => a.mins - b.mins)
+        .forEach(({ p, mins, mode }) => {
+          if (locLines.length >= 5) return;
+          const name = p.displayName;
+          if (!name || name.length < 3) return;
+          // 子字串去重
+          let dup = false;
+          for (const seen of locSeen) {
+            if (seen.includes(name) || name.includes(seen)) { dup = true; break; }
+          }
+          if (dup) return;
+          locSeen.add(name);
+          locLines.push(`${name}（${travelText(mins, mode)}）`);
+        });
+      // 找不到商圈名 → 退公園（走路直線）
       if (locLines.length === 0) {
         topN(park, loc, 2).forEach(({ p, d }) => {
           const ti = travelInfo(d);
@@ -2496,21 +2580,20 @@ ${factsText}
       }
       document.getElementById('s-location').value = locLines.slice(0, 5).join('\n');
 
-      // ── 4. 重要發展（名稱互為子字串時視為同地點，只留最近的那筆）──
+      // ── 4. 重要發展（Distance Matrix + 名稱子字串去重）──
       const devLines = [];
       const devSeen = new Set();
-      topN(devPOI, loc, 10).forEach(({ p, d }) => {
+      devDR.forEach(({ p, mins, mode }) => {
         if (devLines.length >= 2) return;
         const name = p.displayName;
-        if (name.length < 3) return;
+        if (!name || name.length < 3) return;
         let dup = false;
         for (const seen of devSeen) {
           if (seen.includes(name) || name.includes(seen)) { dup = true; break; }
         }
         if (dup) return;
         devSeen.add(name);
-        const ti = travelInfo(d);
-        if (ti) devLines.push(`${name}（${ti.text}）`);
+        devLines.push(`${name}（${travelText(mins, mode)}）`);
       });
       const district = deed.district || '';
       if (district.includes('前鎮') || district.includes('苓雅') || district.includes('鼓山')) {
