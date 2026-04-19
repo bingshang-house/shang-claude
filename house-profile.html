@@ -2425,11 +2425,12 @@ ${factsText}
       const originLL = { lat: origin.lat(), lng: origin.lng() };
       for (const chunk of chunks) {
         // JS SDK 的 RouteMatrix 直接接 LatLngLiteral / LatLng / Place，不是 REST 版的 waypoint 包裝
-        // 不指定 fields，讓 SDK 回預設全部欄位（REST 版的 duration 等欄位名在 JS SDK 不認）
+        // fields 必填，用 ['*'] 取全部欄位（REST 版的 duration 等名稱在 JS SDK 不認）
         const request = {
           origins: [originLL],
           destinations: chunk.map(p => ({ lat: p.location.lat(), lng: p.location.lng() })),
           travelMode,
+          fields: ['*'],
         };
         const iter = await RouteMatrix.computeRouteMatrix(request);
         for await (const el of iter) {
