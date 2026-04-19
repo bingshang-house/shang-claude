@@ -286,11 +286,16 @@
     .info-map-row { display: flex; flex-direction: column; gap: 8px; }
 
     .info-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
-    .info-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    .info-table td { padding: 4px 7px; border-bottom: 1px solid #E8E0CC; }
+    .info-table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+    .info-table col.c-key { width: 15%; }
+    .info-table col.c-val { width: 35%; }
+    .info-table td { padding: 4px 7px; border-bottom: 1px solid #E8E0CC; word-wrap: break-word; overflow-wrap: break-word; vertical-align: middle; }
     .info-table tr:last-child td { border-bottom: none; }
-    .info-table tr:nth-child(even) td:last-child { background: #FFFBF0; }
-    .info-table td.key { background: #7A5500; color: white; font-weight: 500; width: 38%; white-space: nowrap; }
+    .info-table td.key { background: #7A5500; color: white; font-weight: 500; white-space: nowrap; }
+    .info-table td.val { background: #FFFBF0; }
+    .info-table tr.group-title td { background: linear-gradient(90deg, #CC8F00 0%, #A88200 100%); color: #fff; font-weight: 700; font-size: 11px; padding: 3px 10px; letter-spacing: 1px; border-top: 2px solid #7A5500; border-bottom: 1px solid #E8E0CC; white-space: nowrap; }
+    .info-table tr.group-title:first-child td { border-top: none; }
+    .info-table tr.full-row td.val { width: auto; }
 
     .map-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
     .map-box iframe { width: 100%; height: 220px; border: none; display: block; }
@@ -470,6 +475,50 @@
         <textarea id="s-points" rows="5" oninput="updateCard()"></textarea>
       </div>
 
+      <div class="form-sep">重要備註補充</div>
+
+      <div class="fg-row">
+        <div class="fg">
+          <label>房屋座向</label>
+          <select id="s-orientation" onchange="updateCard()">
+            <option value="">－</option>
+            <option value="座東朝西">座東朝西</option>
+            <option value="座西朝東">座西朝東</option>
+            <option value="座南朝北">座南朝北</option>
+            <option value="座北朝南">座北朝南</option>
+            <option value="座東南朝西北">座東南朝西北</option>
+            <option value="座西北朝東南">座西北朝東南</option>
+            <option value="座東北朝西南">座東北朝西南</option>
+            <option value="座西南朝東北">座西南朝東北</option>
+            <option value="不確定">不確定</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>使用狀況</label>
+          <select id="s-occupancy" onchange="updateCard()">
+            <option value="">－</option>
+            <option value="空屋">空屋</option>
+            <option value="自住">自住</option>
+            <option value="出租中">出租中</option>
+            <option value="部分出租">部分出租</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="fg">
+        <label>管理費（元/月）</label>
+        <div style="display:flex;gap:6px;">
+          <input type="number" id="s-mgmt-fee" placeholder="每月" style="flex:1;" oninput="updateCard()">
+          <input type="number" id="s-mgmt-car" placeholder="汽車位" style="flex:1;" oninput="updateCard()">
+          <input type="number" id="s-mgmt-moto" placeholder="機車位" style="flex:1;" oninput="updateCard()">
+        </div>
+      </div>
+
+      <div class="fg">
+        <label>社區公設</label>
+        <textarea id="s-facilities" rows="3" placeholder="例：健身房、閱覽室、交誼廳、兒童遊戲室" oninput="updateCard()"></textarea>
+      </div>
+
       <div class="form-sep">周遭機能（可由 AI 協助填入）</div>
 
       <button id="btnNearby" onclick="doNearbySearch()" style="width:100%;margin-bottom:10px;padding:10px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:22px;cursor:pointer;font-size:14px;font-weight:700;letter-spacing:1px;box-shadow:0 2px 6px rgba(204,143,0,0.3);">🗺️ 自動查詢周邊機能</button>
@@ -555,36 +604,89 @@
           <div class="info-box">
             <div class="section-bar bar-blue">▌ 物件資料</div>
             <table class="info-table">
-              <tr><td class="key">樓　層</td><td id="td-floor">－</td></tr>
-              <tr><td class="key">建築完成</td><td id="td-completion">－</td></tr>
-              <tr><td class="key">所有權登記</td><td id="td-own-date">－</td></tr>
-              <tr><td class="key">土地持分</td><td id="td-land">－</td></tr>
-              <tr><td class="key">使用分區</td><td id="td-zone">－</td></tr>
-              <tr><td class="key">公告現值</td><td id="td-pub-val">－</td></tr>
-              <tr><td class="key">都市計畫</td><td id="td-urban-plan">－</td></tr>
-              <tr><td class="key">細部計畫</td><td id="td-detail-plan">－</td></tr>
-              <tr><td class="key">建蔽容積</td><td id="td-bcr-far">－</td></tr>
-              <tr><td class="key">主建物面積</td><td id="td-main-area">－</td></tr>
-              <tr><td class="key">附屬建物</td><td id="td-attached">－</td></tr>
-              <tr><td class="key">共用部分</td><td id="td-pub-area">－</td></tr>
-              <tr><td class="key">總坪數</td><td id="td-total-area">－</td></tr>
-              <tr><td class="key">主要用途</td><td id="td-use">－</td></tr>
-              <tr><td class="key">建　材</td><td id="td-mat">－</td></tr>
-              <tr><td class="key">格　局</td><td id="td-layout"><span class="pending">待補充</span></td></tr>
-              <tr><td class="key">車　位</td><td id="td-park">－</td></tr>
-              <tr><td class="key">停車狀況</td><td id="td-park-status">－</td></tr>
-              <tr><td class="key">機車位</td><td id="td-moto">－</td></tr>
-              <tr><td class="key">抵押設定</td><td id="td-mortgage">－</td></tr>
-              <tr><td class="key">使用執照</td><td id="td-lic">－</td></tr>
-              <tr><td class="key">總戶數</td><td id="td-lic-units">－</td></tr>
-              <tr><td class="key">總樓層</td><td id="td-lic-floors">－</td></tr>
-              <tr><td class="key">建　商</td><td id="td-lic-builder">－</td></tr>
-              <tr><td class="key">本層樓高</td><td id="td-lic-floorheight">－</td></tr>
-              <tr><td class="key">使用類組</td><td id="td-lic-usage">－</td></tr>
-              <tr><td class="key">中繼水箱</td><td id="td-lic-watertank">－</td></tr>
-              <tr><td class="key">綠建築</td><td id="td-lic-green">－</td></tr>
-              <tr><td class="key">太陽能</td><td id="td-lic-solar">－</td></tr>
-              <tr><td class="key">車位售價</td><td id="td-park-price">－</td></tr>
+              <colgroup>
+                <col class="c-key"><col class="c-val"><col class="c-key"><col class="c-val">
+              </colgroup>
+              <tr class="group-title"><td colspan="4">基本資料</td></tr>
+              <tr>
+                <td class="key">樓　層</td><td class="val" id="td-floor">－</td>
+                <td class="key">建築完成</td><td class="val" id="td-completion">－</td>
+              </tr>
+              <tr>
+                <td class="key">所有權登記</td><td class="val" id="td-own-date">－</td>
+                <td class="key">房屋座向</td><td class="val" id="td-orientation">－</td>
+              </tr>
+              <tr>
+                <td class="key">使用狀況</td><td class="val" id="td-occupancy">－</td>
+                <td class="key">主要用途</td><td class="val" id="td-use">－</td>
+              </tr>
+              <tr>
+                <td class="key">建　材</td><td class="val" id="td-mat">－</td>
+                <td class="key">格　局</td><td class="val" id="td-layout"><span class="pending">待補充</span></td>
+              </tr>
+
+              <tr class="group-title"><td colspan="4">土地與都計</td></tr>
+              <tr>
+                <td class="key">土地持分</td><td class="val" id="td-land">－</td>
+                <td class="key">使用分區</td><td class="val" id="td-zone">－</td>
+              </tr>
+              <tr>
+                <td class="key">公告現值</td><td class="val" id="td-pub-val">－</td>
+                <td class="key">建蔽容積</td><td class="val" id="td-bcr-far">－</td>
+              </tr>
+              <tr>
+                <td class="key">都市計畫</td><td class="val" id="td-urban-plan">－</td>
+                <td class="key">細部計畫</td><td class="val" id="td-detail-plan">－</td>
+              </tr>
+
+              <tr class="group-title"><td colspan="4">建物坪數</td></tr>
+              <tr>
+                <td class="key">主建物面積</td><td class="val" id="td-main-area">－</td>
+                <td class="key">附屬建物</td><td class="val" id="td-attached">－</td>
+              </tr>
+              <tr>
+                <td class="key">共用部分</td><td class="val" id="td-pub-area">－</td>
+                <td class="key">總坪數</td><td class="val" id="td-total-area">－</td>
+              </tr>
+
+              <tr class="group-title"><td colspan="4">車位與費用</td></tr>
+              <tr>
+                <td class="key">車　位</td><td class="val" id="td-park">－</td>
+                <td class="key">停車狀況</td><td class="val" id="td-park-status">－</td>
+              </tr>
+              <tr>
+                <td class="key">機車位</td><td class="val" id="td-moto">－</td>
+                <td class="key">車位售價</td><td class="val" id="td-park-price">－</td>
+              </tr>
+              <tr>
+                <td class="key">管理費</td><td class="val" id="td-mgmt">－</td>
+                <td class="key">抵押設定</td><td class="val" id="td-mortgage">－</td>
+              </tr>
+
+              <tr class="group-title"><td colspan="4">使用執照與細項</td></tr>
+              <tr>
+                <td class="key">使用執照</td><td class="val" id="td-lic">－</td>
+                <td class="key">總戶數</td><td class="val" id="td-lic-units">－</td>
+              </tr>
+              <tr>
+                <td class="key">總樓層</td><td class="val" id="td-lic-floors">－</td>
+                <td class="key">建　商</td><td class="val" id="td-lic-builder">－</td>
+              </tr>
+              <tr>
+                <td class="key">本樓樓板高度</td><td class="val" id="td-lic-floorheight">－</td>
+                <td class="key">使用類組</td><td class="val" id="td-lic-usage">－</td>
+              </tr>
+              <tr>
+                <td class="key">中繼水箱</td><td class="val" id="td-lic-watertank">－</td>
+                <td class="key">綠建築</td><td class="val" id="td-lic-green">－</td>
+              </tr>
+              <tr>
+                <td class="key">太陽能</td><td class="val" id="td-lic-solar">－</td>
+                <td class="key"></td><td class="val"></td>
+              </tr>
+              <tr class="full-row">
+                <td class="key">社區公設</td><td class="val" colspan="3" id="td-facilities">－</td>
+              </tr>
             </table>
           </div>
 
@@ -1738,6 +1840,26 @@
     setText('td-mortgage', d.hasMortgage
       ? `有（${[d.mortgageAmt ? Math.round(d.mortgageAmt/10000)+'萬' : '', shortBank(d.mortgageBank)].filter(Boolean).join('，')}）`
       : '無');
+
+    // 重要備註補充
+    const orientation = document.getElementById('s-orientation').value;
+    const occupancy   = document.getElementById('s-occupancy').value;
+    const mgmtFee     = parseFloat(document.getElementById('s-mgmt-fee').value) || 0;
+    const mgmtCar     = parseFloat(document.getElementById('s-mgmt-car').value) || 0;
+    const mgmtMoto    = parseFloat(document.getElementById('s-mgmt-moto').value) || 0;
+    const facilities  = document.getElementById('s-facilities').value.trim();
+    setText('td-orientation', orientation || '－');
+    setText('td-occupancy',   occupancy   || '－');
+    const mgmtExtra = [
+      mgmtCar  ? `汽車位 ${mgmtCar.toLocaleString()}`  : '',
+      mgmtMoto ? `機車位 ${mgmtMoto.toLocaleString()}` : ''
+    ].filter(Boolean).join('、');
+    let mgmtStr = '－';
+    if (mgmtFee || mgmtCar || mgmtMoto) {
+      mgmtStr = `每月 ${mgmtFee.toLocaleString()} 元` + (mgmtExtra ? `（${mgmtExtra}）` : '');
+    }
+    setText('td-mgmt', mgmtStr);
+    setText('td-facilities', facilities || '－');
     // 使用執照：字號 + 查詢按鈕；「執照細項」列非同步載入
     renderLicenseCell(d);
     loadLicenseDetail(d);
