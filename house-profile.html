@@ -482,8 +482,9 @@
 
       <div class="fg">
         <label>訴求重點（每行一點，最多 6 點）</label>
-        <button type="button" onclick="autoPoints()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">✨ 自動產生訴求重點</button>
-        <textarea id="s-points" rows="5" oninput="updateCard()"></textarea>
+        <button type="button" onclick="autoPoints()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">✨ AI 改寫文案（Gemini）</button>
+        <textarea id="s-points" rows="5" oninput="_pointsTouched=true; updateCard()"></textarea>
+        <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">預設依物件資料自動帶出；想要更自然文筆再按上方 AI 改寫</div>
       </div>
 
       <div class="form-sep">重要備註補充</div>
@@ -814,7 +815,7 @@
       deed = parseDeed(fullText);
       deed._raw = fullText;
       showParsedSummary(deed);
-      autoFillPoints(deed);
+      _pointsTouched = false; // 新物件 → 讓模板以新資料重新填
       updateCard();
       setStatus('ok', `✓ 解析完成：${file.name}`);
 
@@ -1775,22 +1776,19 @@
     return d;
   }
 
-  // ===== Auto-fill Points =====
-  function autoFillPoints(d) {
+  // ===== Points textarea 自動填模板 =====
+  // _pointsTouched：使用者手動輸入 或 AI 產生後為 true，自動模板就停止覆蓋
+  let _pointsTouched = false;
+  function refreshPointsTemplate() {
+    if (_pointsTouched) return;
     const pts = document.getElementById('s-points');
-    if (pts.value.trim()) return; // 使用者已填，不覆蓋
-    const lines = [];
-    if (d.age === '全新') lines.push('全新成屋即可入住，屋況全新免裝潢');
-    if (d.floor >= 10)   lines.push(`${d.floor} 樓高樓層，視野開闊採光充足`);
-    if (d.hasParking)    lines.push('含平面停車位，停車免煩惱');
-    lines.push('緊鄰亞洲新灣區，NVIDIA 算力中心、5G AIoT 園區進駐，增值潛力強');
-    lines.push('捷運黃線規劃通過前鎮區（2034 年通車），交通建設題材加持');
-    lines.push('產權完整單獨所有，交易安心透明');
-    pts.value = lines.join('\n');
+    if (!pts) return;
+    pts.value = autoPointsTemplate(deed);
   }
 
   // ===== Update Card =====
   function updateCard() {
+    refreshPointsTemplate(); // 沒被碰過 → 依最新資料自動產生模板
     const d = deed;
     const price       = parseFloat(document.getElementById('s-price').value) || 0;
     const parkPrice   = parseFloat(document.getElementById('s-parking-price').value) || 0;
@@ -2139,6 +2137,7 @@ ${factsText}`;
         if (res.status === 429) {
           exhaustGeminiUsage();
           updateGeminiUsageBadge();
+          _pointsTouched = true;
           ta.value = autoPointsTemplate(d);
           updateCard();
           alert('Gemini 已達免費額度上限（Google 端回報 429），已改用內建模板產生文案，明天會自動重置。');
@@ -2155,12 +2154,14 @@ ${factsText}`;
         if (finishReason === 'MAX_TOKENS') throw new Error('輸出被 MAX_TOKENS 截斷，請稍後再試');
         throw new Error('Gemini 回傳空白（' + (finishReason || '未知原因') + '）');
       }
+      _pointsTouched = true;
       ta.value = text;
       bumpGeminiUsage(1);
       updateGeminiUsageBadge();
       updateCard();
     } catch (e) {
       // 網路或其他錯誤 → 退模板，讓使用者還是拿得到文案
+      _pointsTouched = true;
       ta.value = autoPointsTemplate(d);
       updateCard();
       alert('AI 產生失敗，已改用內建模板：' + e.message);
