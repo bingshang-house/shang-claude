@@ -2561,11 +2561,12 @@ ${factsText}
 
       statusEl.textContent = '🔎 搜尋周邊設施中…';
 
-      const [subway, busType, busText, ferryText, convenience, market,
+      const [subway, busType, busTransit, busText, ferryText, convenience, market,
              shopee, childcare, clinic, bank, nightmarket,
              districtA, districtB, park, devPOI, interchange] = await Promise.all([
         nearbySearch(loc, 'subway_station',    null,           3000),
         nearbySearch(loc, 'bus_station',       null,           1500),
+        nearbySearch(loc, 'transit_station',   null,           1500),
         nearbySearch(loc, null, '公車站 公車站牌 客運站',      1500),
         nearbySearch(loc, null, '渡輪站 輪渡站 渡船頭',        4000),
         nearbySearch(loc, 'convenience_store', null,            500),
@@ -2584,12 +2585,16 @@ ${factsText}
       // 渡輪站過濾（避免抓到相關店家）
       const ferry = ferryText.filter(p => /渡輪|輪渡|渡船|碼頭/.test(p.displayName || ''));
 
-      // 公車合併：type 搜尋 + 文字搜尋，去重（place.id 或名稱）
-      const busAll = [...busType, ...busText];
+      // 公車合併：bus_station + transit_station + 文字搜尋，去重（place.id 或名稱）
+      // transit_station 是 bus_station 的超集，台灣公車站許多只收錄在此
+      const busAll = [...busType, ...busTransit, ...busText];
       const busSeen = new Set();
       const bus = [];
       for (const p of busAll) {
-        const key = p.id || p.displayName;
+        const name = p.displayName || '';
+        // 排除捷運站（transit_station 會混進捷運）和非公車資料
+        if (/捷運|MRT|LRT|輕軌|火車|TRA|高鐵|HSR|機場|Airport/.test(name)) continue;
+        const key = p.id || name;
         if (!key || busSeen.has(key)) continue;
         busSeen.add(key);
         bus.push(p);
