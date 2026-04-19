@@ -2481,6 +2481,12 @@ ${factsText}
         if (elements.length && !looksLikeElement(elements[0])) {
           console.log('RouteMatrix element 形狀異常：', elements[0], 'keys:', Object.keys(elements[0] || {}));
         }
+        // 印首 element 的 keys + 值，鎖定 minified 欄位名
+        if (elements.length) {
+          const e0 = elements[0];
+          const proto = Object.getPrototypeOf(e0 || {});
+          console.log('RouteMatrix element sample:', e0, 'ownKeys:', Object.keys(e0 || {}), 'protoKeys:', proto ? Object.getOwnPropertyNames(proto) : []);
+        }
         // 欄位名找不到時自動掃描（處理 minified 欄位）
         const pickField = (obj, candidates, validate) => {
           for (const k of candidates) if (obj[k] != null && (!validate || validate(obj[k]))) return obj[k];
