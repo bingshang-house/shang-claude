@@ -757,7 +757,7 @@
       <div style="display:flex;gap:6px;align-items:flex-start;">
         <div style="flex:1;">
           <label style="font-size:11px;color:#555;">地號</label>
-          <input type="text" placeholder="例：愛群段2945" value="${preset?.loNo||''}"
+          <input type="text" id="land-lono-${idx}" placeholder="例：愛群段2945" value="${preset?.loNo||''}"
             style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;"
             oninput="_landData[${idx}].loNo=this.value;updateCard()">
         </div>
@@ -823,7 +823,7 @@
         const loNo  = loNoM ? loNoM[1].replace(/\s/g,'') : '';
         _landData[idx] = { loNo, ping, detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪` };
         document.getElementById(`land-ping-${idx}`).value = ping;
-        document.getElementById(`land-ping-${idx}`).previousElementSibling.previousElementSibling.value = loNo;
+        document.getElementById(`land-lono-${idx}`).value = loNo;
         document.getElementById(`land-info-${idx}`).textContent = `✓ ${total} m²，持分 ${denom}分之${numer} ≈ ${ping} 坪`;
         document.getElementById(`land-zone-label-${idx}`).textContent = `✓ ${file.name}`;
         updateCard();
