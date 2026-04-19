@@ -2396,33 +2396,59 @@ ${factsText}
       .slice(0, n);
   }
 
-  // Distance Matrix：拿實際路徑時間（處理旗津過港隧道、高速公路繞行等直線算不對的案例）
+  // Route Matrix：拿實際路徑時間（處理旗津過港隧道、高速公路繞行等直線算不對的案例）
+  // 2026-02-25 Google 將 google.maps.DistanceMatrix 標記 deprecated，改用 google.maps.routes.RouteMatrix
+  function parseDurationSeconds(duration) {
+    if (duration == null) return 0;
+    if (typeof duration === 'number') return duration;
+    if (typeof duration === 'string') {
+      // "123s" 或 "123.4s" 或 ISO 8601 "PT123S"
+      const m = duration.match(/(\d+(?:\.\d+)?)\s*[sS]?$/);
+      return m ? Math.round(parseFloat(m[1])) : 0;
+    }
+    if (typeof duration === 'object') {
+      if (duration.value != null) return Math.round(duration.value);
+      if (duration.seconds != null) return Number(duration.seconds);
+    }
+    return 0;
+  }
+
   async function routeMatrix(origin, places, mode) {
     if (!places || !places.length) return [];
-    const travelMode = google.maps.TravelMode[mode]; // DRIVING / WALKING
     try {
-      const service = new google.maps.DistanceMatrixService();
-      // Distance Matrix 每次最多 25 destinations
+      const { RouteMatrix } = await google.maps.importLibrary('routes');
+      const travelMode = google.maps.TravelMode[mode]; // DRIVING / WALKING
+      // Route Matrix 每次 origins×destinations 上限 625；1 origin × 25 dest 安全
       const chunks = [];
       for (let i = 0; i < places.length; i += 25) chunks.push(places.slice(i, i + 25));
       const rows = [];
+      const originLL = { lat: origin.lat(), lng: origin.lng() };
       for (const chunk of chunks) {
-        const res = await new Promise((resolve, reject) => {
-          service.getDistanceMatrix({
-            origins: [origin],
-            destinations: chunk.map(p => p.location),
-            travelMode,
-            unitSystem: google.maps.UnitSystem.METRIC,
-          }, (r, s) => s === 'OK' ? resolve(r) : reject(new Error('DM:' + s)));
-        });
-        res.rows[0].elements.forEach((el, i) => {
-          rows.push({
-            p: chunk[i],
-            mins: el.status === 'OK' ? Math.max(1, Math.round(el.duration.value / 60)) : null,
-            d: el.status === 'OK' ? el.distance.value : null,
-            mode,
-          });
-        });
+        const request = {
+          origins: [{ waypoint: { location: { latLng: originLL } } }],
+          destinations: chunk.map(p => ({
+            waypoint: { location: { latLng: { lat: p.location.lat(), lng: p.location.lng() } } }
+          })),
+          travelMode,
+          fields: ['originIndex', 'destinationIndex', 'distanceMeters', 'duration', 'condition']
+        };
+        const iter = await RouteMatrix.computeRouteMatrix(request);
+        for await (const el of iter) {
+          const place = chunk[el.destinationIndex];
+          if (!place) continue;
+          const routeOk = !el.condition || el.condition === 'ROUTE_EXISTS';
+          if (routeOk && el.duration != null) {
+            const secs = parseDurationSeconds(el.duration);
+            rows.push({
+              p: place,
+              mins: Math.max(1, Math.round(secs / 60)),
+              d: el.distanceMeters != null ? Number(el.distanceMeters) : null,
+              mode,
+            });
+          } else {
+            rows.push({ p: place, mins: null, d: null, mode });
+          }
+        }
       }
       return rows;
     } catch (e) {
