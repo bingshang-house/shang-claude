@@ -1255,17 +1255,18 @@
 
       statusEl.textContent = '🔎 搜尋周邊設施中…';
 
-      // 精簡為 8 次查詢（共用 PlacesService，大幅加速）
-      const [subway, bus, supermarket, convenience,
-             hospital, mall, park, devPOI] = await Promise.all([
-        nearbySearch(loc, 'subway_station',    null,  1500),
-        nearbySearch(loc, 'bus_station',       null,   800),
-        nearbySearch(loc, 'supermarket',       null,   800),
-        nearbySearch(loc, 'convenience_store', null,   500),
-        nearbySearch(loc, 'hospital',          null,  1200),
-        nearbySearch(loc, 'shopping_mall',     null,  2000),
-        nearbySearch(loc, 'park',              null,  1000),
-        nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區', 3000),
+      const [subway, bus, convenience, market,
+             shopee, childcare, clinic, mall, park, devPOI] = await Promise.all([
+        nearbySearch(loc, 'subway_station',    null,           1500),
+        nearbySearch(loc, 'bus_station',       null,            800),
+        nearbySearch(loc, 'convenience_store', null,            500),
+        nearbySearch(loc, null, '傳統市場 菜市場',              1000),
+        nearbySearch(loc, null, '蝦皮店到店',                   800),
+        nearbySearch(loc, null, '公共托育 公托 幼兒園',         1000),
+        nearbySearch(loc, 'hospital',          null,           1200),
+        nearbySearch(loc, 'shopping_mall',     null,           2000),
+        nearbySearch(loc, 'park',              null,           1000),
+        nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  3000),
       ]);
 
       // ── 1. 交通機能 ──
@@ -1278,14 +1279,17 @@
       trafficLines.push('鄰近中山高速公路前鎮交流道、台 88 快速道路');
       document.getElementById('s-traffic').value = trafficLines.join('\n');
 
-      // ── 2. 生活機能 ──
+      // ── 2. 生活機能（每類只取最近一項）──
       const lifeLines = [];
-      topN(supermarket, loc, 2).forEach(({ p, d }) =>
-        lifeLines.push(`${p.displayName}（步行約 ${walkMin(d)}）`));
-      topN(convenience, loc, 2).forEach(({ p, d }) =>
-        lifeLines.push(`${p.displayName}（步行約 ${walkMin(d)}）`));
-      topN(hospital, loc, 1).forEach(({ p, d }) =>
-        lifeLines.push(`${p.displayName}（車程約 ${walkMin(d)}）`));
+      const addLife = (results, label) => {
+        const top = topN(results, loc, 1);
+        if (top.length) lifeLines.push(`${label}：${top[0].p.displayName}（步行約 ${walkMin(top[0].d)}）`);
+      };
+      addLife(convenience, '超商');
+      addLife(market,      '傳統市場');
+      addLife(shopee,      '蝦皮店到店');
+      addLife(childcare,   '公托幼兒園');
+      addLife(clinic,      '醫院診所');
       document.getElementById('s-life').value = lifeLines.join('\n');
 
       // ── 3. 商圈特色 ──
