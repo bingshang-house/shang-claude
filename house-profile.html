@@ -394,26 +394,9 @@
     <div class="supplement">
 
       <div class="form-sep">土地資訊</div>
-
-      <div class="fg-row">
-        <div class="fg">
-          <label>上傳土地謄本 PDF（選填）</label>
-          <div class="upload-zone" id="landUploadZone" style="padding:8px;text-align:center;cursor:pointer;"
-               onclick="document.getElementById('landPdfInput').click()"
-               ondragover="event.preventDefault();this.classList.add('drag-over')"
-               ondragleave="this.classList.remove('drag-over')"
-               ondrop="event.preventDefault();this.classList.remove('drag-over');handleLandPDF({files:event.dataTransfer.files})">
-            <div id="landUploadLabel" style="font-size:11px;color:#888;">點擊或拖曳土地謄本</div>
-            <input type="file" id="landPdfInput" accept=".pdf" style="display:none"
-                   onchange="handleLandPDF(this)">
-          </div>
-        </div>
-        <div class="fg">
-          <label>土地持分坪數（可手填）</label>
-          <input type="number" id="s-land-ping" placeholder="例：12.5" step="0.01" min="0" oninput="updateCard()">
-          <div id="land-parse-result" style="font-size:10px;color:#16a34a;margin-top:3px;"></div>
-        </div>
-      </div>
+      <div id="land-entries"></div>
+      <button class="btn-sm" onclick="addLandEntry()" style="margin-bottom:6px;">＋ 新增土地筆</button>
+      <div id="land-total-label" style="font-size:11px;color:#555;"></div>
 
       <div class="form-sep">補充資料</div>
 
@@ -760,44 +743,106 @@
     return CH_FLOOR[c] || c;
   }
 
-  // ===== 土地謄本解析 =====
-  async function handleLandPDF(input) {
-    const file = input.files && input.files[0];
+  // ===== 土地資訊（多筆）=====
+  let _landData = {}; // { idx: {loNo, ping, detail} }
+  let _landIdx  = 0;
+
+  function addLandEntry(preset) {
+    const idx  = _landIdx++;
+    _landData[idx] = preset || { loNo: '', ping: 0, detail: '' };
+    const div  = document.createElement('div');
+    div.id     = `land-entry-${idx}`;
+    div.style.cssText = 'border:1px solid #e0e0e0;border-radius:4px;padding:8px;margin-bottom:6px;';
+    div.innerHTML = `
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <div style="flex:1;">
+          <label style="font-size:11px;color:#555;">地號</label>
+          <input type="text" placeholder="例：愛群段2945" value="${preset?.loNo||''}"
+            style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;"
+            oninput="_landData[${idx}].loNo=this.value;updateCard()">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:11px;color:#555;">持分坪數</label>
+          <input type="number" placeholder="例：3.83" step="0.01" min="0" value="${preset?.ping||''}"
+            style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;"
+            id="land-ping-${idx}"
+            oninput="_landData[${idx}].ping=parseFloat(this.value)||0;updateCard()">
+        </div>
+        <button onclick="removeLandEntry(${idx})" title="移除"
+          style="background:#e74c3c;color:#fff;border:none;border-radius:3px;padding:4px 8px;cursor:pointer;margin-top:16px;">✕</button>
+      </div>
+      <div style="margin-top:5px;">
+        <label style="font-size:11px;color:#555;">上傳土地謄本 PDF（選填，自動解析）</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <div class="upload-zone" style="flex:1;padding:6px;text-align:center;cursor:pointer;font-size:11px;"
+               id="land-zone-${idx}"
+               onclick="document.getElementById('land-file-${idx}').click()"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="event.preventDefault();this.classList.remove('drag-over');parseLandPDF(event.dataTransfer.files[0],${idx})">
+            <span id="land-zone-label-${idx}" style="color:#888;">點擊或拖曳</span>
+            <input type="file" id="land-file-${idx}" accept=".pdf" style="display:none"
+                   onchange="parseLandPDF(this.files[0],${idx})">
+          </div>
+        </div>
+        <div id="land-info-${idx}" style="font-size:10px;color:#16a34a;margin-top:3px;">${preset?.detail||''}</div>
+      </div>`;
+    document.getElementById('land-entries').appendChild(div);
+  }
+
+  function removeLandEntry(idx) {
+    delete _landData[idx];
+    const el = document.getElementById(`land-entry-${idx}`);
+    if (el) el.remove();
+    updateCard();
+  }
+
+  async function parseLandPDF(file, idx) {
     if (!file) return;
-    document.getElementById('landUploadLabel').textContent = '解析中…';
+    document.getElementById(`land-zone-label-${idx}`).textContent = '解析中…';
     try {
-      const buf  = await file.arrayBuffer();
-      const pdf  = await pdfjsLib.getDocument({ data: buf }).promise;
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
       let raw = '';
       for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const tc   = await page.getTextContent();
-        raw += tc.items.map(it => it.str).join(' ') + '\n';
+        const pg = await pdf.getPage(i);
+        raw += (await pg.getTextContent()).items.map(it => it.str).join(' ') + '\n';
       }
       const t = fw(raw);
-      // 面積：找「數字 + 平方公尺」
-      const areaM  = t.match(/([\d]+(?:\.[\d]+)?)\s*平方公尺/);
-      // 持分：找「X分之Y」
+      // 地號：從標題抓「段 XXXX-0000 地號」
+      const loNoM = t.match(/([^\s]{2,6}段(?:[^\s]{2,6}小段)?\s*[\d\-]+)\s*地號/);
+      // 面積：「面積 XXXX 平方公尺」（排除「元/平方公尺」）
+      const areaM = t.match(/面積\s*([\d]+(?:\.[\d]+)?)\s*平方公尺/);
+      // 持分：「權利範圍 XXXXX分之YYYY」
       const ratioM = t.match(/[権權]利[範][囲圍]\s*(\d+)分之(\d+)/);
       if (areaM && ratioM) {
-        const total  = parseFloat(areaM[1]);
-        const denom  = parseInt(ratioM[1]);
-        const numer  = parseInt(ratioM[2]);
-        const pingShare = p2(sqm2ping(total * numer / denom));
-        document.getElementById('s-land-ping').value = pingShare;
-        document.getElementById('land-parse-result').textContent =
-          `自動解析：總面積 ${total} m²，持分 ${denom}分之${numer} ≈ ${pingShare} 坪`;
-        document.getElementById('landUploadLabel').textContent = `✓ ${file.name}`;
+        const total = parseFloat(areaM[1]);
+        const denom = parseInt(ratioM[1]);
+        const numer = parseInt(ratioM[2]);
+        const ping  = p2(sqm2ping(total * numer / denom));
+        const loNo  = loNoM ? loNoM[1].replace(/\s/g,'') : '';
+        _landData[idx] = { loNo, ping, detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪` };
+        document.getElementById(`land-ping-${idx}`).value = ping;
+        document.getElementById(`land-ping-${idx}`).previousElementSibling.previousElementSibling.value = loNo;
+        document.getElementById(`land-info-${idx}`).textContent = `✓ ${total} m²，持分 ${denom}分之${numer} ≈ ${ping} 坪`;
+        document.getElementById(`land-zone-label-${idx}`).textContent = `✓ ${file.name}`;
         updateCard();
       } else {
-        document.getElementById('land-parse-result').textContent = '⚠ 無法自動辨識，請手動填寫';
-        document.getElementById('landUploadLabel').textContent = file.name;
+        document.getElementById(`land-info-${idx}`).textContent = '⚠ 無法辨識，請手動填寫';
+        document.getElementById(`land-zone-label-${idx}`).textContent = file.name;
       }
-    } catch (e) {
-      document.getElementById('landUploadLabel').textContent = '解析失敗';
+    } catch(e) {
+      document.getElementById(`land-zone-label-${idx}`).textContent = '解析失敗';
       console.error(e);
     }
   }
+
+  function getLandTotal() {
+    return Object.values(_landData).reduce((s, e) => s + (e.ping || 0), 0);
+  }
+
+  // 初始化第一筆
+  addLandEntry();
 
   function parseDeed(raw) {
     const t = fw(raw);
@@ -1030,8 +1075,19 @@
       ? `民國 ${d.completionRoc} 年（屋齡 ${d.age}）`
       : d.age || '－');
     setText('td-own-date', d.ownerRegDate || '－');
-    const landPing = parseFloat(document.getElementById('s-land-ping').value) || 0;
-    setText('td-land', landPing ? `${landPing} 坪` : '－');
+    const landTotal = p2(getLandTotal());
+    const landEntries = Object.values(_landData).filter(e => e.ping > 0);
+    let landText = '－';
+    if (landEntries.length === 1) {
+      const e = landEntries[0];
+      landText = `${e.loNo ? e.loNo + '　' : ''}${e.ping} 坪`;
+    } else if (landEntries.length > 1) {
+      landText = landEntries.map(e => `${e.loNo||''}（${e.ping}坪）`).join(' ＋ ') + `　合計 ${landTotal} 坪`;
+    }
+    setText('td-land', landText);
+    // 更新左側總坪數標示
+    const totalLbl = document.getElementById('land-total-label');
+    if (totalLbl) totalLbl.textContent = landTotal ? `土地持分合計：${landTotal} 坪` : '';
     setText('td-main-area', d.mainPing
       ? `${d.mainPing} 坪（${d.mainArea} m²）`
       : '－');
