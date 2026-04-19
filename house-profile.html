@@ -2424,11 +2424,10 @@ ${factsText}
       const rows = [];
       const originLL = { lat: origin.lat(), lng: origin.lng() };
       for (const chunk of chunks) {
+        // JS SDK 的 RouteMatrix 直接接 LatLngLiteral / LatLng / Place，不是 REST 版的 waypoint 包裝
         const request = {
-          origins: [{ waypoint: { location: { latLng: originLL } } }],
-          destinations: chunk.map(p => ({
-            waypoint: { location: { latLng: { lat: p.location.lat(), lng: p.location.lng() } } }
-          })),
+          origins: [originLL],
+          destinations: chunk.map(p => ({ lat: p.location.lat(), lng: p.location.lng() })),
           travelMode,
           fields: ['originIndex', 'destinationIndex', 'distanceMeters', 'duration', 'condition']
         };
