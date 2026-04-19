@@ -1190,7 +1190,7 @@
       if (keyword) {
         const { places } = await google.maps.places.Place.searchByText({
           fields: ['displayName', 'location'],
-          query: keyword,
+          textQuery: keyword,
           locationBias: { center, radius: radius || 3000 },
           maxResultCount: 5,
           language: 'zh-TW',
