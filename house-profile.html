@@ -2432,13 +2432,27 @@ ${factsText}
           travelMode,
           fields: ['*'],
         };
-        const iter = await RouteMatrix.computeRouteMatrix(request);
-        for await (const el of iter) {
+        const result = await RouteMatrix.computeRouteMatrix(request);
+        // 回傳可能是 Array / { elements } / sync iterable / async iterable，全部相容
+        let elements = [];
+        if (Array.isArray(result)) {
+          elements = result;
+        } else if (result && Array.isArray(result.elements)) {
+          elements = result.elements;
+        } else if (result && typeof result[Symbol.asyncIterator] === 'function') {
+          for await (const el of result) elements.push(el);
+        } else if (result && typeof result[Symbol.iterator] === 'function') {
+          elements = [...result];
+        } else {
+          throw new Error('unknown computeRouteMatrix response shape');
+        }
+        for (const el of elements) {
           const place = chunk[el.destinationIndex];
           if (!place) continue;
           const routeOk = !el.condition || el.condition === 'ROUTE_EXISTS';
-          if (routeOk && el.duration != null) {
-            const secs = parseDurationSeconds(el.duration);
+          const dur = el.duration ?? el.staticDuration ?? el.travelDuration;
+          if (routeOk && dur != null) {
+            const secs = parseDurationSeconds(dur);
             rows.push({
               p: place,
               mins: Math.max(1, Math.round(secs / 60)),
