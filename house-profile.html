@@ -899,6 +899,51 @@
     return r.json();
   }
 
+  // ===== NLSC 地籍圖連結（免申請 WEB_005 goland） =====
+  // 由段中文名 + 高雄區名 → NLSC 4 碼 sectcode（https://api.nlsc.gov.tw/other/ListLandSection/E/EXX）
+  async function fetchNlscSect(distName, sectName) {
+    const dc = DIST_CODE[distName];
+    if (!dc) return null;
+    const townCode = 'E' + dc;
+    const cacheKey = `nlsc_sect_${townCode}`;
+    let xml = sessionStorage.getItem(cacheKey);
+    if (!xml) {
+      try {
+        const r = await fetch(`https://api.nlsc.gov.tw/other/ListLandSection/E/${townCode}`);
+        if (!r.ok) return null;
+        xml = await r.text();
+        sessionStorage.setItem(cacheKey, xml);
+      } catch (e) { console.warn('NLSC ListLandSection failed', e); return null; }
+    }
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const items = doc.getElementsByTagName('sectItem');
+    for (let i = 0; i < items.length; i++) {
+      const str = items[i].getElementsByTagName('sectstr')[0]?.textContent?.trim();
+      if (str === sectName) {
+        return items[i].getElementsByTagName('sectcode')[0]?.textContent?.trim() || null;
+      }
+    }
+    return null;
+  }
+
+  // 「瑞崗段四小段2945-0000」 + nlscSect=1025 → https://maps.nlsc.gov.tw/goland/E/102529450000
+  function nlscGolandUrl(entry) {
+    if (!entry?.nlscSect || !entry?.loNo) return null;
+    const m = entry.loNo.match(/(\d[\d-]*)\s*$/);
+    if (!m) return null;
+    const parts = m[1].split('-');
+    const land8 = parts[0].padStart(4,'0') + (parts[1]||'0').padStart(4,'0');
+    return `https://maps.nlsc.gov.tw/goland/E/${entry.nlscSect}${land8}`;
+  }
+
+  function landNoHtml(entry) {
+    const txt = escH(entry.loNo || '');
+    if (!txt) return '';
+    const url = nlscGolandUrl(entry);
+    if (!url) return txt;
+    return `<a href="${url}" target="_blank" rel="noopener" title="點擊開啟 NLSC 地籍圖" style="color:#7A5500;text-decoration:underline;font-weight:600;">${txt}</a>`;
+  }
+
   async function queryZoning(idx) {
     const data = _landData[idx];
     if (!data?.loNo) return;
@@ -992,6 +1037,9 @@
       _landData[idx].detailPlan = detailPlan;
       _landData[idx].bcr        = bcr;
       _landData[idx].far        = far;
+
+      // NLSC 地籍圖 sectcode（讓地號可點擊開地籍圖）
+      _landData[idx].nlscSect = await fetchNlscSect(data.distName, sectName);
 
       let msg = `✓ ${zoneName}`;
       if (pubVal)   msg += `　現值 ${pubVal.toLocaleString()} 元/m²`;
@@ -1242,14 +1290,15 @@
     setText('td-own-date', d.ownerRegDate || '－');
     const landTotal = p2(getLandTotal());
     const landEntries = Object.values(_landData).filter(e => e.ping > 0);
-    let landText = '－';
+    let landHtml = '－';
     if (landEntries.length === 1) {
       const e = landEntries[0];
-      landText = `${e.loNo ? e.loNo + '　' : ''}${e.ping} 坪`;
+      const link = landNoHtml(e);
+      landHtml = `${link ? link + '　' : ''}${e.ping} 坪`;
     } else if (landEntries.length > 1) {
-      landText = landEntries.map(e => `${e.loNo||''}（${e.ping}坪）`).join(' ＋ ') + `　合計 ${landTotal} 坪`;
+      landHtml = landEntries.map(e => `${landNoHtml(e)}（${e.ping}坪）`).join(' ＋ ') + `　合計 ${landTotal} 坪`;
     }
-    setText('td-land', landText);
+    setHtml('td-land', landHtml);
     const zones = landEntries.map(e => e.zone).filter(Boolean);
     setText('td-zone', zones.length ? zones.join(' ／ ') : '－');
     const pubVals = landEntries.filter(e => e.pubVal);
