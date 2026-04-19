@@ -576,6 +576,7 @@
               <tr><td class="key">機車位</td><td id="td-moto">－</td></tr>
               <tr><td class="key">抵押設定</td><td id="td-mortgage">－</td></tr>
               <tr><td class="key">使用執照</td><td id="td-lic">－</td></tr>
+              <tr><td class="key">執照細項</td><td id="td-lic-detail">－</td></tr>
               <tr><td class="key">車位售價</td><td id="td-park-price">－</td></tr>
             </table>
           </div>
@@ -894,10 +895,321 @@
     '美濃區':'31','六龜區':'32','甲仙區':'33'
   };
 
+  // 高雄市行政區 → 郵遞區號 3 碼（buildmis 用）
+  const KCG_ZIP = {
+    '新興區':'800','前金區':'801','苓雅區':'802','鹽埕區':'803','鼓山區':'804',
+    '旗津區':'805','前鎮區':'806','三民區':'807','楠梓區':'811','小港區':'812',
+    '左營區':'813','仁武區':'814','大社區':'815','岡山區':'820','路竹區':'821',
+    '阿蓮區':'822','田寮區':'823','燕巢區':'824','橋頭區':'825','梓官區':'826',
+    '彌陀區':'827','永安區':'828','湖內區':'829','鳳山區':'830','大寮區':'831',
+    '林園區':'832','鳥松區':'833','大樹區':'840','旗山區':'842','美濃區':'843',
+    '六龜區':'844','內門區':'845','杉林區':'846','甲仙區':'847','桃源區':'848',
+    '那瑪夏區':'849','茂林區':'851','茄萣區':'852'
+  };
+
+  // 使用執照字號 → {yy, kind, no1, suffix}，for buildmis 查詢
+  // 格式舉例：
+  //   (110)高市工建築使字第00001號   → 使用執照 kind=3
+  //   (107)高市工建築字第00383號     → 建造執照 kind=1
+  //   (107)高市工建築字第00383-02號  → 變更建築案
+  //   (XX)高市工臨使字第X號          → 臨時使用 kind=8
+  function parseLicense(lic) {
+    if (!lic) return null;
+    const s = String(lic).replace(/\s/g, '');
+    // 先擷取年份 + 字第前的 prefix 段，再從 prefix 判斷執照種類
+    const m = s.match(/[（(](\d{2,3})[）)](.*?)字第0*(\d+)(?:-0*(\d+))?號/);
+    if (!m) return null;
+    const prefix = m[2];
+    let kind = null;
+    if      (/臨建/.test(prefix)) kind = '7';
+    else if (/臨使/.test(prefix)) kind = '8';
+    else if (/雜使/.test(prefix)) kind = '5';
+    else if (/廣告/.test(prefix)) kind = 'A';
+    else if (/拆/.test(prefix))   kind = '4';
+    else if (/使/.test(prefix))   kind = '3';
+    else if (/雜/.test(prefix))   kind = '2';
+    else if (/築|建/.test(prefix))kind = '1'; // 建造（「建築字第」→ 建造執照）
+    if (!kind) return null;
+    return { yy: m[1], kind, no1: m[3], suffix: m[4] || '' };
+  }
+
   async function proxyFetch(arcgisUrl) {
     const r = await fetch(`${URBAN_PROXY}/?url=${encodeURIComponent(arcgisUrl)}`);
     return r.json();
   }
+
+  // ===== buildmis 建築執照存根查詢（高雄市） =====
+  const BUILDMIS_BASE = 'https://buildmis.kcg.gov.tw/bupic/pages/jsapi';
+
+  async function buildmisQuery(params) {
+    const u = `${URBAN_PROXY}/?url=${encodeURIComponent(`${BUILDMIS_BASE}/querylic`)}`;
+    const r = await fetch(u, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(params).toString(),
+    });
+    if (!r.ok) return [];
+    try { return await r.json(); } catch { return []; }
+  }
+
+  async function buildmisDetail(dkey) {
+    const u = `${URBAN_PROXY}/?url=${encodeURIComponent(`${BUILDMIS_BASE}/getLicenseInfo`)}`;
+    const r = await fetch(u, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: dkey }),
+    });
+    if (!r.ok) return null;
+    try { return await r.json(); } catch { return null; }
+  }
+
+  async function buildmisSections(zip) {
+    const u = `${URBAN_PROXY}/?url=${encodeURIComponent(`${BUILDMIS_BASE}/bldcode`)}`;
+    const r = await fetch(u, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `code_type=SEC&code_seq=${zip}&orders=code_desc`,
+    });
+    if (!r.ok) return [];
+    try { return await r.json(); } catch { return []; }
+  }
+
+  // 解析 getLicenseInfo 回的物件 → C 案 7 項重點
+  function parseLicenseInfo(info, myFloor) {
+    if (!info) return null;
+    const bf = info.buildfloor || '';
+    const bfM = bf.match(/地上(\d+)層(?:地下(\d+)層)?.*?(\d+)戶/);
+    const totalFloors = bfM ? { above: +bfM[1], below: +(bfM[2] || 0) } : null;
+    const totalUnits  = bfM ? +bfM[3] : null;
+
+    let thisFloor = null;
+    if (myFloor && Array.isArray(info.stair) && info.stair.length) {
+      const code = '地上' + String(myFloor).padStart(3, '0') + '層';
+      const rows = info.stair.filter(s => s.story_code === code);
+      if (rows.length) {
+        const residential = rows.find(r => /H[12]|住宅|集合|商場|店鋪/.test(r.usage_code_desc || ''));
+        const row = residential || rows[0];
+        thisFloor = {
+          height: row.story_height,
+          usage: row.usage_code_desc,
+          allRows: rows.map(r => `${r.usage_code_desc}（${r.story_height}m）`).join('、'),
+        };
+      }
+    }
+
+    const stairArr = Array.isArray(info.stair) ? info.stair : [];
+    const stairText = stairArr.map(s => `${s.story_code} ${s.usage_code_desc || ''}`).join(' ');
+    const hasWaterTank = /中繼|水箱/.test(stairText);
+
+    const memoText = (Array.isArray(info.memo_seq) ? info.memo_seq : []).map(m => m.dese || '').join(' ');
+    const isGreenBuilding = /綠建築/.test(memoText);
+    const hasSolar = /太陽(光電|能發電)|光電/.test(memoText);
+
+    return {
+      licenseDesc: info.license_desc || '',
+      licenseDescOld: info.license_desc_old || '',
+      licedate: info.IDlicedate || '',
+      commenceDate: info.commence_date || '',
+      completeDate: info.complete_date || '',
+      totalFloors, totalUnits,
+      builder: info.bmp01_name || '',
+      thisFloor, hasWaterTank, isGreenBuilding, hasSolar,
+      coverrate: info.coverrate || '',
+      spacerate: info.spacerate || '',
+      buildheight: info.buildheight || '',
+      lanusage: info.lanusage || '',
+      buildfloor: bf,
+      addr: info.addr || '',
+    };
+  }
+
+  // 從謄本資料拆出查詢條件。依優先序：字號 → 地址 → (地號需使用者手動)
+  async function fetchLicenseCandidates(d) {
+    // 1) 字號
+    if (d.licenseParsed && d.licenseParsed.yy && d.licenseParsed.kind) {
+      const list = await buildmisQuery({
+        qrytyp: 1,
+        lic_yy: d.licenseParsed.yy,
+        lic_kind: d.licenseParsed.kind,
+        lic_no1: d.licenseParsed.no1,
+      });
+      if (list.length) return { via: 'license', list };
+    }
+    // 2) 地址
+    if (d.address && d.district) {
+      const distName = d.district.replace(/^高雄市/, '');
+      const zip = KCG_ZIP[distName];
+      if (zip) {
+        const addr = d.address.replace(/^高雄市[^區]+區/, '').replace(/\s/g, '');
+        const roadM = addr.match(/^(.+?(?:路|街|大道|巷))/);
+        const noM = addr.match(/(\d+)號/);
+        if (roadM && noM) {
+          const list = await buildmisQuery({
+            qrytyp: 3, addradr: zip, addradr1: roadM[1], addradr4: noM[1],
+          });
+          if (list.length) return { via: 'address', list };
+        }
+      }
+    }
+    return { via: null, list: [] };
+  }
+
+  // 地號查詢：給土地資料 → 跑 bldcode 查 section code → 打 querylic
+  async function fetchLicenseByLand(landEntry) {
+    if (!landEntry?.distName || !landEntry?.loNo) return [];
+    const zip = KCG_ZIP[landEntry.distName];
+    if (!zip) return [];
+    const sectM = landEntry.loNo.match(/^(.+?段(?:.+?小段)?)\s*(\d+)(?:-(\d+))?/);
+    if (!sectM) return [];
+    const sectName = sectM[1].trim();
+    const no1 = sectM[2];
+    const no2 = sectM[3] || '';
+    const secs = await buildmisSections(zip);
+    const hit = secs.find(s => s.code_desc === sectName);
+    if (!hit) return [];
+    const params = { qrytyp: 4, dist: zip, section: hit.sub_seq, road_no1: no1 };
+    if (no2) params.road_no2 = no2;
+    return buildmisQuery(params);
+  }
+
+  // ===== buildmis UI 整合 =====
+  let _licCandidates = [];
+  let _licSelected   = null;
+  let _currentFloor  = null;
+  let _licCache      = null; // { sig, info, via }
+
+  function renderLicenseCell(d) {
+    const el = document.getElementById('td-lic');
+    if (!el) return;
+    const btn = `<button onclick="openLicenseSearch()" title="到官方頁面手動查詢" style="margin-left:6px;padding:2px 8px;background:#FFF8E0;border:1px solid #CC8F00;color:#7A5500;border-radius:10px;cursor:pointer;font-size:11px;">🔍 手動查</button>`;
+    if (!d.license) {
+      el.innerHTML = `－ ${btn}`;
+      return;
+    }
+    el.innerHTML = `<span style="color:#7A5500;font-weight:600;">${escH(d.license)}</span> ${btn}`;
+  }
+
+  async function loadLicenseDetail(d) {
+    const cell = document.getElementById('td-lic-detail');
+    if (!cell) return;
+    _currentFloor = d.floor || null;
+
+    // 沒字號、沒地址、沒土地資料 → 不查，保持 －
+    const hasAnyHint = (d.licenseParsed?.yy) || (d.address && d.district);
+    if (!hasAnyHint) {
+      cell.textContent = '－';
+      return;
+    }
+
+    // 若查詢條件未變，直接用快取重繪（讓 floor 改變時能即時反映）
+    const firstLand = Object.values(_landData).find(e => e.loNo && e.distName);
+    const querySig = JSON.stringify({
+      lic: d.licenseParsed || null,
+      addr: d.address || '',
+      dist: d.district || '',
+      land: firstLand ? { loNo: firstLand.loNo, dist: firstLand.distName } : null,
+    });
+    if (_licCache && _licCache.sig === querySig && _licCache.info) {
+      renderLicenseDetail(_licCache.info, _licCache.via);
+      return;
+    }
+
+    _licCandidates = [];
+    _licSelected = null;
+    cell.innerHTML = '<span style="color:#999;">查詢中…</span>';
+    let result;
+    try {
+      result = await fetchLicenseCandidates(d);
+    } catch (e) {
+      console.warn('buildmis query failed', e);
+      cell.innerHTML = `<span style="color:#b00;">查詢失敗</span>`;
+      return;
+    }
+
+    // 字號/地址都沒查到 → 試土地地號（取第一筆）
+    if (!result.list.length) {
+      const firstLand = Object.values(_landData).find(e => e.loNo && e.distName);
+      if (firstLand) {
+        try {
+          const landList = await fetchLicenseByLand(firstLand);
+          if (landList.length) result = { via: 'land', list: landList };
+        } catch (e) { console.warn('buildmis land query failed', e); }
+      }
+    }
+
+    _licCandidates = result.list;
+    if (!result.list.length) {
+      cell.innerHTML = `<span style="color:#999;">未查到　<button onclick="openLicenseSearch()" style="padding:2px 8px;background:#FFF8E0;border:1px solid #CC8F00;color:#7A5500;border-radius:10px;cursor:pointer;font-size:11px;">🔍 手動查</button></span>`;
+      return;
+    }
+
+    // 多筆 → 優先找 status='新登錄' 且含「使字第」的
+    let pick = result.list.find(c => c.status === '新登錄' && /使字第/.test(c.license_desc || '')) || result.list[0];
+    _licSelected = pick.dkey;
+    const info = await buildmisDetail(pick.dkey);
+    if (!info) {
+      cell.innerHTML = '<span style="color:#b00;">載入細項失敗</span>';
+      return;
+    }
+    _licCache = { sig: querySig, info, via: result.via };
+    renderLicenseDetail(info, result.via);
+  }
+
+  function renderLicenseDetail(info, via) {
+    const cell = document.getElementById('td-lic-detail');
+    if (!cell) return;
+    const p = parseLicenseInfo(info, _currentFloor);
+    if (!p) { cell.innerHTML = '－'; return; }
+
+    const tf = p.totalFloors;
+    const floors = tf ? `地上${tf.above}/地下${tf.below}層` : '－';
+    const tfText = p.thisFloor
+      ? `${_currentFloor}F 層高 <b>${p.thisFloor.height}m</b>（${escH(p.thisFloor.usage || '')}）`
+      : (_currentFloor ? `${_currentFloor}F 資料缺` : '');
+    const builder = (p.builder || '').split(/[　\s]*負責人/)[0].trim() || '－';
+    const green   = p.isGreenBuilding ? '<b style="color:#2d7a2d;">✓</b>' : '－';
+    const solar   = p.hasSolar       ? '<b style="color:#2d7a2d;">✓</b>' : '－';
+    const tank    = p.hasWaterTank   ? '<b>有</b>' : '無';
+
+    const multiHint = (_licCandidates.length > 1)
+      ? `<button onclick="openLicensePicker()" style="padding:2px 8px;background:#FFF8E0;border:1px solid #CC8F00;color:#7A5500;border-radius:10px;cursor:pointer;font-size:11px;">其他 ${_licCandidates.length - 1} 張 ▼</button>`
+      : '';
+    const viaHint = via === 'address' ? '（地址查）' : (via === 'land' ? '（地號查）' : '');
+    const detailUrl = `https://buildmis.kcg.gov.tw/bupic/pages/licdtil/${encodeURIComponent(_licSelected)}`;
+
+    cell.innerHTML = `
+      <div style="line-height:1.6;font-size:12.5px;">
+        <div>總戶數 <b>${p.totalUnits ?? '－'}</b> 戶　總樓層 <b>${floors}</b>　建商 <b>${escH(builder)}</b></div>
+        ${tfText ? `<div>${tfText}</div>` : ''}
+        <div>中繼水箱 ${tank}　綠建築 ${green}　太陽能 ${solar}　${viaHint}</div>
+        <div style="margin-top:3px;">${multiHint}
+          <a href="${detailUrl}" target="_blank" rel="noopener" style="color:#7A5500;text-decoration:underline;">完整細項 ↗</a>
+        </div>
+      </div>`;
+  }
+
+  function openLicenseSearch() {
+    window.open('https://buildmis.kcg.gov.tw/bupic/pages/querylic', '_blank', 'noopener');
+  }
+
+  async function openLicensePicker() {
+    if (_licCandidates.length < 2) return;
+    const opts = _licCandidates.map((c, i) =>
+      `${i + 1}. ${c.license_desc}（${c.licdate} / ${c.status}）`
+    ).join('\n');
+    const raw = prompt(`查到 ${_licCandidates.length} 張執照，選擇編號：\n\n${opts}`, '1');
+    const idx = parseInt(raw);
+    if (!idx || idx < 1 || idx > _licCandidates.length) return;
+    const pick = _licCandidates[idx - 1];
+    _licSelected = pick.dkey;
+    const cell = document.getElementById('td-lic-detail');
+    if (cell) cell.innerHTML = '<span style="color:#999;">載入中…</span>';
+    const info = await buildmisDetail(pick.dkey);
+    if (info) renderLicenseDetail(info, null);
+  }
+  window.openLicenseSearch = openLicenseSearch;
+  window.openLicensePicker = openLicensePicker;
+
 
   // ===== NLSC 地籍圖連結（免申請 WEB_005 goland） =====
   // 由段中文名 + 高雄區名 → NLSC 4 碼 sectcode（https://api.nlsc.gov.tw/other/ListLandSection/E/EXX）
@@ -1209,7 +1521,10 @@
 
     // 使用執照（只取字號，不含後續說明文字）
     const licM = t.match(/使用執照字號[：:]\s*[（(]([^）)]+)[）)]\s*(\S+號)/);
-    if (licM) d.license = `（${licM[1]}）${licM[2]}`;
+    if (licM) {
+      d.license = `（${licM[1]}）${licM[2]}`;
+      d.licenseParsed = parseLicense(d.license);
+    }
 
     // ===== 計算坪數 =====
     d.mainPing = d.mainArea ? sqm2ping(d.mainArea) : 0;
@@ -1340,7 +1655,9 @@
     setText('td-mortgage', d.hasMortgage
       ? `有（${[d.mortgageAmt ? Math.round(d.mortgageAmt/10000)+'萬' : '', shortBank(d.mortgageBank)].filter(Boolean).join('，')}）`
       : '無');
-    setText('td-lic',      d.license || '－');
+    // 使用執照：字號 + 查詢按鈕；「執照細項」列非同步載入
+    renderLicenseCell(d);
+    loadLicenseDetail(d);
     setText('td-park-price', parkPrice
       ? `${parkPrice} 萬（不含車位售價 ${noParPrice} 萬）`
       : '－');
