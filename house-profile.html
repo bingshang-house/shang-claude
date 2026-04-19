@@ -2463,7 +2463,7 @@ ${factsText}
         }
         // 若拿到的是 rows（第一層 Array(1) = 1 origin），裡面每個 row 才包 destinations
         // 判定方式：item 看起來不像 Element（沒 destinationIndex 也沒 duration/distanceMeters）→ 往下剝一層
-        const looksLikeElement = (it) => it && (it.destinationIndex != null || it.distanceMeters != null || it.duration != null || it.staticDuration != null);
+        const looksLikeElement = (it) => it && (it.destinationIndex != null || it.distanceMeters != null || it.durationMillis != null || it.staticDurationMillis != null || it.duration != null || it.staticDuration != null);
         if (elements.length && !looksLikeElement(elements[0])) {
           const first = elements[0];
           // 找 first 裡面第一個 Array 當作真正的 elements
@@ -2481,36 +2481,27 @@ ${factsText}
         if (elements.length && !looksLikeElement(elements[0])) {
           console.log('RouteMatrix element 形狀異常：', elements[0], 'keys:', Object.keys(elements[0] || {}));
         }
-        // 印首 element 的 keys + 值，鎖定 minified 欄位名
-        if (elements.length) {
-          const e0 = elements[0];
-          const proto = Object.getPrototypeOf(e0 || {});
-          console.log('RouteMatrix element sample:', e0, 'ownKeys:', Object.keys(e0 || {}), 'protoKeys:', proto ? Object.getOwnPropertyNames(proto) : []);
-        }
-        // 欄位名找不到時自動掃描（處理 minified 欄位）
-        const pickField = (obj, candidates, validate) => {
-          for (const k of candidates) if (obj[k] != null && (!validate || validate(obj[k]))) return obj[k];
-          for (const k of Object.keys(obj || {})) if (validate && validate(obj[k])) return obj[k];
-          return undefined;
-        };
+        // 讀 element：用 proto 上公開 getter（durationMillis / distanceMeters / condition），
+        // destinationIndex 沒有就用陣列 index
         for (let i = 0; i < elements.length; i++) {
           const el = elements[i];
           if (!el) continue;
-          // destinationIndex：可能是 number 欄位，也可能就用陣列順序
-          let di = pickField(el, ['destinationIndex'], v => typeof v === 'number' && v >= 0 && v < chunk.length);
-          if (di == null) di = i;
+          const di = (typeof el.destinationIndex === 'number' && el.destinationIndex >= 0) ? el.destinationIndex : i;
           const place = chunk[di];
           if (!place) continue;
-          const condition = pickField(el, ['condition'], v => typeof v === 'string');
-          const routeOk = !condition || condition === 'ROUTE_EXISTS';
-          const dur = pickField(el, ['duration', 'staticDuration', 'travelDuration'], v => v != null && (typeof v === 'number' || typeof v === 'string' || (typeof v === 'object' && (v.value != null || v.seconds != null))));
-          const dist = pickField(el, ['distanceMeters'], v => typeof v === 'number');
-          if (routeOk && dur != null) {
-            const secs = parseDurationSeconds(dur);
+          const routeOk = !el.condition || el.condition === 'ROUTE_EXISTS';
+          // 單位是毫秒（durationMillis / staticDurationMillis），不是秒
+          let secs = null;
+          if (typeof el.durationMillis === 'number') secs = el.durationMillis / 1000;
+          else if (typeof el.staticDurationMillis === 'number') secs = el.staticDurationMillis / 1000;
+          else if (el.duration != null) secs = parseDurationSeconds(el.duration);
+          else if (el.staticDuration != null) secs = parseDurationSeconds(el.staticDuration);
+          const dist = typeof el.distanceMeters === 'number' ? el.distanceMeters : null;
+          if (routeOk && secs != null) {
             rows.push({
               p: place,
               mins: Math.max(1, Math.round(secs / 60)),
-              d: dist != null ? Number(dist) : null,
+              d: dist,
               mode,
             });
           } else {
