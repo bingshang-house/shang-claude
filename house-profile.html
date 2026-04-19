@@ -283,7 +283,7 @@
     .bar-purple { background: #8A6500; }
 
     /* Info + Map */
-    .info-map-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .info-map-row { display: flex; flex-direction: column; gap: 8px; }
 
     .info-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
     .info-table { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -293,8 +293,8 @@
     .info-table td.key { background: #7A5500; color: white; font-weight: 500; width: 38%; white-space: nowrap; }
 
     .map-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
-    .map-box iframe { width: 100%; height: 208px; border: none; display: block; }
-    .map-placeholder { height: 208px; background: #FFF8E0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #7A5500; font-size: 11px; gap: 4px; }
+    .map-box iframe { width: 100%; height: 220px; border: none; display: block; }
+    .map-placeholder { height: 220px; background: #FFF8E0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #7A5500; font-size: 11px; gap: 4px; }
 
     /* Plan + Points */
     .plan-points-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -576,7 +576,14 @@
               <tr><td class="key">機車位</td><td id="td-moto">－</td></tr>
               <tr><td class="key">抵押設定</td><td id="td-mortgage">－</td></tr>
               <tr><td class="key">使用執照</td><td id="td-lic">－</td></tr>
-              <tr><td class="key">執照細項</td><td id="td-lic-detail">－</td></tr>
+              <tr><td class="key">總戶數</td><td id="td-lic-units">－</td></tr>
+              <tr><td class="key">總樓層</td><td id="td-lic-floors">－</td></tr>
+              <tr><td class="key">建　商</td><td id="td-lic-builder">－</td></tr>
+              <tr><td class="key">本層樓高</td><td id="td-lic-floorheight">－</td></tr>
+              <tr><td class="key">使用類組</td><td id="td-lic-usage">－</td></tr>
+              <tr><td class="key">中繼水箱</td><td id="td-lic-watertank">－</td></tr>
+              <tr><td class="key">綠建築</td><td id="td-lic-green">－</td></tr>
+              <tr><td class="key">太陽能</td><td id="td-lic-solar">－</td></tr>
               <tr><td class="key">車位售價</td><td id="td-park-price">－</td></tr>
             </table>
           </div>
@@ -999,7 +1006,7 @@
 
     const stairArr = Array.isArray(info.stair) ? info.stair : [];
     const stairText = stairArr.map(s => `${s.story_code} ${s.usage_code_desc || ''}`).join(' ');
-    const hasWaterTank = /中繼|水箱/.test(stairText);
+    const hasWaterTank = /中繼/.test(stairText);
 
     const memoText = (Array.isArray(info.memo_seq) ? info.memo_seq : []).map(m => m.dese || '').join(' ');
     const isGreenBuilding = /綠建築/.test(memoText);
@@ -1089,15 +1096,18 @@
     el.innerHTML = `<span style="color:#7A5500;font-weight:600;">${escH(d.license)}</span> ${btn}`;
   }
 
+  const LIC_DETAIL_IDS = ['td-lic-units','td-lic-floors','td-lic-builder','td-lic-floorheight','td-lic-usage','td-lic-watertank','td-lic-green','td-lic-solar'];
+  function setLicDetailAll(text) {
+    LIC_DETAIL_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = text; });
+  }
+
   async function loadLicenseDetail(d) {
-    const cell = document.getElementById('td-lic-detail');
-    if (!cell) return;
     _currentFloor = d.floor || null;
 
     // 沒字號、沒地址、沒土地資料 → 不查，保持 －
     const hasAnyHint = (d.licenseParsed?.yy) || (d.address && d.district);
     if (!hasAnyHint) {
-      cell.textContent = '－';
+      setLicDetailAll('－');
       return;
     }
 
@@ -1116,13 +1126,13 @@
 
     _licCandidates = [];
     _licSelected = null;
-    cell.innerHTML = '<span style="color:#999;">查詢中…</span>';
+    setLicDetailAll('查詢中…');
     let result;
     try {
       result = await fetchLicenseCandidates(d);
     } catch (e) {
       console.warn('buildmis query failed', e);
-      cell.innerHTML = `<span style="color:#b00;">查詢失敗</span>`;
+      setLicDetailAll('查詢失敗');
       return;
     }
 
@@ -1139,7 +1149,7 @@
 
     _licCandidates = result.list;
     if (!result.list.length) {
-      cell.innerHTML = `<span style="color:#999;">未查到　<button onclick="openLicenseSearch()" style="padding:2px 8px;background:#FFF8E0;border:1px solid #CC8F00;color:#7A5500;border-radius:10px;cursor:pointer;font-size:11px;">🔍 手動查</button></span>`;
+      setLicDetailAll('未查到');
       return;
     }
 
@@ -1148,44 +1158,63 @@
     _licSelected = pick.dkey;
     const info = await buildmisDetail(pick.dkey);
     if (!info) {
-      cell.innerHTML = '<span style="color:#b00;">載入細項失敗</span>';
+      setLicDetailAll('載入細項失敗');
       return;
     }
     _licCache = { sig: querySig, info, via: result.via };
     renderLicenseDetail(info, result.via);
   }
 
+  // 把「H2集合住宅」格式化為「H2 集合住宅」（英數與中文間加半形空格）
+  function fmtUsage(s) {
+    if (!s) return '';
+    return String(s).replace(/([A-Za-z0-9]+)([\u4e00-\u9fff])/g, '$1 $2').replace(/([\u4e00-\u9fff])([A-Za-z0-9]+)/g, '$1 $2');
+  }
+
   function renderLicenseDetail(info, via) {
-    const cell = document.getElementById('td-lic-detail');
-    if (!cell) return;
     const p = parseLicenseInfo(info, _currentFloor);
-    if (!p) { cell.innerHTML = '－'; return; }
+    if (!p) { setLicDetailAll('－'); return; }
 
     const tf = p.totalFloors;
-    const floors = tf ? `地上${tf.above}/地下${tf.below}層` : '－';
-    const tfText = p.thisFloor
-      ? `${_currentFloor}F 層高 <b>${p.thisFloor.height}m</b>（${escH(p.thisFloor.usage || '')}）`
-      : (_currentFloor ? `${_currentFloor}F 資料缺` : '');
+    const floorsText = tf ? `地上 ${tf.above} 層 / 地下 ${tf.below} 層` : '－';
     const builder = (p.builder || '').split(/[　\s]*負責人/)[0].trim() || '－';
-    const green   = p.isGreenBuilding ? '<b style="color:#2d7a2d;">✓</b>' : '－';
-    const solar   = p.hasSolar       ? '<b style="color:#2d7a2d;">✓</b>' : '－';
-    const tank    = p.hasWaterTank   ? '<b>有</b>' : '無';
 
-    const multiHint = (_licCandidates.length > 1)
-      ? `<button onclick="openLicensePicker()" style="padding:2px 8px;background:#FFF8E0;border:1px solid #CC8F00;color:#7A5500;border-radius:10px;cursor:pointer;font-size:11px;">其他 ${_licCandidates.length - 1} 張 ▼</button>`
-      : '';
-    const viaHint = via === 'address' ? '（地址查）' : (via === 'land' ? '（地號查）' : '');
-    const detailUrl = `https://buildmis.kcg.gov.tw/bupic/pages/licdtil/${encodeURIComponent(_licSelected)}`;
+    setText('td-lic-units',   p.totalUnits ? `${p.totalUnits} 戶` : '－');
+    setText('td-lic-floors',  floorsText);
+    setText('td-lic-builder', builder);
 
-    cell.innerHTML = `
-      <div style="line-height:1.6;font-size:12.5px;">
-        <div>總戶數 <b>${p.totalUnits ?? '－'}</b> 戶　總樓層 <b>${floors}</b>　建商 <b>${escH(builder)}</b></div>
-        ${tfText ? `<div>${tfText}</div>` : ''}
-        <div>中繼水箱 ${tank}　綠建築 ${green}　太陽能 ${solar}　${viaHint}</div>
-        <div style="margin-top:3px;">${multiHint}
-          <a href="${detailUrl}" target="_blank" rel="noopener" style="color:#7A5500;text-decoration:underline;">完整細項 ↗</a>
-        </div>
-      </div>`;
+    const fhEl = document.getElementById('td-lic-floorheight');
+    if (fhEl) {
+      if (p.thisFloor && p.thisFloor.height) {
+        fhEl.textContent = `${_currentFloor} F　${p.thisFloor.height} m`;
+      } else if (_currentFloor) {
+        fhEl.textContent = `${_currentFloor} F 資料缺`;
+      } else {
+        fhEl.textContent = '－';
+      }
+    }
+
+    setText('td-lic-usage', p.thisFloor && p.thisFloor.usage ? fmtUsage(p.thisFloor.usage) : '－');
+    setText('td-lic-watertank', p.hasWaterTank ? '有' : '無');
+
+    const greenEl = document.getElementById('td-lic-green');
+    if (greenEl) greenEl.innerHTML = p.isGreenBuilding ? '<b style="color:#2d7a2d;">✓ 有</b>' : '無';
+    const solarEl = document.getElementById('td-lic-solar');
+    if (solarEl) solarEl.innerHTML = p.hasSolar ? '<b style="color:#2d7a2d;">✓ 有</b>' : '無';
+
+    // 把「完整細項 ↗」+「其他 N 張」按鈕補到 使用執照 那格
+    const licEl = document.getElementById('td-lic');
+    if (licEl) {
+      const viaHint = via === 'address' ? '（地址查）' : (via === 'land' ? '（地號查）' : '');
+      const multiBtn = (_licCandidates.length > 1)
+        ? `<button onclick="openLicensePicker()" style="margin-left:6px;padding:2px 8px;background:#FFF8E0;border:1px solid #CC8F00;color:#7A5500;border-radius:10px;cursor:pointer;font-size:11px;">其他 ${_licCandidates.length - 1} 張 ▼</button>`
+        : '';
+      const detailUrl = `https://buildmis.kcg.gov.tw/bupic/pages/licdtil/${encodeURIComponent(_licSelected)}`;
+      const manualBtn = `<button onclick="openLicenseSearch()" title="到官方頁面手動查詢" style="margin-left:6px;padding:2px 8px;background:#FFF8E0;border:1px solid #CC8F00;color:#7A5500;border-radius:10px;cursor:pointer;font-size:11px;">🔍 手動查</button>`;
+      const licText = info.license_desc || '';
+      licEl.innerHTML = `<span style="color:#7A5500;font-weight:600;">${escH(licText)}</span><span style="color:#999;font-size:11px;">${viaHint}</span>
+        <a href="${detailUrl}" target="_blank" rel="noopener" style="margin-left:6px;color:#7A5500;text-decoration:underline;font-size:11px;">完整細項 ↗</a>${multiBtn}${manualBtn}`;
+    }
   }
 
   function openLicenseSearch() {
@@ -1202,10 +1231,14 @@
     if (!idx || idx < 1 || idx > _licCandidates.length) return;
     const pick = _licCandidates[idx - 1];
     _licSelected = pick.dkey;
-    const cell = document.getElementById('td-lic-detail');
-    if (cell) cell.innerHTML = '<span style="color:#999;">載入中…</span>';
+    setLicDetailAll('載入中…');
     const info = await buildmisDetail(pick.dkey);
-    if (info) renderLicenseDetail(info, null);
+    if (info) {
+      _licCache = { sig: _licCache?.sig || '', info, via: _licCache?.via || null };
+      renderLicenseDetail(info, _licCache.via);
+    } else {
+      setLicDetailAll('載入細項失敗');
+    }
   }
   window.openLicenseSearch = openLicenseSearch;
   window.openLicensePicker = openLicensePicker;
@@ -1421,9 +1454,15 @@
     const ageM = t.match(/建築完成日期\s+民國(\d+)年(?:(\d+)月)?/);
     if (ageM) { d.completionRoc = parseInt(ageM[1]); d.age = rocAge(ageM[1]); }
 
-    // 所有權登記日期
-    const ownDateM = t.match(/登記日期\s+民國(\d+)年\s*(\d+)月\s*(\d+)日/);
-    if (ownDateM) d.ownerRegDate = `民國 ${ownDateM[1]} 年 ${ownDateM[2]} 月 ${ownDateM[3]} 日`;
+    // 所有權登記日期（建物所有權部 裡的登記日期，不是標示部的第一次登記日）
+    {
+      const ownIdx = t.indexOf('建物所有權部');
+      if (ownIdx >= 0) {
+        const ownSec = t.slice(ownIdx);
+        const ownDateM = ownSec.match(/登記日期\s+民國(\d+)年\s*(\d+)月\s*(\d+)日/);
+        if (ownDateM) d.ownerRegDate = `民國 ${ownDateM[1]} 年 ${ownDateM[2]} 月 ${ownDateM[3]} 日`;
+      }
+    }
 
     // ===== 附屬建物（全部動態解析）=====
     d.attachedBuildings = [];
