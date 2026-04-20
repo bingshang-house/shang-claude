@@ -353,7 +353,7 @@
     /* Pending */
     .pending { color: #CC8F00; font-style: italic; font-weight: 600; }
 
-    /* TGOS Settings */
+    /* API Settings */
     .tgos-settings { border:1px solid #E8E0CC; border-radius:10px; margin:14px 14px 10px; overflow:hidden; background:#fff; }
     .tgos-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fff; cursor:pointer; font-size:13px; font-weight:700; color:#7A5500; }
     .tgos-header:hover { background:#FFF8E0; }
@@ -388,22 +388,12 @@
 
     <!-- API Settings -->
     <div class="tgos-settings" id="tgosSettings">
-      <div class="tgos-header" onclick="toggleTGOS()">
+      <div class="tgos-header" onclick="toggleApiPanel()">
         <span>⚙️ API 金鑰設定</span>
         <span id="tgosStatus" class="tgos-badge">未設定</span>
       </div>
       <div class="tgos-body" id="tgosBody" style="display:none;">
-        <div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px;">TGOS（地址→里鄰）</div>
-        <div style="font-size:11px;color:#666;margin-bottom:4px;">
-          申請：<a href="https://api.tgos.tw" target="_blank" style="color:#2563eb;">api.tgos.tw</a>（免費）
-        </div>
-        <div class="fg-row" style="margin-bottom:4px;">
-          <div class="fg"><label style="font-size:11px;">AppID</label>
-            <input type="text" id="tgosAppId" placeholder="填入 AppID" style="font-size:11px;"></div>
-          <div class="fg"><label style="font-size:11px;">APIKey</label>
-            <input type="text" id="tgosApiKey" placeholder="填入 APIKey" style="font-size:11px;"></div>
-        </div>
-        <div style="font-size:11px;font-weight:600;color:#555;margin:8px 0 4px;">Google Maps（周邊機能查詢）</div>
+        <div style="font-size:11px;font-weight:600;color:#555;margin:0 0 4px;">Google Maps（周邊機能查詢）</div>
         <div class="fg" style="margin-bottom:6px;">
           <label style="font-size:11px;">API Key</label>
           <input type="text" id="gmApiKey" placeholder="填入 Google Maps API Key" style="font-size:11px;">
@@ -817,14 +807,14 @@
       updateCard();
       setStatus('ok', `✓ 解析完成：${file.name}`);
 
-      // Auto school lookup: try TGOS first, fallback to deed village
+      // Auto school lookup via NLSC TextQueryMap, fallback to deed village
       const vEl = document.getElementById('s-village');
       if (!vEl.value.trim()) {
         const fullAddr = (deed.district || '') + (deed.address || '');
         if (fullAddr) {
           setStatus('loading', '🔍 正在查詢里鄰資訊…');
           try {
-            const geo = await tgosGeocode(fullAddr);
+            const geo = await nlscGeocode(fullAddr);
             if (geo && geo.village) {
               vEl.value = geo.village;
               document.getElementById('s-neighbor').value = geo.neighbor || '';
@@ -2230,50 +2220,32 @@ ${factsText}
   }
 
   // ===== API Key Settings =====
-  function getTGOSCredentials() {
-    const appId  = localStorage.getItem('tgos_appid');
-    const apiKey = localStorage.getItem('tgos_apikey');
-    return (appId && apiKey) ? { appId, apiKey } : null;
-  }
-
   // Key 已綁定網域限制，放前端安全
   const GM_KEY_DEFAULT = 'AIzaSyByF_IG84HcD9gay4MV7jZMkqbk0hAxndo';
   function getGMKey() { return localStorage.getItem('gm_apikey') || GM_KEY_DEFAULT; }
 
   function saveApiKeys() {
-    const tgosAppId  = document.getElementById('tgosAppId').value.trim();
-    const tgosApiKey = document.getElementById('tgosApiKey').value.trim();
-    const gmKey      = document.getElementById('gmApiKey').value.trim();
-    if (tgosAppId && tgosApiKey) {
-      localStorage.setItem('tgos_appid',  tgosAppId);
-      localStorage.setItem('tgos_apikey', tgosApiKey);
-    }
+    const gmKey = document.getElementById('gmApiKey').value.trim();
     if (gmKey) localStorage.setItem('gm_apikey', gmKey);
-    updateTGOSStatus();
+    updateApiStatus();
     document.getElementById('tgosBody').style.display = 'none';
     alert('✓ API 設定已儲存');
   }
 
-  function updateTGOSStatus() {
+  function updateApiStatus() {
     const badge = document.getElementById('tgosStatus');
-    const cred  = getTGOSCredentials();
     const gmKey = getGMKey();
-    const ok    = cred || gmKey;
-    if (ok) {
+    if (gmKey) {
       badge.textContent = '✓ 已設定';
       badge.className   = 'tgos-badge ok';
+      document.getElementById('gmApiKey').value = gmKey;
     } else {
       badge.textContent = '未設定';
       badge.className   = 'tgos-badge no';
     }
-    if (cred) {
-      document.getElementById('tgosAppId').value  = cred.appId;
-      document.getElementById('tgosApiKey').value = cred.apiKey;
-    }
-    if (gmKey) document.getElementById('gmApiKey').value = gmKey;
   }
 
-  function toggleTGOS() {
+  function toggleApiPanel() {
     const body = document.getElementById('tgosBody');
     body.style.display = body.style.display === 'none' ? 'block' : 'none';
   }
@@ -2703,28 +2675,8 @@ ${factsText}
     }
   }
 
-  // ===== TGOS Geocoding =====
-  let tgosLoaded = false;
-  let tgosLoadPromise = null;
-
-  function loadTGOSScript(appId, apiKey) {
-    if (tgosLoaded && window.TGOS) return Promise.resolve();
-    if (tgosLoadPromise) return tgosLoadPromise;
-    tgosLoadPromise = new Promise((resolve, reject) => {
-      const existing = document.getElementById('tgos-sdk');
-      if (existing) existing.remove();
-      const s = document.createElement('script');
-      s.id      = 'tgos-sdk';
-      s.charset = 'utf-8';
-      s.src     = `https://api.tgos.tw/TGOS_API/tgos?ver=2&AppID=${encodeURIComponent(appId)}&APIKey=${encodeURIComponent(apiKey)}`;
-      s.onload  = () => { tgosLoaded = true; resolve(); };
-      s.onerror = () => { tgosLoadPromise = null; reject(new Error('TGOS SDK 載入失敗')); };
-      document.head.appendChild(s);
-    });
-    return tgosLoadPromise;
-  }
-
-  async function tgosGeocode(address) {
+  // ===== NLSC Geocoding (地址→里鄰) =====
+  async function nlscGeocode(address) {
     try {
       // NLSC TextQueryMap：回 XML 含「XX里N鄰」完整地址
       const target = 'https://api.nlsc.gov.tw/idc/TextQueryMap/'
@@ -2749,7 +2701,7 @@ ${factsText}
 
   // Init
   updateCard();
-  updateTGOSStatus();
+  updateApiStatus();
   updateGeminiUsageBadge();
 
   // ===== School District Lookup =====
