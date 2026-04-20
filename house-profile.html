@@ -821,7 +821,7 @@
       const vEl = document.getElementById('s-village');
       if (!vEl.value.trim()) {
         const fullAddr = (deed.district || '') + (deed.address || '');
-        if (fullAddr && getTGOSCredentials()) {
+        if (fullAddr) {
           setStatus('loading', '🔍 正在查詢里鄰資訊…');
           try {
             const geo = await tgosGeocode(fullAddr);
@@ -837,7 +837,7 @@
             }
           } catch (e) {
             if (deed.village) { vEl.value = deed.village; doLookupSchool(); }
-            setStatus('ok', `✓ 解析完成（TGOS 查詢失敗，已用謄本里名）`);
+            setStatus('ok', `✓ 解析完成（里鄰查詢失敗，已用謄本里名）`);
           }
         } else if (deed.village) {
           vEl.value = deed.village;
@@ -2725,26 +2725,26 @@ ${factsText}
   }
 
   async function tgosGeocode(address) {
-    const cred = getTGOSCredentials();
-    if (!cred) return null;
-    await loadTGOSScript(cred.appId, cred.apiKey);
-    if (!window.TGOS || !TGOS.TGLocateService) throw new Error('TGOS SDK 未就緒');
-    return new Promise((resolve) => {
-      const locator = new TGOS.TGLocateService();
-      const req = new TGOS.TGLocatorRequest();
-      req.address = address;
-      locator.locateTWD97(req, (results, status) => {
-        if (status === TGOS.TGLocatorStatus.OK && results && results.length > 0) {
-          const ac = results[0].addressComponents;
-          resolve({
-            village:  ac.village  || ac.town_village || '',
-            neighbor: ac.neighborhood ? parseInt(ac.neighborhood) : 0,
-          });
-        } else {
-          resolve(null);
-        }
-      });
-    });
+    try {
+      // NLSC TextQueryMap：回 XML 含「XX里N鄰」完整地址
+      const target = 'https://api.nlsc.gov.tw/idc/TextQueryMap/'
+                   + encodeURIComponent(address) + '/10/180728/2500695';
+      const u = 'https://kcg-urban-proxy.bingshang1019.workers.dev/?url='
+              + encodeURIComponent(target);
+      const r = await fetch(u);
+      if (!r.ok) return null;
+      const xml = await r.text();
+      const content = xml.match(/<CONTENT>([^<]+)<\/CONTENT>/)?.[1] || '';
+      if (!content) return null;
+      // 全形數字轉半形
+      const half = content.replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+      const m = half.match(/(.+?里)(\d+)鄰/);
+      if (!m) return null;
+      return { village: m[1], neighbor: parseInt(m[2], 10) || 0 };
+    } catch (e) {
+      console.error('NLSC lookup failed', e);
+      return null;
+    }
   }
 
   // Init
