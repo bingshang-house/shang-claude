@@ -3079,13 +3079,14 @@
   })();
 
   // ===== CASE STUDY 下載 Excel =====
+  // 範本：cs-template.xlsx（由「範本.xls」另存而來，保留思源宋體 + 黃色標題底色）
+  // 勾選邏輯：符合條件就把對應 merge 範圍整塊塗紅（#FF0000），不是填 ● 符號
   async function downloadCaseStudyXlsx() {
     const btn = document.getElementById('btnCsXlsx');
     const origText = btn.textContent;
     btn.textContent = '⏳ 產生中...';
     btn.disabled = true;
     try {
-      // 1. Fetch 範本
       const resp = await fetch('cs-template.xlsx?v=' + Date.now());
       if (!resp.ok) throw new Error(`範本下載失敗 ${resp.status}`);
       const buf = await resp.arrayBuffer();
@@ -3093,36 +3094,99 @@
       await wb.xlsx.load(buf);
       const ws = wb.worksheets[0];
 
-      // 2. 蒐集資料
+      // ===== 勾選塗紅 helper =====
+      const RED_FILL = {
+        type: 'pattern', pattern: 'solid',
+        fgColor: { argb: 'FFFF0000' },
+        bgColor: { argb: 'FFFFFFFF' }
+      };
+      // 勾選格對應表：key → merge 範圍（整塊塗紅）
+      const TICK = {
+        // 鑰匙存置
+        keyStore: 'CM2:CN2', keyOwner: 'CS2:CT2', keyAgent: 'DA2:DB2',
+        // 價格（含車/不含車）
+        withPark: 'BK14:BL15', noPark: 'BR14:BS15',
+        // 設定
+        mgNo: 'CG12:CH13', mgYes: 'CL12:CM13',
+        // 建築形態
+        shapeTown: 'AJ18:AK19', shapeMansion: 'AJ21:AK22', shapeApt: 'AJ24:AK25',
+        // 主要建材
+        matBrick: 'AJ30:AK31', matSteel: 'AT30:AU31', matRc: 'AJ33:AK34',
+        // 使用用途
+        useShop: 'AJ36:AK37', useResi: 'AQ36:AR37', useOffice: 'AX36:AY37',
+        // 使用現況
+        occEmpty: 'AJ39:AK40', occSelf: 'AQ39:AR40', occRent: 'AX39:AY40',
+        // 警衛
+        secYes: 'BP24:BR25', secNo: 'BU24:BX25', sec24h: 'BY24:BZ25',
+        // 車位有無
+        parkYes: 'CP24:CQ25', parkNo: 'CX24:CY25',
+        // 車位種類
+        typeFlat: 'CP33:CQ34', typeMech: 'CY33:CZ34',
+        // 車位入口
+        entRamp: 'CP36:CQ37', entLift: 'CX36:CY37',
+        // 土地所有權
+        landFull: 'F58:G59', landShare: 'F61:G62',
+        // 使用區分
+        zone5Com: 'B69:C70', zoneOther: 'B72:C73',
+      };
+      const tick = key => {
+        const range = TICK[key];
+        if (!range) return;
+        const [s, e] = range.split(':');
+        const sc = ws.getCell(s), ec = ws.getCell(e || s);
+        for (let r = sc.row; r <= ec.row; r++) {
+          for (let c = sc.col; c <= ec.col; c++) {
+            ws.getCell(r, c).fill = RED_FILL;
+          }
+        }
+      };
+      // 填值 helper（不動樣式）
+      const S = (addr, v) => {
+        if (v === undefined || v === null || v === '') return;
+        ws.getCell(addr).value = v;
+      };
+
+      // ===== 蒐集資料 =====
       const d = (typeof deed === 'object' && deed) ? deed : {};
       const landEntries = Object.values(typeof _landData === 'object' && _landData ? _landData : {}).filter(e => e.ping > 0);
       const val = id => (document.getElementById(id)?.value || '').trim();
       const num = id => parseFloat(val(id)) || 0;
 
-      // 價格
-      const priceTotal = num('s-price-total');
-      const priceHouse = num('s-price-house');
-      const priceCar = num('s-price-car');
-      const noParPrice = priceHouse || (priceTotal && !priceCar ? priceTotal : 0);
+      // 價格：s-price=總價(含車) / s-parking-price=車位價
+      const priceTotal = num('s-price');
+      const priceCar = num('s-parking-price');
+      const priceHouse = priceTotal && priceCar ? (priceTotal - priceCar) : 0;
+      const withPark = val('cs-s-price-withpark'); // 'yes' 含車位 / 'no' 不含 / '' 未選
+      const isWithPark = withPark === 'yes' || (!withPark && priceCar > 0);
 
       // 設定
       const mgAmt = num('cs-s-mg-amt');
       const mgBank = val('cs-s-mg-bank');
-      const hasMg = !!mgAmt || d.hasMortgage;
+      const hasMg = !!mgAmt || !!d.hasMortgage;
       const mgAmtShow = mgAmt || (d.mortgageAmt ? Math.round(d.mortgageAmt / 10000) : 0);
-      const mgBankShow = mgBank || shortBank(d.mortgageBank) || '';
+      const mgBankShow = mgBank || (typeof shortBank === 'function' ? shortBank(d.mortgageBank) : d.mortgageBank) || '';
 
-      // 格局/座向
-      const bedroom = num('s-rooms'), hall = num('s-living'), bath = num('s-bath');
+      // 格局：s-layout 純文字 "4 房 2 廳 2 衛"
+      const layoutStr = val('s-layout');
+      const roomM = layoutStr.match(/(\d+)\s*房/);
+      const hallM = layoutStr.match(/(\d+)\s*廳/);
+      const bathM = layoutStr.match(/(\d+)\s*衛/);
+      const bedroom = roomM ? parseInt(roomM[1]) : 0;
+      const hall = hallM ? parseInt(hallM[1]) : 0;
+      const bath = bathM ? parseInt(bathM[1]) : 0;
+
+      // 座向
+      const orient = val('s-orientation');
+      const oMatch = orient.match(/座([東南西北]+)朝([東南西北]+)/);
 
       // 學區
       const schoolStr = val('s-school');
-      const schoolJ = (schoolStr.match(/([^\s、，,]+?)國中/) || [])[1] || '';
-      const schoolP = (schoolStr.match(/([^\s、，,]+?)國小/) || [])[1] || '';
+      const schoolJ = (schoolStr.match(/([^\s、，,\n]+?)國中/) || [])[1] || '';
+      const schoolP = (schoolStr.match(/([^\s、，,\n]+?)國小/) || [])[1] || '';
 
-      // 訴求重點
+      // 訴求重點（新範本只有 5 條：CJ51 / CJ54 / CJ57 / CJ60 / CJ63）
       const pointsRaw = val('s-points');
-      const points = pointsRaw.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 6);
+      const points = pointsRaw.split('\n').map(l => l.trim().replace(/^★\s*/, '')).filter(Boolean).slice(0, 5);
 
       // 土地
       const zones = landEntries.map(e => e.zone).filter(Boolean);
@@ -3130,20 +3194,22 @@
       const pubValEntry = landEntries.find(e => e.pubVal);
       const landTotal = (typeof getLandTotal === 'function') ? getLandTotal() : 0;
 
-      // 3. 填入儲存格（mapping 比照 售 (2) 範本）
-      const S = (addr, v) => {
-        if (v === undefined || v === null || v === '') return;
-        const cell = ws.getCell(addr);
-        cell.value = v;
-      };
+      // 交通/生活/位置/公設
+      const lifeStr = val('s-life');
+      const trafficStr = val('s-traffic');
+      const locationStr = val('s-location');
+      const facilities = val('s-facilities');
+      const mrtLine = trafficStr.split('\n').find(l => /捷運|輕軌|火車|高鐵/.test(l)) || '';
+      const parkLine = lifeStr.split('\n').find(l => /公園|綠地|河岸|園道/.test(l)) || '';
 
-      // 頁首
+      // ===== 開始填入 =====
+
+      // 頁首：合約編號 + 鑰匙存置
       S('CM4', val('cs-s-contract'));
-      // 鑰匙存置：在對應位置寫 ● 符號
       const keyhold = val('cs-s-keyhold');
-      if (keyhold === 'store') S('CN2', '●');
-      else if (keyhold === 'owner') S('CT2', '●');
-      else if (keyhold === 'agent') S('DB2', '●');
+      if (keyhold === 'store') tick('keyStore');
+      else if (keyhold === 'owner') tick('keyOwner');
+      else if (keyhold === 'agent') tick('keyAgent');
 
       // 案件 / 物件 / 建設 / 社區
       S('F5', val('cs-s-case-name'));
@@ -3151,29 +3217,15 @@
       S('CW5', val('cs-s-builder'));
       S('CW7', val('cs-s-community'));
 
-      // 坪 / 價 / 設定
-      // M9 / M13 / BJ9 是公式，不要覆蓋。填主建物各層坪數即可自動加總。
-      S('AB9', priceHouse || noParPrice || '');
-      S('AO9', priceTotal || '');
-      S('AB13', priceCar || '');
-      S('BM14', (priceTotal && priceCar) ? '●' : '');
-      S('BT14', (noParPrice && !priceCar) ? '●' : '');
-
-      // 設定
-      S('CH11', !hasMg ? '●' : '');
-      S('CM11', hasMg ? '●' : '');
-      S('CQ11', hasMg && mgAmtShow ? mgAmtShow : '');
-      S('CY11', hasMg ? mgBankShow : '');
-
-      // 主建物逐層：6 列（row 21/24/27/30/33/36）
-      // Col: D 或 J（依範本為 D21、D24、J27、J30、J33、J36）放樓層；G 放用途；M 放坪數
+      // 坪數摘要（M 欄）：主建物各層、附屬、公設、車位、地坪
+      // 主建物各層寫到 M21/M24/M27/M30/M33/M36
       const mbRows = [
-        { r: 21, floorCol: 'D' },
-        { r: 24, floorCol: 'D' },
-        { r: 27, floorCol: 'J' },
-        { r: 30, floorCol: 'J' },
-        { r: 33, floorCol: 'J' },
-        { r: 36, floorCol: 'J' },
+        { r: 21, fc: 'D', uc: 'G' },   // 前兩列：D=樓層 / G=用途 / M=坪
+        { r: 24, fc: 'D', uc: 'G' },
+        { r: 27, fc: 'J', uc: null },  // 後四列：J=樓層 / M=坪（D-I 是合併區塊，不寫）
+        { r: 30, fc: 'J', uc: null },
+        { r: 33, fc: 'J', uc: null },
+        { r: 36, fc: 'J', uc: null },
       ];
       const fb = (d.floorBreakdown && d.floorBreakdown.length > 0)
         ? d.floorBreakdown.slice(0, 6)
@@ -3182,162 +3234,200 @@
         const m = mbRows[i];
         if (!m) return;
         let floor = row.name || row.floor || '';
-        floor = String(floor).replace(/F$/i, '').replace(/樓$/, '');
-        S(`${m.floorCol}${m.r}`, floor);
-        S(`G${m.r}`, row.use || '主建物');
-        S(`M${m.r}`, row.ping || '');
+        floor = String(floor).replace(/F$/i, '').replace(/樓$/, '').trim();
+        if (floor) S(`${m.fc}${m.r}`, floor);
+        if (m.uc && row.use) S(`${m.uc}${m.r}`, row.use);
+        if (row.ping) S(`M${m.r}`, Number(row.ping));
       });
+      // 總建坪 M9 / 不含車位 M13（若範本是公式會被覆蓋，不是公式就直接填）
+      if (d.totalWithPark) S('M9', Number(d.totalWithPark));
+      if (d.totalNoPark)   S('M13', Number(d.totalNoPark));
+      // 附屬 M39 / 公設 M43 / 車位 M47 / 地坪 M51
+      if (d.attachedPing) S('M39', Number(d.attachedPing));
+      if (d.pubOnlyPing)  S('M43', Number(d.pubOnlyPing));
+      if (d.parkPing)     S('M47', Number(d.parkPing));
+      if (landTotal)      S('M51', Number(landTotal));
 
-      // 建築屬性欄
-      const shape = val('cs-s-shape') || ((d.totalFloors >= 7) ? 'mansion' : (d.totalFloors >= 2 ? 'apt' : ''));
-      const flStr = d.totalFloors ? `${d.totalFloors}${d.basementFloors ? '/地下' + d.basementFloors : ''}` : '';
-      if (shape === 'town') S('AJ18', '●');
-      if (shape === 'mansion') S('AJ21', '●');
-      if (shape === 'apt') S('AJ24', '●');
-      S('AR18', shape === 'town' ? flStr : '');
-      S('AR21', shape === 'mansion' ? flStr : '');
-      S('AR24', shape === 'apt' ? flStr : '');
+      // 價格：AB9 房價 / AO9 總價 / AB13 車位價
+      if (priceHouse) S('AB9', priceHouse);
+      else if (priceTotal && !priceCar) S('AB9', priceTotal);
+      if (priceTotal) S('AO9', priceTotal);
+      if (priceCar)   S('AB13', priceCar);
+      // 含車/不含車 勾選
+      if (isWithPark) tick('withPark');
+      else if (priceTotal) tick('noPark');
 
-      S('AJ27', landTotal || '');  // 基地面積
-      const mat = String(d.material || '');
-      if (/加強磚/.test(mat)) S('AJ30', '●');
-      if (/鋼骨|SRC|SC(?![A-Z])/.test(mat)) S('AT30', '●');
-      if (/鋼筋混凝土|RC/.test(mat)) S('AJ33', '●');
-
-      const useSel = val('cs-s-use');
-      const usage = String(d.usage || '');
-      if (useSel === 'shop' || /店舖|店鋪|商場/.test(usage)) S('AJ36', '●');
-      if (useSel === 'resi' || /住宅|住家/.test(usage)) S('AQ36', '●');
-      if (useSel === 'office' || /辦公/.test(usage)) S('AX36', '●');
-
-      const occ = val('s-occupancy');
-      if (/空屋/.test(occ)) S('AJ39', '●');
-      if (/自住/.test(occ)) S('AQ39', '●');
-      if (/出租/.test(occ)) S('AX39', '●');
-
-      if (d.completionRoc) {
-        S('AJ42', d.completionRoc);
+      // 設定
+      if (hasMg) {
+        tick('mgYes');
+        if (mgAmtShow) S('CQ11', mgAmtShow);
+        if (mgBankShow) S('CY11', mgBankShow);
+      } else {
+        tick('mgNo');
       }
 
-      // 格局屬性欄
+      // 建築形態 + 樓層字串
+      const shape = val('cs-s-shape') || (d.totalFloors >= 7 ? 'mansion' : (d.totalFloors >= 2 ? 'apt' : ''));
+      const bStr = d.basementFloors ? `B${d.basementFloors}` : '';
+      const tStr = d.totalFloors ? String(d.totalFloors) : '';
+      if (shape === 'town') {
+        tick('shapeTown');
+        if (tStr) S('AR18', tStr);
+      } else if (shape === 'mansion') {
+        tick('shapeMansion');
+        if (bStr) S('AR21', bStr);
+        if (tStr) S('AW21', tStr);
+      } else if (shape === 'apt') {
+        tick('shapeApt');
+        if (bStr) S('AR24', bStr);
+        if (tStr) S('AW24', tStr);
+      }
+
+      // 基地面積
+      if (landTotal) S('AJ27', Number(landTotal));
+
+      // 主要建材
+      const mat = String(d.material || '');
+      if (/加強磚/.test(mat)) tick('matBrick');
+      if (/鋼骨|SRC|SC(?![A-Z])/.test(mat)) tick('matSteel');
+      if (/鋼筋混凝土|RC/.test(mat)) tick('matRc');
+
+      // 使用用途
+      const useSel = val('cs-s-use');
+      const usage = String(d.usage || '');
+      if (useSel === 'shop' || /店舖|店鋪|商場/.test(usage)) tick('useShop');
+      if (useSel === 'resi' || /住宅|住家|集合/.test(usage)) tick('useResi');
+      if (useSel === 'office' || /辦公/.test(usage)) tick('useOffice');
+
+      // 使用現況
+      const occ = val('s-occupancy');
+      if (/空屋/.test(occ))      tick('occEmpty');
+      if (/自住|自用/.test(occ)) tick('occSelf');
+      if (/出租|租/.test(occ))   tick('occRent');
+
+      // 建築完成日（ROC 年 月 日）
+      if (d.completionRoc) S('AJ42', d.completionRoc);
+      const completionMatch = String(d.completionDate || '').match(/(\d+)\D+(\d+)\D+(\d+)/);
+      if (completionMatch) {
+        S('AJ42', parseInt(completionMatch[1]));
+        S('AQ42', parseInt(completionMatch[2]));
+        S('AX42', parseInt(completionMatch[3]));
+      }
+
+      // 格局
       if (bedroom) S('BM18', bedroom);
-      if (hall) S('BT18', hall);
-      if (bath) S('BZ18', bath);
-      S('CP18', val('cs-s-ceiling'));
+      if (hall)    S('BT18', hall);
+      if (bath)    S('BZ18', bath);
+
+      // 本戶挑高 / 面前道路
+      if (val('cs-s-ceiling')) S('CP18', num('cs-s-ceiling'));
+      if (val('cs-s-road'))    S('CP21', num('cs-s-road'));
 
       // 座向
-      const orient = (typeof document !== 'undefined') ? (window._orientation || '') : '';
-      // 座西朝東 → 座欄 = 西, 朝欄 = 東
-      const oMatch = String(orient).match(/座([^朝]+)朝(.+)/);
       if (oMatch) {
         S('BP21', oMatch[1]);
         S('BY21', oMatch[2]);
       }
-      S('CP21', val('cs-s-road'));
 
       // 警衛
       const sec = val('cs-s-security');
-      if (sec === 'yes') S('BP24', '●');
-      if (sec === 'no') S('BU24', '●');
-      if (sec === '24h') S('BZ24', '●');
+      if (sec === 'yes') tick('secYes');
+      if (sec === 'no')  tick('secNo');
+      if (sec === '24h') tick('sec24h');
 
-      // 車位
-      if (d.hasParking) S('CR24', '●');
-      else S('CZ24', '●');
+      // 車位有無
+      if (d.hasParking) tick('parkYes');
+      else              tick('parkNo');
 
-      // 管理費
-      const mgmtFee = num('s-mgmt') || (typeof _lastMgmtFee !== 'undefined' ? _lastMgmtFee : 0);
-      if (mgmtFee) S('BM27', mgmtFee);
-      S('BW27', val('s-moto'));
+      // 管理費 / 機車位
+      const mgmtFee = num('s-mgmt-fee');
+      const mgmtMoto = num('s-mgmt-moto');
+      if (mgmtFee)  S('BM27', mgmtFee);
+      if (mgmtMoto) S('CA27', mgmtMoto);
 
-      // 編號
+      // 汽車位編號：row 27（CP27="地下" label / CT27 樓數 / CW27="樓" / CZ27 號數 / DF27="號"）
       if (d.parkNo) {
         const pm = String(d.parkNo).match(/地下\s*(\S+?)\s*層?\s*(?:第)?(\d+)\s*號?/);
         if (pm) {
           S('CT27', pm[1]);
-          S('CZ27', pm[2]);
+          S('CZ27', parseInt(pm[2]));
         } else {
           S('CT27', d.parkNo);
         }
       }
 
       // 電梯
-      S('BN30', num('cs-s-elev-unit'));
-      S('BV30', num('cs-s-elev-count'));
+      if (num('cs-s-elev-unit'))  S('BN30', num('cs-s-elev-unit'));
+      if (num('cs-s-elev-count')) S('BV30', num('cs-s-elev-count'));
 
       // 學區
-      S('BN33', schoolJ);
-      S('BW33', schoolP);
-
-      // 綠地 / 捷運 / 生活圈
-      const lifeStr = val('s-life');
-      const trafficStr = val('s-traffic');
-      const locationStr = val('s-location');
-      const mrtLine = trafficStr.split('\n').find(l => /捷運|輕軌|火車|高鐵/.test(l)) || '';
-      const parkLine = lifeStr.split('\n').find(l => /公園|綠地|河岸/.test(l)) || '';
-      S('BN36', parkLine);
-      S('BN39', (locationStr.split('\n')[0] || lifeStr.split('\n')[0] || ''));
-      S('BN42', mrtLine);
-
-      // 登記日期（ROC 年 月 日）
-      if (d.ownerRegDate) {
-        const rm = String(d.ownerRegDate).match(/(\d+)\s*年\s*(\d+)\s*月\s*(\d+)/);
-        if (rm) {
-          S('BN45', rm[1]);
-          S('BT45', rm[2]);
-          S('BZ45', rm[3]);
-        }
-      }
+      if (schoolJ) S('BN33', schoolJ);
+      if (schoolP) S('BW33', schoolP);
 
       // 車位種類 / 入口
       const parkType = val('cs-s-park-type');
-      const parkStatus = val('s-park-status');
-      if (parkType === 'flat' || /平面/.test(parkStatus)) S('CR33', '●');
-      if (parkType === 'mech' || /機械/.test(parkStatus)) S('DA33', '●');
+      const parkStatusStr = val('s-park-status');
+      if (parkType === 'flat' || /平面/.test(parkStatusStr)) tick('typeFlat');
+      if (parkType === 'mech' || /機械/.test(parkStatusStr)) tick('typeMech');
       const parkEntry = val('cs-s-park-entry');
-      if (parkEntry === 'ramp' || /坡道/.test(parkStatus)) S('CR36', '●');
-      if (parkEntry === 'lift' || /昇降/.test(parkStatus)) S('CZ36', '●');
+      if (parkEntry === 'ramp' || /坡道/.test(parkStatusStr)) tick('entRamp');
+      if (parkEntry === 'lift' || /昇降|升降/.test(parkStatusStr)) tick('entLift');
 
-      // 公設內容（兩行）
-      const facText = (typeof computeFacilities === 'function' ? '' : '') || val('cs-s-facilities') || '';
-      S('CP39', facText);
+      // 綠地 / 生活圈 / 捷運
+      if (parkLine)     S('BN36', parkLine);
+      const lifeZone = locationStr.split('\n')[0] || lifeStr.split('\n')[0] || '';
+      if (lifeZone) S('BN39', lifeZone);
+      if (mrtLine)  S('BN42', mrtLine);
 
-      // 底部：附屬/公設/車位/地坪 — 填各自的 M 列
-      // 注意：M9/M13 是公式會自動算，所以要把各層坪填進 M 列（已在主建物迴圈完成）
-      // 附屬、公設、車位、地坪是獨立列
-      S('M39', d.attachedPing || '');
-      S('M42', d.pubOnlyPing || '');
-      S('M45', d.parkPing || '');
-      S('M48', landTotal || '');
+      // 公設內容（兩區：CP39 一行 + CH41 多行）
+      if (facilities) {
+        const lines = facilities.split(/[\n、,，]/).map(s => s.trim()).filter(Boolean);
+        S('CP39', lines.slice(0, 3).join('、'));
+        if (lines.length > 3) S('CH41', lines.slice(3).join('、'));
+      }
+
+      // 登記日期
+      if (d.ownerRegDate) {
+        const rm = String(d.ownerRegDate).match(/(\d+)\s*年\s*(\d+)\s*月\s*(\d+)/);
+        if (rm) {
+          S('BN45', parseInt(rm[1]));
+          S('BT45', parseInt(rm[2]));
+          S('BZ45', parseInt(rm[3]));
+        }
+      }
 
       // 土地所有權
       const landOwn = val('cs-s-land-own');
-      if (landOwn === 'full') S('F55', '●');
-      if (landOwn === 'share') S('F58', '●');
+      if (landOwn === 'full')  tick('landFull');
+      if (landOwn === 'share') tick('landShare');
 
-      // 使用區分
-      if (/第五種商業區|商業區/.test(zoneStr)) S('B69', '●');
-      if (/住宅/.test(zoneStr)) S('B66', '●');
-      if (/工業/.test(zoneStr)) S('M66', '●');
-      if (zoneStr && !/第五種商業區/.test(zoneStr)) S('E69', zoneStr);
+      // 使用區分（勾選 + 文字）
+      if (/第五種商業區/.test(zoneStr)) {
+        tick('zone5Com');
+      } else if (zoneStr) {
+        tick('zoneOther');
+        S('E72', zoneStr);
+      }
 
       // 公告現值
-      if (pubValEntry?.pubVal) S('J72', pubValEntry.pubVal);
+      if (pubValEntry?.pubVal) S('J75', Number(pubValEntry.pubVal));
 
       // 總戶數
-      S('J75', val('cs-s-total-units'));
+      if (val('cs-s-total-units')) S('J78', num('cs-s-total-units'));
 
-      // 訴求重點（★ 6 條：CJ48 / CJ51 / CJ54 / CJ57 / CJ60 / CJ63）
-      const pointCells = ['CJ48', 'CJ51', 'CJ54', 'CJ57', 'CJ60', 'CJ63'];
+      // 訴求重點 5 條（CJ51 / CJ54 / CJ57 / CJ60 / CJ63）
+      const pointCells = ['CJ51', 'CJ54', 'CJ57', 'CJ60', 'CJ63'];
       points.forEach((p, i) => { if (pointCells[i]) S(pointCells[i], p); });
 
       // 店長/承辦人/電話/經紀人
-      S('CP63', val('cs-s-partner-name') || '江 炳 賞');
-      S('CP67', '江炳賞');
-      S('CP71', '0971-115207');
-      S('CP75', '江炳賞(114)高市字第01680號');
+      const partnerName = val('cs-s-partner-name') || '江炳賞';
+      const partnerPhone = val('cs-s-partner-phone') || '0971-115207';
+      S('CP66', partnerName);
+      S('CP70', '江炳賞');
+      S('CP74', partnerPhone);
+      S('CP78', '江炳賞(114)高市字第01680號');
 
-      // 4. 圖片（平面圖：使用者上傳過的）
+      // 平面圖（使用者上傳）— 放 BE48:CF80 範圍
       const planImg = document.querySelector('#csPlanPreview img, #planPreview img');
       if (planImg && planImg.src && planImg.src.startsWith('data:')) {
         try {
@@ -3347,16 +3437,16 @@
             base64: base64,
             extension: ext === 'jpg' ? 'jpeg' : ext,
           });
-          // 平面圖位置大約是 BE45:CF62 區域
+          // BE=56, CF=83（0-based 對應 ExcelJS col index）
           ws.addImage(imgId, {
-            tl: { col: 56, row: 46 },   // 約 BE 欄、row 47
-            br: { col: 84, row: 62 },   // 約 CF 欄、row 63
+            tl: { col: 56, row: 47 },
+            br: { col: 84, row: 80 },
             editAs: 'oneCell',
           });
         } catch (e) { console.warn('平面圖嵌入失敗', e); }
       }
 
-      // 5. 觸發下載
+      // 下載
       const out = await wb.xlsx.writeBuffer();
       const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
