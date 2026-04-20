@@ -57,5 +57,13 @@
 - A4 銷售資料表：一個欄位對應一個答案，不要把多資訊擠一格
 - 資料表橫向排版會隨欄位擴充變擠，優先用單欄縱向、地圖/圖片放資料表下方
 
+### Excel 範本產製（永慶/信義式合併格版型）
+- 合併格 > 50 的印刷版型**別用 HTML/CSS 複製**，直接走 `.xls → .xlsx` 範本 + ExcelJS 填 cell
+- **ExcelJS 4.4 有 Text Box 丟失 bug**：`wb.xlsx.load + writeBuffer` 會砍掉 `xl/drawings/drawing1.xml` 裡的 Text Box / 文字方塊（抬頭、公司資訊、簽名欄的文字框全消失）
+- **修法**：writeBuffer 後用 **JSZip 把原範本的 `xl/drawings/*` + `xl/media/*` 整包覆蓋回去**
+- 因為 drawings 被覆蓋，`ws.addImage` 新增的使用者圖會失效 → 改成覆蓋範本原 `xl/media/imageN.jpeg` 的 bytes（保留原 anchor 位置）
+- PNG 使用者圖要先 canvas → `toDataURL('image/jpeg')` 轉 JPEG，否則檔名與內容格式對不上
+- 詳見 memory `feedback_excel_as_layout_engine.md`
+
 ### 詳細規則
 跨 session 的專案記憶存在 `C:\Users\user\.claude\projects\C--Users-user-Downloads-housedata-agent\memory\`，MEMORY.md 是索引，含 PDF 解析、GIS 查詢、buildmis API、UI 設計、API 金鑰等檔案。
