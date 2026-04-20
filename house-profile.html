@@ -2232,10 +2232,13 @@
       const orient = val('s-orientation');
       const oMatch = orient.match(/座([東南西北]+)朝([東南西北]+)/);
 
-      // 學區
+      // 學區（s-school 格式「國小：太平國小\n國中：中山國中、明義國中」）
+      // 先 strip 前綴再 match 學校名字（避免前綴「國小：」「國中：」汙染）
       const schoolStr = val('s-school');
-      const schoolJ = (schoolStr.match(/([^\s、，,\n]+?)國中/) || [])[1] || '';
-      const schoolP = (schoolStr.match(/([^\s、，,\n]+?)國小/) || [])[1] || '';
+      const schoolLineJ = (schoolStr.split('\n').find(l => /國中/.test(l)) || '').replace(/^[^：:]*[：:]\s*/, '');
+      const schoolLineP = (schoolStr.split('\n').find(l => /國小/.test(l)) || '').replace(/^[^：:]*[：:]\s*/, '');
+      const schoolJ = (schoolLineJ.match(/([^、，,（(\s]+?)國中/) || [])[1] || '';
+      const schoolP = (schoolLineP.match(/([^、，,（(\s]+?)國小/) || [])[1] || '';
 
       // 訴求重點（新範本只有 5 條：CJ51 / CJ54 / CJ57 / CJ60 / CJ63）
       const pointsRaw = val('s-points');
@@ -2473,12 +2476,22 @@
       points.forEach((p, i) => { if (pointCells[i]) S(pointCells[i], p); });
 
       // 店長/承辦人/電話/經紀人
+      // CP66 店長（固定江炳賞）/ CP70 承辦人（partnerName）/ CP74 電話 / CP78 經紀人字號
       const partnerName = val('cs-s-partner-name') || '江炳賞';
       const partnerPhone = val('cs-s-partner-phone') || '0971-115207';
-      S('CP66', partnerName);
-      S('CP70', '江炳賞');
+      S('CP66', '江炳賞');
+      S('CP70', partnerName);
       S('CP74', partnerPhone);
       S('CP78', '江炳賞(114)高市字第01680號');
+
+      // 移除範本內建佔位大圖（中央/右側），只保留左上 logo（tl.col<12 且 tl.row<6）
+      // 不清會一直掛著顯示「平面參考圖」「位置地圖」的範本圖（即使沒上傳）
+      if (Array.isArray(ws._media)) {
+        ws._media = ws._media.filter(m => {
+          const tl = m.range?.tl;
+          return tl && tl.col < 12 && tl.row < 6;
+        });
+      }
 
       // 平面圖（使用者上傳）— 放 BE48:CF80 範圍
       const planImg = document.querySelector('#csPlanPreview img, #planPreview img');
