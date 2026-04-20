@@ -1775,19 +1775,12 @@
     return d;
   }
 
-  // ===== Points textarea 自動填模板 =====
-  // _pointsTouched：使用者手動輸入 或 AI 產生後為 true，自動模板就停止覆蓋
+  // _pointsTouched：AI 產生或使用者手動輸入後為 true（目前沒 auto-fill，但 fallback 模板還用得到）
   let _pointsTouched = false;
-  function refreshPointsTemplate() {
-    if (_pointsTouched) return;
-    const pts = document.getElementById('s-points');
-    if (!pts) return;
-    pts.value = autoPointsTemplate(deed);
-  }
 
   // ===== Update Card =====
   function updateCard() {
-    refreshPointsTemplate(); // 沒被碰過 → 依最新資料自動產生模板
+    // 訴求重點不自動填模板，留給 AI 或使用者手動輸入
     const d = deed;
     const price       = parseFloat(document.getElementById('s-price').value) || 0;
     const parkPrice   = parseFloat(document.getElementById('s-parking-price').value) || 0;
@@ -2112,72 +2105,104 @@
 
     try {
       const val = id => (document.getElementById(id)?.value || '').trim();
+      const td = id => {
+        const s = (document.getElementById(id)?.textContent || '').trim();
+        return (!s || s === '－' || s === '待補充' || s === '不確定') ? '' : s;
+      };
       const roadAddr = d.address
         ? addrToRoad(`${d.district || ''}${d.address}`)
         : (d.district || '');
+      // 基本資料 + 周邊機能一併帶入讓 AI 參考
       const facts = {
         地段: roadAddr,
         樓層: d.isWholeBuilding ? `整棟 ${d.totalFloors || ''} 層透天` : (d.floor ? `${d.floor} 樓` : ''),
         屋齡: d.age || '',
+        建築完成: td('td-completion'),
         座向: val('s-orientation'),
         使用分區: (Object.values(_landData).map(e => e.zone).filter(Boolean).join('、')) || '',
+        都市計畫: td('td-urban-plan'),
         細部計畫: (Object.values(_landData).map(e => e.detailPlan).filter(Boolean).join('、')) || '',
+        建蔽容積: td('td-bcr-far'),
         主要用途: d.usage || '',
+        建材: td('td-mat'),
         格局: val('s-layout'),
-        停車位: d.hasParking ? `有（${val('s-park-status') || '平面'}）` : '無',
+        主建物面積: td('td-main-area'),
+        附屬建物: td('td-attached'),
+        共用部分: td('td-pub-area'),
+        總坪數: td('td-total-area'),
+        土地持分: td('td-land'),
+        車位: td('td-park'),
+        停車狀況: val('s-park-status'),
+        機車位: td('td-moto'),
+        車位售價: td('td-park-price'),
+        管理費: td('td-mgmt'),
+        使用執照: td('td-lic'),
+        總戶數: td('td-lic-units'),
+        總樓層: td('td-lic-floors'),
+        建商: td('td-lic-builder'),
+        本樓樓板高度: td('td-lic-floorheight'),
+        使用類組: td('td-lic-usage'),
+        中繼水箱: td('td-lic-watertank'),
+        綠建築: td('td-lic-green'),
+        太陽能: td('td-lic-solar'),
+        國小學區: td('td-school-e'),
+        國中學區: td('td-school-j'),
+        社區公設: val('s-facilities'),
         交通機能: val('s-traffic'),
         生活機能: val('s-life'),
         商圈特色: val('s-location'),
         重要發展: val('s-develop'),
-        學區: val('s-school'),
-        社區公設: val('s-facilities'),
       };
       const factsText = Object.entries(facts)
-        .filter(([, v]) => v && v !== '不確定')
+        .filter(([, v]) => v)
         .map(([k, v]) => `${k}：${v}`).join('\n');
 
-      const prompt = `你是奧美、麥肯廣告等級的不動產文案大師，幫業主寫房屋銷售文案。通過語言和視覺的轉換，把基本資料包裝成有溫度、貼近生活、讓讀者能想見日常場景的故事。
+      const prompt = `你是奧美、麥肯廣告等級的不動產文案大師，幫業主寫房屋銷售文案。把物件的基本資料與周邊機能，包裝成有溫度、貼近生活的日常場景。
 
 # 文案結構
 第一行是主標題，用 2-3 個同類表情符號裝飾，例如：
 🏡🏡 房屋亮點 🏡🏡
 （或 ✨✨ 優質特色 ✨✨、🌟🌟 精選賣點 🌟🌟、🌳🌳 優質好宅 🌳🌳 擇一）
 
-主標題下方空一行，接著列出 4 到 6 個特色重點。
+主標題下方空一行，接著列出 3 到 4 個特色重點。
 每個重點兩行：
-- 第一行：✅ + 一個能反映該重點的表情符號 + 標題短句（例：「✅ 📍 地段精華・通勤無感」）
-- 第二行：描述兩到三句住在這裡的實際生活場景（不要寫「想像」二字，直接描述），把資料轉化為日常感覺。
+- 第一行：✅ + 一個表情符號 + 標題短句（例：「✅ 📍 地段精華・通勤無感」）
+- 第二行：一句描述住在這裡的生活場景，把資料轉化為具體日常感覺
 
-每個重點之間空一行。不要用 ---、===、======= 分隔線。不要用 markdown 標題 # ##。
+每個重點之間空一行。不要用 ---、===、# 等分隔線或 markdown 標題。
+
+# 字數限制
+全文（含主標題、所有重點）總字數控制在 150 字以內。寧可少寫一個重點，也不要超字。
 
 # 語氣與用字
-- 繁體中文，活潑、專業，有溫度，像奧美文案
-- 負面形容轉正面：老公寓→有歷史韻味的社區、小坪數→精巧俐落宅、屋齡高→累積生活故事的老屋…
-- 避免空泛 AI 腔、避免這些老套行銷詞：最佳選擇、完美宅邸、宜居首選、典藏、匠心、璀璨、盡享、坐擁、開啟、成家首選、誠摯邀約、未來可期、增值潛力無限、交通四通八達、生活機能一應俱全、應有盡有、擘劃、打造
+- 繁體中文，活潑、專業，有溫度
+- 負面轉正面：老公寓→有歷史韻味的社區、小坪數→精巧俐落宅、屋齡高→累積生活故事的老屋
+- 避免老套行銷詞：最佳選擇、完美宅邸、宜居首選、典藏、匠心、璀璨、盡享、坐擁、成家首選、未來可期、增值潛力無限、交通四通八達、生活機能一應俱全、應有盡有、擘劃、打造
 
 # 規則
-- 地段已限定到路段，直接使用資料裡的地段，不要補門牌號碼、不要拼湊具體建案名
-- 只使用資料裡有的事實，沒提到的面向不要編造（例如資料沒寫學區就不要寫學區好）
+- 從物件資料中挑最有感的 3-4 個賣點發揮（例如地段 + 學區 + 生活機能 + 坪數/車位擇強項）
+- 地段直接用資料裡的路段，不要補門牌號碼、不要拼建案名
+- 只使用資料裡有的事實，沒寫的面向不要編造
 - 不要加總結收尾，最後一個重點寫完就結束
-- 主標題 + 每個重點開頭的 emoji 各 1 組即可，內文不要每句塞 emoji
+- 內文不要每句塞 emoji
 
 # 語氣範例（學語氣不要照抄文字）
 
 🏡🏡 房屋亮點 🏡🏡
 
 ✅ 📍 地段精華・走路就是日常
-捷運站 5 分鐘腳程，早晨不用跟車潮搶時間。下班後拐進巷弄買杯手搖，回家路程就是一段輕鬆的散步。
+捷運 5 分鐘腳程，下班拐進巷弄買杯手搖，回家就是一段輕鬆散步。
 
 ✅ 🛒 菜市場與超商都在轉角
-巷口有 7-11，步行 5 分鐘到傳統市場。平日傍晚繞去買把青菜，週末早起挑條新鮮的魚，日子過得踏實又從容。
+巷口有 7-11，步行 5 分鐘到傳統市場，日子過得踏實從容。
 
 ✅ 🎓 學區資源讓接送變簡單
-○○國小走路 8 分鐘到，早上送完小孩回家還能喝杯咖啡。放學時間家長們在校門口聊兩句，小孩書包一扔就去公園玩。
+○○國小走路 8 分鐘，早上送完小孩還能回家喝杯咖啡。
 
 物件資料：
 ${factsText}
 
-直接輸出完整文案，不要加任何前言、說明或結語。`;
+直接輸出完整文案，不要加任何前言、說明或結語。全文 150 字以內。`;
 
       const url = 'https://kcg-urban-proxy.bingshang1019.workers.dev/gemini?model=gemini-2.5-flash';
       const res = await fetch(url, {
