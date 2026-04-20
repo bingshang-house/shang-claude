@@ -2675,6 +2675,21 @@ ${factsText}
       }
       document.getElementById('s-develop').value = devLines.slice(0, 5).join('\n');
 
+      // ── 5. 學區步行/車程時間 ──
+      try {
+        const sDist = (document.getElementById('s-district')?.value || '').trim()
+                   || normDist(deed?.district || '');
+        const sVillage = (document.getElementById('s-village')?.value || '').trim();
+        const sNeighbor = (document.getElementById('s-neighbor')?.value || '').trim();
+        if (sDist && sVillage) {
+          const sdRes = lookupSchool(sDist, sVillage, sNeighbor);
+          if (sdRes) {
+            window._schoolTravel = {};
+            await computeSchoolTravel(loc, sDist, [...(sdRes.e || []), ...(sdRes.j || [])]);
+          }
+        }
+      } catch (e) { console.warn('學區車程查詢失敗:', e.message); }
+
       updateCard();
       statusEl.innerHTML = '<span style="color:#16a34a;">✓ 周邊機能查詢完成，可在左側欄位修改</span>';
 
@@ -2770,9 +2785,15 @@ ${factsText}
   }
 
   // A4 卡片的「國小學區／國中學區」格子渲染：每次 updateCard 呼叫，依 s-village + s-neighbor 自動比對 SD
+  // 學校的步行/車程時間由 doNearbySearch 算出後放進 window._schoolTravel 快取，渲染時讀
   function fmtSchools(arr) {
     if (!arr || !arr.length) return '－';
-    return arr.length > 1 ? arr.join('、') + '（共同學區）' : arr[0];
+    const cache = window._schoolTravel || {};
+    const parts = arr.map(name => {
+      const t = cache[name];
+      return t?.text ? `${name}（${t.text}）` : name;
+    });
+    return parts.length > 1 ? parts.join('、') + '（共同學區）' : parts[0];
   }
   function renderSchoolCells() {
     const district = (document.getElementById('s-district')?.value || '').trim()
@@ -2784,6 +2805,43 @@ ${factsText}
     if (!r) { setText('td-school-e','－'); setText('td-school-j','－'); return; }
     setText('td-school-e', fmtSchools(r.e));
     setText('td-school-j', fmtSchools(r.j));
+  }
+
+  // 搜尋單一學校在地圖上的位置（用行政區 + 校名提高精度）
+  async function searchSchoolPlace(loc, districtHint, name) {
+    const q = (districtHint ? `高雄市${districtHint}` : '高雄市') + name;
+    const places = await nearbySearch(loc, null, q, 8000);
+    // 優先名稱含完整校名
+    const exact = places.find(p => (p.displayName || '') === name)
+               || places.find(p => (p.displayName || '').includes(name));
+    return exact || places[0] || null;
+  }
+
+  // 算學區清單每所學校的步行/車程時間，結果寫入 window._schoolTravel
+  async function computeSchoolTravel(loc, districtHint, names) {
+    const uniq = [...new Set(names.filter(Boolean))];
+    if (!uniq.length) return;
+    const hits = await Promise.all(uniq.map(n => searchSchoolPlace(loc, districtHint, n)));
+    const pairs = hits.map((p, i) => p ? { p, name: uniq[i] } : null).filter(Boolean);
+    if (!pairs.length) return;
+    const walkList = [], driveList = [];
+    for (const v of pairs) {
+      const d = calcDist(loc, v.p);
+      if (d <= 1200) walkList.push(v); else driveList.push(v);
+    }
+    const [walkRes, driveRes] = await Promise.all([
+      walkList.length ? routeMatrix(loc, walkList.map(v => v.p), 'WALKING') : [],
+      driveList.length ? routeMatrix(loc, driveList.map(v => v.p), 'DRIVING') : [],
+    ]);
+    window._schoolTravel = window._schoolTravel || {};
+    for (let i = 0; i < walkRes.length; i++) {
+      const r = walkRes[i];
+      if (r.mins != null) window._schoolTravel[walkList[i].name] = { text: travelText(r.mins, 'WALKING'), mins: r.mins, mode: 'WALKING' };
+    }
+    for (let i = 0; i < driveRes.length; i++) {
+      const r = driveRes[i];
+      if (r.mins != null) window._schoolTravel[driveList[i].name] = { text: travelText(r.mins, 'DRIVING'), mins: r.mins, mode: 'DRIVING' };
+    }
   }
 
   function doLookupSchool() {
