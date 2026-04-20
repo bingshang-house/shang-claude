@@ -2733,9 +2733,8 @@ ${factsText}
   updateGeminiUsageBadge();
 
   // ===== School District Lookup =====
-  // SD = 人工驗證資料；SD_FALLBACK = 自動解析的全高雄資料（可能有誤）
+  // SD = 驗證過的學區資料（來源：教育局 115 PDF 經 Gemini 結構化 + 人工抽檢）
   const SD = window.SD || {};
-  const SD_FALLBACK = window.SD_FALLBACK || {};
 
   // Check if neighbor falls in any of the ranges [[min,max],...]
   function inRanges(n, ranges) {
@@ -2750,13 +2749,7 @@ ${factsText}
   function lookupSchool(district, village, neighbor) {
     const d = normDist(district);
     if (!d || !village) return null;
-    const key = d + village;
-    let entry = SD[key];
-    let fallback = false;
-    if (!entry) {
-      entry = SD_FALLBACK[key];
-      fallback = !!entry;
-    }
+    const entry = SD[d + village];
     if (!entry) return null;
     const nb = parseInt(neighbor) || 0;
 
@@ -2766,14 +2759,14 @@ ${factsText}
         return rule.r && inRanges(nb, rule.r);
       });
       if (matched.length === 0 && nb) {
-        return { e: entry.e || [], j: entry.j || [], fallback };
+        return { e: entry.e || [], j: entry.j || [] };
       }
       const e = [...new Set(matched.flatMap(r => r.e || entry.e || []))];
       const j = [...new Set(matched.flatMap(r => r.j || entry.j || []))];
-      return { e, j, fallback };
+      return { e, j };
     }
 
-    return { e: entry.e || [], j: entry.j || [], fallback };
+    return { e: entry.e || [], j: entry.j || [] };
   }
 
   // A4 卡片的「國小學區／國中學區」格子渲染：每次 updateCard 呼叫，依 s-village + s-neighbor 自動比對 SD
@@ -2789,9 +2782,8 @@ ${factsText}
     if (!village || !district) { setText('td-school-e','－'); setText('td-school-j','－'); return; }
     const r = lookupSchool(district, village, neighbor);
     if (!r) { setText('td-school-e','－'); setText('td-school-j','－'); return; }
-    const suffix = r.fallback ? '＊' : '';
-    setText('td-school-e', fmtSchools(r.e) + suffix);
-    setText('td-school-j', fmtSchools(r.j) + suffix);
+    setText('td-school-e', fmtSchools(r.e));
+    setText('td-school-j', fmtSchools(r.j));
   }
 
   function doLookupSchool() {
@@ -2816,12 +2808,9 @@ ${factsText}
 
     const eText = fmt(result.e);
     const jText = fmt(result.j);
-    const warn = result.fallback
-      ? '<div style="color:#c80;font-size:11px;margin-top:4px;">⚠️ 自動解析資料，建議對照教育局公告查證</div>'
-      : '';
     resEl.innerHTML =
       `<div>🏫 國小：<strong>${eText}</strong></div>` +
-      `<div>🏫 國中：<strong>${jText}</strong></div>` + warn;
+      `<div>🏫 國中：<strong>${jText}</strong></div>`;
 
     const schoolText = `國小：${result.e.join('、')}${result.e.length > 1 ? '（共同學區）' : ''}\n國中：${result.j.join('、')}${result.j.length > 1 ? '（共同學區）' : ''}`;
     document.getElementById('s-school').value = schoolText;
