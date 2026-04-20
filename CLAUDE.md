@@ -41,6 +41,17 @@
 ### Cloudflare Worker proxy 打政府 API
 - 一律 retry 3 次，退避 600ms → 1400ms（上游 522 超時很常見）
 - updateCard 等會多次觸發的函式，重查失敗時要**保留上一次成功的快取**，不要洗畫面
+- **目標 API 需要 Referer / User-Agent 驗證** → 瀏覽器 fetch 禁止覆寫這類 header，必走 Worker passthrough 代發（NLSC TextQueryMap 就是這樣）
+- **目標 API 需要 session cookie**（JSESSIONID 等）→ CF Workers 會 strip subrequest Set-Cookie value，此路不通，要找 stateless 替代端點
+
+### Gemini 解析政府 PDF 結構化資料（學區表、公告文件）
+- **有備註/會議決議/歷年調整的表格 → 用 Gemini 2.5 Pro，不要用 Flash**
+  - Flash 會把「XX 學年度會議決議」「不含 2-6 年級」「如有兄姐就讀」當正文抓
+  - 2026-04-20 學區表實例：Flash 把鼓山龍水里解成九如國小（正確是中山國小），Pro + 強化負面 prompt 一次解對
+- Prompt **先列禁止再列要抓**，把實際字串寫出來（「XX 學年度」「不含」），不要用「排除備註」抽象指令
+- 大型 PDF 批次：每批 3 區、temperature 0、maxOutputTokens 65000、retry 5 次、每批 sleep 1s、結果寫中繼 JSON 可續跑
+- **Pro 回傳 JSON 偶爾是 array `[{k:v},{k:v}]` 不是 object**，收到後先 shape 檢查 + 展平，不然 `Object.assign` 會用 array index 當 key 毀資料
+- 人工驗證過的區要建保留名單，Pro 重跑不覆蓋（Pro 再準也漏邊緣案例如多校自由學區）
 
 ### UI 原則
 - A4 銷售資料表：一個欄位對應一個答案，不要把多資訊擠一格
