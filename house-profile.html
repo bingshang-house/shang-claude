@@ -1067,7 +1067,7 @@
         const loNo  = loNoM ? loNoM[1].replace(/\s/g,'') : '';
         const distM2 = t.match(/高雄市([^\s]{1,4}區)/);
         const distName = distM2 ? distM2[1] : (deed.district || '').replace('高雄市','');
-        _landData[idx] = { loNo, ping, detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪`, distName };
+        _landData[idx] = { loNo, ping, fullArea: total, detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪`, distName };
         document.getElementById(`land-ping-${idx}`).value = ping;
         document.getElementById(`land-lono-${idx}`).value = loNo;
         document.getElementById(`land-info-${idx}`).textContent = `✓ ${total} m²，持分 ${denom}分之${numer} ≈ ${ping} 坪`;
@@ -1717,9 +1717,14 @@
     const areaM = t.match(/總\s*面\s*積\s*([\d.]+)\s*平\s*方\s*公\s*尺/);
     if (areaM) d.mainArea = parseFloat(areaM[1]);
 
-    // 建築完成日期
-    const ageM = t.match(/建築完成日期\s+民國(\d+)年(?:(\d+)月)?/);
-    if (ageM) { d.completionRoc = parseInt(ageM[1]); d.age = rocAge(ageM[1]); }
+    // 建築完成日期（年 / 月 / 日 都抓，PDF.js 空白不穩用 \s*）
+    const ageM = t.match(/建築完成日期\s*民國\s*(\d+)\s*年\s*(?:(\d+)\s*月)?\s*(?:(\d+)\s*日)?/);
+    if (ageM) {
+      d.completionRoc = parseInt(ageM[1]);
+      d.age = rocAge(ageM[1]);
+      if (ageM[2]) d.completionMonth = parseInt(ageM[2]);
+      if (ageM[3]) d.completionDay = parseInt(ageM[3]);
+    }
 
     // 所有權登記日期（建物所有權部 裡的登記日期，不是標示部的第一次登記日）
     {
@@ -2161,6 +2166,13 @@
         if (v === undefined || v === null || v === '') return;
         ws.getCell(addr).value = v;
       };
+      // 填值 + 放大字體（賞哥指定主建物/建築形態字要更醒目）
+      const SF = (addr, v, size) => {
+        if (v === undefined || v === null || v === '') return;
+        const c = ws.getCell(addr);
+        c.value = v;
+        c.font = { ...(c.font || {}), size };
+      };
 
       // ===== 清空範本預設資料（範本帶星海灣樣本值+紅色勾選，沒清會殘留）=====
       const WHITE_FILL = {
@@ -2291,18 +2303,18 @@
         if (!m) return;
         let floor = row.name || row.floor || '';
         floor = String(floor).replace(/F$/i, '').replace(/樓$/, '').trim();
-        if (floor) S(`${m.fc}${m.r}`, floor);
-        if (m.uc && row.use) S(`${m.uc}${m.r}`, row.use);
-        if (row.ping) S(`M${m.r}`, Number(row.ping));
+        if (floor) SF(`${m.fc}${m.r}`, floor, 20);
+        if (m.uc && row.use) SF(`${m.uc}${m.r}`, row.use, 20);
+        if (row.ping) SF(`M${m.r}`, Number(row.ping), 20);
       });
       // 總建坪 M9 / 不含車位 M13（若範本是公式會被覆蓋，不是公式就直接填）
-      if (d.totalWithPark) S('M9', Number(d.totalWithPark));
-      if (d.totalNoPark)   S('M13', Number(d.totalNoPark));
+      if (d.totalWithPark) SF('M9',  Number(d.totalWithPark), 20);
+      if (d.totalNoPark)   SF('M13', Number(d.totalNoPark), 20);
       // 附屬 M39 / 公設 M43 / 車位 M47 / 地坪 M51
-      if (d.attachedPing) S('M39', Number(d.attachedPing));
-      if (d.pubOnlyPing)  S('M43', Number(d.pubOnlyPing));
-      if (d.parkPing)     S('M47', Number(d.parkPing));
-      if (landTotal)      S('M51', Number(landTotal));
+      if (d.attachedPing) SF('M39', Number(d.attachedPing), 20);
+      if (d.pubOnlyPing)  SF('M43', Number(d.pubOnlyPing), 20);
+      if (d.parkPing)     SF('M47', Number(d.parkPing), 20);
+      if (landTotal)      SF('M51', Number(landTotal), 20);
 
       // 價格：AB9 房價 / AO9 總價 / AB13 車位價
       if (priceHouse) S('AB9', priceHouse);
@@ -2334,19 +2346,22 @@
       const tStr = floorsAbove ? String(floorsAbove) : '';
       if (shape === 'town') {
         tick('shapeTown');
-        if (tStr) S('AR18', tStr);
+        if (tStr) SF('AR18', tStr, 18);
       } else if (shape === 'mansion') {
         tick('shapeMansion');
-        if (bStr) S('AR21', bStr);
-        if (tStr) S('AW21', tStr);
+        if (bStr) SF('AR21', bStr, 18);
+        if (tStr) SF('AW21', tStr, 18);
       } else if (shape === 'apt') {
         tick('shapeApt');
-        if (bStr) S('AR24', bStr);
-        if (tStr) S('AW24', tStr);
+        if (bStr) SF('AR24', bStr, 18);
+        if (tStr) SF('AW24', tStr, 18);
       }
 
-      // 基地面積
-      if (landTotal) S('AJ27', Number(landTotal));
+      // 基地面積（= 土地謄本「面積」欄加總，不是持分坪數；賞哥指定）
+      const landFullArea = landEntries.reduce((s, e) => s + (e.fullArea || 0), 0);
+      const landFullPing = landFullArea ? p2(sqm2ping(landFullArea)) : 0;
+      if (landFullPing) S('AJ27', Number(landFullPing));
+      else if (landTotal) S('AJ27', Number(landTotal)); // fallback 舊邏輯
 
       // 主要建材
       const mat = String(d.material || '');
@@ -2366,14 +2381,10 @@
       if (/自住|自用/.test(occ)) tick('occSelf');
       if (/出租|租/.test(occ))   tick('occRent');
 
-      // 建築完成日（ROC 年 月 日）
-      if (d.completionRoc) S('AJ42', d.completionRoc);
-      const completionMatch = String(d.completionDate || '').match(/(\d+)\D+(\d+)\D+(\d+)/);
-      if (completionMatch) {
-        S('AJ42', parseInt(completionMatch[1]));
-        S('AQ42', parseInt(completionMatch[2]));
-        S('AX42', parseInt(completionMatch[3]));
-      }
+      // 建築完成日（ROC 年 / 月 / 日，來自建物謄本標示部 parser）
+      if (d.completionRoc)   S('AJ42', d.completionRoc);
+      if (d.completionMonth) S('AQ42', d.completionMonth);
+      if (d.completionDay)   S('AX42', d.completionDay);
 
       // 格局
       if (bedroom) S('BM18', bedroom);
@@ -3234,6 +3245,7 @@ ${factsText}
       };
       addLife(convenience,  '超商');
       addLife(market,       '傳統市場');
+      addLife(park,         '公園綠地');
       addLife(shopee,       '蝦皮店到店');
       addLife(childcare,    '公托幼兒園');
       addLife(clinic,       '醫院診所');
@@ -3242,7 +3254,7 @@ ${factsText}
         const nm = nmDR[0];
         lifeLines.push(`夜市：${nm.p.displayName}（${travelText(nm.mins, nm.mode)}）`);
       }
-      document.getElementById('s-life').value = lifeLines.slice(0, 5).join('\n');
+      document.getElementById('s-life').value = lifeLines.slice(0, 6).join('\n');
 
       // ── 3. 商圈特色（用 Distance Matrix 排序 + 標準化去重）──
       const locLines = [];
