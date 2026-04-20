@@ -2322,10 +2322,16 @@
         tick('mgNo');
       }
 
-      // 建築形態 + 樓層字串（由 d.totalFloors 推，透天暫不自動判斷）
-      const shape = d.totalFloors >= 7 ? 'mansion' : (d.totalFloors >= 2 ? 'apt' : '');
-      const bStr = d.basementFloors ? `B${d.basementFloors}` : '';
-      const tStr = d.totalFloors ? String(d.totalFloors) : '';
+      // 建築形態 + 樓層字串（優先讀右邊 buildmis td-lic-floors「地上 17 層 / 地下 4 層」，
+      // 比建物謄本 d.totalFloors 更完整 — 含地下層數）
+      const licFloorsText = tdClean('td-lic-floors');
+      const aboveM = licFloorsText.match(/地上\s*(\d+)/);
+      const belowM = licFloorsText.match(/地下\s*(\d+)/);
+      const floorsAbove = aboveM ? parseInt(aboveM[1]) : (d.totalFloors || 0);
+      const floorsBelow = belowM ? parseInt(belowM[1]) : 0;
+      const shape = floorsAbove >= 7 ? 'mansion' : (floorsAbove >= 2 ? 'apt' : '');
+      const bStr = floorsBelow ? `B${floorsBelow}` : '';
+      const tStr = floorsAbove ? String(floorsAbove) : '';
       if (shape === 'town') {
         tick('shapeTown');
         if (tStr) S('AR18', tStr);
@@ -2429,7 +2435,13 @@
 
       // 綠地 / 生活圈 / 捷運
       if (parkLine)     S('BN36', parkLine);
-      const lifeZone = locationStr.split('\n')[0] || lifeStr.split('\n')[0] || '';
+      // 生活圈主題：抓生活機能裡的「市場」+「公園/綠地」行（賞哥指定）
+      const marketLine = lifeStr.split('\n').find(l => /市場/.test(l)) || '';
+      const greenLine = lifeStr.split('\n').find(l => /公園|綠地|園道|河岸/.test(l)) || '';
+      const lifeZone = [marketLine, greenLine].filter(Boolean).join('、')
+        || locationStr.split('\n')[0]
+        || lifeStr.split('\n')[0]
+        || '';
       if (lifeZone) S('BN39', lifeZone);
       if (mrtLine)  S('BN42', mrtLine);
 
