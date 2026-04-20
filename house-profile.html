@@ -2189,6 +2189,21 @@
           if (cell.fill?.fgColor?.argb === 'FFFF0000') cell.fill = WHITE_FILL;
         });
       });
+      // 頂部 header banner（範本 .xls → .xlsx 另存時，中上 AW2:CB3 這塊的
+      // 「CASE STUDY / 公司名稱 / 電話 / 地址」banner 圖片沒帶過來變空白，
+      // 賞哥指定這區是必要的 → 用文字補回）
+      {
+        const hdr = ws.getCell('AW2');
+        hdr.value = {
+          richText: [
+            { text: 'CASE STUDY\n', font: { name: '思源宋體 Heavy', size: 22, bold: true, color: { argb: 'FF7A5500' } } },
+            { text: '賞好賞不動產有限公司　高雄亞灣中華加盟店\n', font: { name: '思源宋體 Heavy', size: 11, bold: true } },
+            { text: '高雄市苓雅區中華四路122號　電話 0971-115207', font: { name: '思源宋體 Heavy', size: 10 } },
+          ]
+        };
+        hdr.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      }
+
       // 所有會被填值的格子清空
       [
         'CM4','F5','AR5','CW5','CW7',
