@@ -6,6 +6,7 @@
   <title>房屋銷售介紹產生器</title>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -2102,6 +2103,32 @@
   // ===== 下載 Excel 銷售資料表 =====
   // 範本：cs-template.xlsx（由 .xls 另存，保留思源宋體 + 黃色標題底色）
   // 勾選邏輯：符合條件就把對應 merge 範圍整塊塗紅（#FF0000），不填 ● 符號
+
+  // 把 canvas 轉成 JPEG bytes（imgSrc=null 則畫白底；有 HTMLImageElement 則貼上）
+  function canvasToJpegBytes(w, h, imgEl) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, w, h);
+    if (imgEl) ctx.drawImage(imgEl, 0, 0, w, h);
+    const b64 = c.toDataURL('image/jpeg', 0.92).split(',')[1];
+    return Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+  }
+  // dataURL (png/jpg) → JPEG bytes（覆蓋 xl/media/imageN.jpeg 需要 jpeg 格式）
+  function dataUrlToJpegBytes(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          resolve(canvasToJpegBytes(img.naturalWidth || 800, img.naturalHeight || 600, img));
+        } catch (e) { reject(e); }
+      };
+      img.onerror = () => reject(new Error('image load failed'));
+      img.src = dataUrl;
+    });
+  }
+
   async function downloadCaseStudyXlsx() {
     const btn = document.getElementById('btnCsXlsx');
     const origText = btn.textContent;
@@ -2110,9 +2137,9 @@
     try {
       const resp = await fetch('cs-template.xlsx?v=' + Date.now());
       if (!resp.ok) throw new Error(`範本下載失敗 ${resp.status}`);
-      const buf = await resp.arrayBuffer();
+      const origBuf = await resp.arrayBuffer();
       const wb = new ExcelJS.Workbook();
-      await wb.xlsx.load(buf);
+      await wb.xlsx.load(origBuf);
       const ws = wb.worksheets[0];
 
       // ===== 勾選塗紅 helper =====
@@ -2189,21 +2216,6 @@
           if (cell.fill?.fgColor?.argb === 'FFFF0000') cell.fill = WHITE_FILL;
         });
       });
-      // 頂部 header banner（範本 .xls → .xlsx 另存時，中上 AW2:CB3 這塊的
-      // 「CASE STUDY / 公司名稱 / 電話 / 地址」banner 圖片沒帶過來變空白，
-      // 賞哥指定這區是必要的 → 用文字補回）
-      {
-        const hdr = ws.getCell('AW2');
-        hdr.value = {
-          richText: [
-            { text: 'CASE STUDY\n', font: { name: '思源宋體 Heavy', size: 22, bold: true, color: { argb: 'FF7A5500' } } },
-            { text: '賞好賞不動產有限公司　高雄亞灣中華加盟店\n', font: { name: '思源宋體 Heavy', size: 11, bold: true } },
-            { text: '高雄市苓雅區中華四路122號　電話 0971-115207', font: { name: '思源宋體 Heavy', size: 10 } },
-          ]
-        };
-        hdr.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      }
-
       // 所有會被填值的格子清空
       [
         'CM4','F5','AR5','CW5','CW7',
@@ -2529,37 +2541,44 @@
       S('CP74', partnerPhone);
       S('CP78', '江炳賞(114)高市字第01680號');
 
-      // 移除範本內建佔位大圖（中央/右側），只保留左上 logo（tl.col<12 且 tl.row<6）
-      // 不清會一直掛著顯示「平面參考圖」「位置地圖」的範本圖（即使沒上傳）
-      if (Array.isArray(ws._media)) {
-        ws._media = ws._media.filter(m => {
-          const tl = m.range?.tl;
-          return tl && tl.col < 12 && tl.row < 6;
-        });
-      }
-
-      // 平面圖（使用者上傳）— 放 BE48:CF80 範圍
+      // 使用者上傳的平面圖 data URL（稍後覆蓋 image3.jpeg）
       const planImg = document.querySelector('#csPlanPreview img, #planPreview img');
-      if (planImg && planImg.src && planImg.src.startsWith('data:')) {
-        try {
-          const base64 = planImg.src.split(',')[1];
-          const ext = (planImg.src.match(/data:image\/(\w+);/) || [])[1] || 'png';
-          const imgId = wb.addImage({
-            base64: base64,
-            extension: ext === 'jpg' ? 'jpeg' : ext,
-          });
-          // BE=56, CF=83（0-based 對應 ExcelJS col index）
-          ws.addImage(imgId, {
-            tl: { col: 56, row: 47 },
-            br: { col: 84, row: 80 },
-            editAs: 'oneCell',
-          });
-        } catch (e) { console.warn('平面圖嵌入失敗', e); }
-      }
+      const planDataUrl = (planImg && planImg.src && planImg.src.startsWith('data:')) ? planImg.src : null;
 
-      // 下載
-      const out = await wb.xlsx.writeBuffer();
-      const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      // 下載：先寫出 xlsx，再用 JSZip 把原範本的 Text Box（永慶抬頭 / 公司資訊）與
+      // logo 圖覆蓋回去（ExcelJS 4.4 不保留 drawing1.xml 的 Text Box，會整塊丟失）
+      const outBuf = await wb.xlsx.writeBuffer();
+      const [origZip, outZip] = await Promise.all([
+        JSZip.loadAsync(origBuf),
+        JSZip.loadAsync(outBuf),
+      ]);
+      // 把原範本的 drawings + media + drawing rels 全部搬回 out
+      for (const name of Object.keys(origZip.files)) {
+        if (origZip.files[name].dir) continue;
+        if (/^xl\/drawings\//.test(name) || /^xl\/media\//.test(name)) {
+          const data = await origZip.file(name).async('uint8array');
+          outZip.file(name, data);
+        }
+      }
+      // image2 = 位置地圖樣本（星海灣）→ 覆蓋成白底避免殘留
+      // image3 = 平面圖樣本 → 若使用者有上傳，換成使用者圖；沒有則白底
+      const blankJpeg = canvasToJpegBytes(10, 10, null);
+      outZip.file('xl/media/image2.jpeg', blankJpeg);
+      if (planDataUrl) {
+        try {
+          const planJpeg = await dataUrlToJpegBytes(planDataUrl);
+          outZip.file('xl/media/image3.jpeg', planJpeg);
+        } catch (e) {
+          console.warn('平面圖轉檔失敗', e);
+          outZip.file('xl/media/image3.jpeg', blankJpeg);
+        }
+      } else {
+        outZip.file('xl/media/image3.jpeg', blankJpeg);
+      }
+      const blob = await outZip.generateAsync({
+        type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const fname = [val('cs-s-contract') || '銷售表', d.address || '物件'].filter(Boolean).join('-') + '.xlsx';
