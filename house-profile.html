@@ -409,13 +409,7 @@
           <input type="text" id="gmApiKey" placeholder="填入 Google Maps API Key" style="font-size:11px;">
         </div>
         <div style="font-size:11px;font-weight:600;color:#555;margin:8px 0 4px;">Gemini AI（訴求重點自動產生）</div>
-        <div style="font-size:11px;color:#666;margin-bottom:4px;">
-          申請：<a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#2563eb;">aistudio.google.com</a>（免費）
-        </div>
-        <div class="fg" style="margin-bottom:6px;">
-          <label style="font-size:11px;">API Key</label>
-          <input type="text" id="geminiApiKey" placeholder="填入 Gemini API Key" style="font-size:11px;">
-        </div>
+        <div style="font-size:11px;color:#666;margin-bottom:6px;">✓ 已走安全代理（key 保存在伺服器端）</div>
         <div id="gemini-usage-badge" style="font-size:11px;color:#888;margin-bottom:8px;">今日 AI 用量：0/240</div>
         <button onclick="saveApiKeys()" style="width:100%;padding:8px;background:#CC8F00;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">儲存全部設定</button>
       </div>
@@ -2183,8 +2177,7 @@ ${factsText}
 
 直接輸出完整文案，不要加任何前言、說明或結語。`;
 
-      const key = getGeminiKey();
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+      const url = 'https://kcg-urban-proxy.bingshang1019.workers.dev/gemini?model=gemini-2.5-flash';
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2245,21 +2238,17 @@ ${factsText}
 
   // Key 已綁定網域限制，放前端安全
   const GM_KEY_DEFAULT = 'AIzaSyByF_IG84HcD9gay4MV7jZMkqbk0hAxndo';
-  const GEMINI_KEY_DEFAULT = 'AIzaSyDIjbArLgTgT0WdlA5mHPcECdDJiOowBm0';
   function getGMKey() { return localStorage.getItem('gm_apikey') || GM_KEY_DEFAULT; }
-  function getGeminiKey() { return localStorage.getItem('gemini_apikey') || GEMINI_KEY_DEFAULT; }
 
   function saveApiKeys() {
     const tgosAppId  = document.getElementById('tgosAppId').value.trim();
     const tgosApiKey = document.getElementById('tgosApiKey').value.trim();
     const gmKey      = document.getElementById('gmApiKey').value.trim();
-    const geminiKey  = document.getElementById('geminiApiKey').value.trim();
     if (tgosAppId && tgosApiKey) {
       localStorage.setItem('tgos_appid',  tgosAppId);
       localStorage.setItem('tgos_apikey', tgosApiKey);
     }
     if (gmKey) localStorage.setItem('gm_apikey', gmKey);
-    if (geminiKey) localStorage.setItem('gemini_apikey', geminiKey);
     updateTGOSStatus();
     document.getElementById('tgosBody').style.display = 'none';
     alert('✓ API 設定已儲存');
