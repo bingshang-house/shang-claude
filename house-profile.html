@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>房屋銷售介紹產生器</title>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -372,579 +373,84 @@
       .right-panel { padding: 0; overflow: visible; }
       .a4-card { box-shadow: none; width: 100%; min-height: auto; }
     }
-    /* CASE STUDY 切換：body.cs-mode 時 A4 版面隱藏，非 cs-mode 時 CS 版面隱藏 */
+    /* ===== CASE STUDY 切換 ===== */
     body:not(.cs-mode) .cs-card { display: none !important; }
     body.cs-mode .a4-card { display: none !important; }
     body.cs-mode .right-panel { overflow: auto; justify-content: flex-start; padding: 12px; }
 
-    /* ===== CASE STUDY A4 橫式 ===== */
+    /* ===== CASE STUDY 卡片（table-based）===== */
     .cs-card {
       width: 297mm;
       height: 210mm;
       background: #fff;
-      box-shadow: var(--shadow);
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
       margin: 0 auto;
       padding: 0;
-      font-family: 'Noto Serif TC', 'Source Han Serif TC', 'PMingLiU', serif;
+      font-family: 'Noto Serif TC','Source Han Serif TC','PMingLiU',serif;
+      color: #000;
       font-size: 10.5px;
-      color: #111;
+      line-height: 1.25;
       position: relative;
       overflow: hidden;
-      flex-shrink: 0;
-    }
-    .cs-card, .cs-card * { box-sizing: border-box; }
-    .cs-grid {
-      width: 100%;
-      height: 100%;
-      border: 2px solid #000;
-      border-collapse: collapse;
-    }
-    .cs-card table { border-collapse: collapse; width: 100%; }
-    .cs-card td, .cs-card th {
-      border: 1px solid #333;
-      padding: 2px 4px;
-      vertical-align: middle;
-      line-height: 1.3;
-    }
-    /* Header */
-    .cs-head {
-      display: grid;
-      grid-template-columns: 54mm 1fr 70mm;
-      border-bottom: 2px solid #000;
-      height: 13mm;
-    }
-    .cs-head-logo {
-      display: flex;
-      align-items: center;
-      padding: 0 4mm;
-      font-family: 'Noto Serif TC', serif;
-      font-weight: 900;
-      font-size: 16px;
-      color: #000;
-      border-right: 1px solid #333;
-    }
-    .cs-head-logo .brand-mark {
-      display: inline-block;
-      width: 7mm; height: 7mm;
-      border: 2px solid #c92424;
-      border-radius: 50%;
-      margin-right: 3mm;
-      position: relative;
-    }
-    .cs-head-logo .brand-mark::after {
-      content: "賞";
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 900;
-      color: #c92424;
-    }
-    .cs-head-title {
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      padding: 0 4mm;
-      border-right: 1px solid #333;
+      flex-shrink: 0;
+      border: 1.5pt solid #000;
     }
-    .cs-head-title .t1 {
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: 2px;
+    .cs-card table {
+      border-collapse: collapse;
+      width: 100%;
+      table-layout: fixed;
     }
-    .cs-head-title .t2 {
-      font-size: 9.5px;
-      color: #333;
-      margin-top: 1px;
-    }
-    .cs-head-right {
-      display: grid;
-      grid-template-columns: 28mm 1fr;
-      grid-template-rows: 1fr 1fr;
-    }
-    .cs-head-right > div {
-      border-left: 1px solid #333;
-      padding: 1mm 2mm;
-      display: flex;
-      align-items: center;
-    }
-    .cs-head-right .cs-casestudy {
-      font-weight: 900;
-      letter-spacing: 2px;
-      font-size: 14px;
-      color: #c92424;
-      justify-content: center;
-      border-bottom: 1px solid #333;
-    }
-    .cs-head-right .cs-contract {
-      font-size: 10px;
-      border-bottom: 1px solid #333;
-      gap: 3mm;
-    }
-    .cs-head-right .cs-keyhold {
-      font-size: 9.5px;
-      gap: 2mm;
-      justify-content: space-between;
-    }
-    .cs-head-right .cs-keyhold .lbl { font-weight: 700; }
-    .cs-head-right .cs-contract-val {
-      font-weight: 700;
-      font-size: 12px;
-      letter-spacing: 1px;
-    }
-
-    /* 2nd row: 案件名稱 tags | 物件座落 | 建設社區 */
-    .cs-row2 {
-      display: grid;
-      grid-template-columns: 80mm 1fr 55mm;
-      height: 14mm;
-      border-bottom: 2px solid #000;
-    }
-    .cs-row2 > div { display: flex; border-right: 1px solid #333; }
-    .cs-row2 > div:last-child { border-right: none; }
-    .cs-label-box {
-      width: 18mm;
-      background: #f3f3f3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      font-weight: 700;
-      font-size: 10.5px;
-      line-height: 1.2;
-      border-right: 1px solid #333;
-    }
-    .cs-label-box.narrow { width: 15mm; }
-    .cs-label-box.wide { width: 22mm; }
-    .cs-row2 .cs-cell-val {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      padding: 1mm 2mm;
-      font-size: 11px;
+    .cs-card td, .cs-card th {
+      border: 0.3pt solid #000;
+      padding: 1mm 1.5mm;
+      vertical-align: middle;
       font-weight: 500;
     }
-    .cs-row2 .cs-addr {
-      font-size: 15px;
+    .cs-card .lbl {
+      background: #fff8d8;
       font-weight: 700;
-      color: #c92424;
-      letter-spacing: 1px;
-    }
-    .cs-builder-stack {
-      display: grid;
-      grid-template-rows: 1fr 1fr;
-      flex: 1;
-    }
-    .cs-builder-stack > div {
-      display: grid;
-      grid-template-columns: 18mm 1fr;
-      border-bottom: 1px solid #333;
-    }
-    .cs-builder-stack > div:last-child { border-bottom: none; }
-    .cs-builder-stack .lbl {
-      background: #f3f3f3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      border-right: 1px solid #333;
-    }
-    .cs-builder-stack .val {
-      display: flex;
-      align-items: center;
-      padding: 0 2mm;
-      font-weight: 700;
-      font-size: 11px;
-    }
-
-    /* 3rd row: 價格列 */
-    .cs-row3 {
-      display: grid;
-      grid-template-columns: 70mm 55mm 1fr 65mm;
-      height: 14mm;
-      border-bottom: 2px solid #000;
-    }
-    .cs-row3 > div {
-      display: grid;
-      border-right: 1px solid #333;
-    }
-    .cs-row3 > div:last-child { border-right: none; }
-    .cs-p1 { grid-template-rows: 1fr 1fr; }
-    .cs-p1 > div {
-      display: grid;
-      grid-template-columns: 18mm 1fr 8mm;
-      border-bottom: 1px solid #333;
-    }
-    .cs-p1 > div:last-child { border-bottom: none; }
-    .cs-p1 .lbl {
-      background: #f3f3f3;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; border-right: 1px solid #333;
-    }
-    .cs-p1 .val {
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 14px; color: #c92424;
-    }
-    .cs-p1 .unit {
-      display: flex; align-items: center; justify-content: center;
-      font-size: 9px; color: #333;
-      border-left: 1px solid #333;
-    }
-    .cs-p2 { grid-template-rows: 1fr 1fr; }
-    .cs-p2 > div {
-      display: grid;
-      grid-template-columns: 10mm 1fr 10mm;
-      border-bottom: 1px solid #333;
-    }
-    .cs-p2 > div:last-child { border-bottom: none; }
-    .cs-p2 .lbl, .cs-p2 .unit {
-      background: #f3f3f3;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700;
-    }
-    .cs-p2 .lbl { border-right: 1px solid #333; }
-    .cs-p2 .unit { border-left: 1px solid #333; }
-    .cs-p2 .val {
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 14px; color: #c92424;
-    }
-    .cs-p3 {
-      grid-template-rows: 1fr 1fr;
-    }
-    .cs-p3 > div {
-      display: grid;
-      grid-template-columns: 18mm 1fr 12mm;
-      border-bottom: 1px solid #333;
-    }
-    .cs-p3 > div:last-child { border-bottom: none; }
-    .cs-p3 .lbl {
-      background: #f3f3f3;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; border-right: 1px solid #333;
-    }
-    .cs-p3 .val {
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 16px; color: #c92424;
-    }
-    .cs-p3 .unit {
-      background: #f3f3f3;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 9px; border-left: 1px solid #333;
-    }
-    .cs-p4 {
-      grid-template-rows: 1fr 1fr;
-    }
-    .cs-p4 > div {
-      display: flex;
-      align-items: center;
-      padding: 0 2mm;
-      border-bottom: 1px solid #333;
-      gap: 2mm;
+      text-align: center;
       font-size: 10px;
+      line-height: 1.15;
     }
-    .cs-p4 > div:last-child { border-bottom: none; }
-    .cs-p4 .lbl { font-weight: 700; }
-
-    /* 4th row: 主建物 | 建築形態 | 格局 | 挑高/車位/公設 */
-    .cs-row4 {
-      display: grid;
-      grid-template-columns: 46mm 72mm 1fr 85mm;
-      height: 90mm;
-      border-bottom: 2px solid #000;
-    }
-    .cs-row4 > div { border-right: 1px solid #333; }
-    .cs-row4 > div:last-child { border-right: none; }
-
-    /* 主建物 — 左側樓層列表 */
-    .cs-main-table {
-      display: grid;
-      grid-template-columns: 7mm 11mm 1fr 8mm;
-      grid-template-rows: repeat(7, 1fr);
-      height: 100%;
-    }
-    .cs-main-table > div {
-      border-right: 1px solid #333;
-      border-bottom: 1px solid #333;
-      display: flex;
-      align-items: center;
-      padding: 0 1.5mm;
-      font-size: 10px;
-    }
-    .cs-main-table > div:nth-child(4n) { border-right: none; }
-    .cs-main-table > div.hd {
-      background: #f3f3f3;
+    .cs-card .val {
       font-weight: 700;
-      justify-content: center;
+      color: #222;
     }
-    .cs-main-table > div.unit {
-      background: #f3f3f3;
-      font-weight: 700;
-      justify-content: center;
-      font-size: 9px;
-    }
-    .cs-main-table > div.val {
-      justify-content: flex-end;
-      font-weight: 600;
-    }
-    .cs-main-table > div.lbl-主 {
-      grid-row: 1 / span 7;
-      background: #f3f3f3;
+    .cs-card .val.num { text-align: center; font-size: 12px; color: #c92424; font-weight: 800; }
+    .cs-card .val.big { font-size: 14px; color: #c92424; font-weight: 800; text-align: center; letter-spacing: 1px; }
+    .cs-card .val.addr { font-size: 14px; color: #c92424; font-weight: 800; letter-spacing: 1px; }
+    .cs-card .unit { text-align: center; font-size: 9.5px; color: #333; background: #fff8d8; }
+    .cs-card .hd { background: #fff8d8; font-weight: 700; text-align: center; font-size: 10px; }
+    .cs-card .vlbl {
+      background: #ffe79a;
       writing-mode: vertical-rl;
       text-orientation: upright;
-      justify-content: center;
-      align-items: center;
-      font-weight: 700;
+      text-align: center;
+      font-weight: 900;
       letter-spacing: 4px;
-      font-size: 11px;
-      border-right: 1px solid #333;
+      font-size: 12px;
+      width: 6mm;
     }
 
-    /* 建築形態 column */
-    .cs-shape {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
-    .cs-shape > .row {
-      display: grid;
-      grid-template-columns: 20mm 1fr;
-      border-bottom: 1px solid #333;
-    }
-    .cs-shape > .row:last-child { border-bottom: none; }
-    .cs-shape .lbl {
-      background: #f3f3f3;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700;
-      border-right: 1px solid #333;
-      text-align: center;
-      line-height: 1.2;
-    }
-    .cs-shape .val {
-      padding: 1mm 2mm;
-      display: flex;
-      align-items: center;
-      gap: 2mm;
-      flex-wrap: wrap;
-      font-size: 10px;
-    }
-    .cs-shape .val.col {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.5mm;
-    }
-
-    /* 格局 column */
-    .cs-attr {
-      display: grid;
-      grid-template-rows: repeat(10, 1fr);
-      height: 100%;
-    }
-    .cs-attr > .row {
-      display: grid;
-      grid-template-columns: 16mm 1fr;
-      border-bottom: 1px solid #333;
-    }
-    .cs-attr > .row:last-child { border-bottom: none; }
-    .cs-attr .lbl {
-      background: #f3f3f3;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700;
-      border-right: 1px solid #333;
-      line-height: 1.2;
-      text-align: center;
-    }
-    .cs-attr .val {
-      padding: 0 2mm;
-      display: flex;
-      align-items: center;
-      gap: 2mm;
-      flex-wrap: wrap;
-      font-size: 10px;
-    }
-
-    /* 5th row: 附屬/公設/車位/地坪 + 土地 + 位置圖 + 平面圖 + 訴求重點 + 頁尾 */
-    .cs-row5 {
-      display: grid;
-      grid-template-columns: 52mm 75mm 75mm 1fr;
-      flex: 1;
-      height: calc(210mm - 13mm - 14mm - 14mm - 90mm - 6mm);
-      border-bottom: 2px solid #000;
-    }
-    .cs-row5 > div { border-right: 1px solid #333; }
-    .cs-row5 > div:last-child { border-right: none; }
-
-    /* 附屬/公設/車位/地坪 + 土地/公告/總戶數 */
-    .cs-extras {
-      display: grid;
-      grid-template-rows: repeat(9, 1fr);
-    }
-    .cs-extras > .row {
-      display: grid;
-      grid-template-columns: 15mm 1fr 8mm;
-      border-bottom: 1px solid #333;
-    }
-    .cs-extras > .row:last-child { border-bottom: none; }
-    .cs-extras > .row.full {
-      grid-template-columns: 15mm 1fr;
-    }
-    .cs-extras .lbl {
-      background: #f3f3f3;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700;
-      border-right: 1px solid #333;
-      font-size: 10px;
-    }
-    .cs-extras .lbl.gold { background: #fff3c2; color: #a06400; }
-    .cs-extras .val {
-      padding: 0 2mm;
-      display: flex;
-      align-items: center;
-      font-size: 10px;
-      gap: 1mm;
-      flex-wrap: wrap;
-    }
-    .cs-extras .unit {
-      background: #f3f3f3;
-      font-size: 9px;
-      display: flex; align-items: center; justify-content: center;
-      border-left: 1px solid #333;
-    }
-
-    /* 位置圖區塊 */
-    .cs-map-cell, .cs-plan-cell {
-      display: flex;
-      flex-direction: column;
-    }
-    .cs-cell-title {
-      background: #f3f3f3;
-      text-align: center;
-      font-weight: 700;
-      font-size: 11px;
-      padding: 1mm;
-      border-bottom: 1px solid #333;
-      letter-spacing: 2px;
-    }
-    .cs-map-body, .cs-plan-body {
-      flex: 1;
-      position: relative;
-      overflow: hidden;
-      background: #fafafa;
-    }
-    .cs-map-body iframe {
-      width: 100%;
-      height: 100%;
-      border: 0;
-      display: block;
-    }
-    .cs-plan-body img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-    }
-    .cs-plan-body .placeholder {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #aaa;
-      font-size: 10px;
-      text-align: center;
-      padding: 4mm;
-      line-height: 1.6;
-    }
-    .cs-plan-footnote {
-      font-size: 7.5px;
-      color: #666;
-      text-align: left;
-      padding: 1mm 2mm;
-      border-top: 1px solid #ccc;
-      line-height: 1.4;
-    }
-
-    /* 訴求重點 + 聯絡 column */
-    .cs-right {
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-    }
-    .cs-right .cs-points-head {
-      background: #f3f3f3;
-      text-align: center;
-      font-weight: 700;
-      font-size: 11px;
-      padding: 1mm;
-      border-bottom: 1px solid #333;
-      letter-spacing: 2px;
-    }
-    .cs-right .cs-points-body {
-      padding: 2mm 3mm;
-      font-size: 10.5px;
-      line-height: 1.7;
-      overflow: hidden;
-    }
-    .cs-right .cs-points-body .p {
-      display: flex;
-      align-items: flex-start;
-      gap: 1mm;
-      color: #c92424;
-      font-weight: 500;
-    }
-    .cs-right .cs-points-body .p::before {
-      content: "★";
-      flex-shrink: 0;
-    }
-    .cs-contact-block {
-      border-top: 1px solid #333;
-      display: grid;
-      grid-template-columns: 18mm 1fr;
-      grid-template-rows: repeat(4, 1fr);
-      font-size: 10px;
-    }
-    .cs-contact-block > .lbl {
-      background: #f3f3f3;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700;
-      border-right: 1px solid #333;
-      border-bottom: 1px solid #333;
-    }
-    .cs-contact-block > .val {
-      padding: 0 2mm;
-      display: flex; align-items: center;
-      border-bottom: 1px solid #333;
-    }
-    .cs-contact-block > div:nth-last-child(-n+2) { border-bottom: none; }
-    .cs-contact-block .val.big { font-size: 14px; font-weight: 700; }
-    .cs-contact-block .val.agent { font-size: 9.5px; }
-
-    /* 頁尾聲明 */
-    .cs-footer-disclaim {
-      height: 6mm;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 9px;
-      color: #c92424;
-      font-weight: 500;
-      letter-spacing: 0.5px;
-    }
-
-    /* Checkbox visual */
+    /* 勾選框：綠框、勾選後紅底 */
     .cs-card .chk {
       display: inline-flex;
       align-items: center;
-      gap: 1mm;
+      gap: 1.2mm;
       font-size: 10px;
       white-space: nowrap;
+      line-height: 1.1;
+      margin-right: 1mm;
     }
     .cs-card .chk::before {
       content: "";
       display: inline-block;
-      width: 2.8mm;
-      height: 2.8mm;
-      border: 1px solid #111;
+      width: 2.6mm;
+      height: 2.6mm;
+      border: 0.5pt solid #2a7a3a;
       background: #fff;
       flex-shrink: 0;
     }
@@ -953,7 +459,224 @@
       border-color: #c92424;
     }
 
-    /* 頂部 CASE STUDY 按鈕 */
+    /* ====== 頁首 ====== */
+    .cs-head {
+      height: 13mm;
+    }
+    .cs-head td { padding: 0.5mm 2mm; }
+    .cs-head .logo {
+      width: 48mm;
+      font-weight: 900;
+      font-size: 16px;
+      letter-spacing: 3px;
+      color: #c92424;
+      text-align: center;
+    }
+    .cs-head .logo .mark {
+      display: inline-block;
+      width: 6mm; height: 6mm;
+      border: 1.5pt solid #c92424;
+      border-radius: 50%;
+      line-height: 5.5mm;
+      text-align: center;
+      font-size: 9.5px;
+      color: #c92424;
+      margin-right: 1.5mm;
+      vertical-align: middle;
+    }
+    .cs-head .shop {
+      text-align: center;
+      font-weight: 900;
+      font-size: 14.5px;
+      letter-spacing: 3px;
+    }
+    .cs-head .shop-sub {
+      font-size: 8.5px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      color: #333;
+      margin-top: 0.5mm;
+    }
+    .cs-head .badge {
+      width: 22mm;
+      text-align: center;
+      font-weight: 900;
+      font-size: 13px;
+      letter-spacing: 2px;
+      color: #c92424;
+      background: #fffbea;
+    }
+    .cs-head .keyh { font-size: 9.5px; width: 42mm; background: #fff8d8; }
+    .cs-head .keyh b { font-weight: 800; margin-right: 1mm; }
+    .cs-head .contract { width: 28mm; font-size: 9.5px; background: #fff8d8; }
+    .cs-head .contract b { font-weight: 800; display: block; }
+    .cs-head .contract span { font-weight: 800; font-size: 11px; color: #000; letter-spacing: 1px; }
+
+    /* ====== Row2 案件/物件/建設 ====== */
+    .cs-row2 td { height: 7mm; padding: 0.5mm 1.5mm; }
+    .cs-row2 .lbl-case { width: 13mm; }
+    .cs-row2 .v-case { font-weight: 700; font-size: 10.5px; }
+    .cs-row2 .lbl-loc { width: 13mm; }
+    .cs-row2 .lbl-bld { width: 18mm; }
+    .cs-row2 .v-bld { width: 40mm; font-weight: 700; font-size: 10.5px; }
+    .cs-row2 .v-addr { font-weight: 800; font-size: 14px; color: #c92424; letter-spacing: 1px; }
+
+    /* ====== Row3 坪/價 ====== */
+    .cs-row3 td { height: 8mm; padding: 0.5mm 1.5mm; }
+    .cs-row3 .lbl-s { width: 16mm; }
+    .cs-row3 .lbl-xs { width: 10mm; }
+    .cs-row3 .u-s { width: 8mm; }
+    .cs-row3 .u-xs { width: 7mm; }
+    .cs-row3 .v-price { font-size: 18px; font-weight: 900; color: #c92424; text-align: center; }
+    .cs-row3 .mixcell { font-size: 9.5px; font-weight: 600; padding: 0.5mm 2mm; }
+    .cs-row3 .mixcell .chk { font-size: 9.5px; }
+
+    /* ====== Row4 主要內容區 ====== */
+    .cs-main {
+      flex: 1;
+      display: flex;
+      border-top: 0.3pt solid #000;
+      border-bottom: 0.3pt solid #000;
+    }
+    .cs-main > div {
+      border-right: 0.3pt solid #000;
+      display: flex;
+      flex-direction: column;
+    }
+    .cs-main > div:last-child { border-right: none; }
+    .cs-main .col-mb { width: 48mm; }
+    .cs-main .col-shape { width: 66mm; }
+    .cs-main .col-attr1 { flex: 1; }
+    .cs-main .col-attr2 { width: 78mm; }
+
+    .cs-main table { height: 100%; }
+    .cs-main td { height: auto; padding: 0.8mm 1.5mm; font-size: 10px; }
+    .cs-main .row-lbl {
+      background: #fff8d8;
+      width: 14mm;
+      text-align: center;
+      font-weight: 700;
+      font-size: 10px;
+      line-height: 1.15;
+    }
+    .cs-main .row-val {
+      font-weight: 700;
+      font-size: 10.5px;
+      padding: 0.8mm 2mm;
+    }
+    .cs-main .row-val.chkline { font-weight: 500; font-size: 10px; }
+    .cs-main .row-val.redv { color: #c92424; font-size: 11px; }
+
+    /* 主建物表 */
+    .cs-mb-inner { width: 100%; }
+    .cs-mb-inner td { padding: 0.5mm 1mm; font-size: 9.5px; }
+    .cs-mb-inner .h-floor { width: 8mm; text-align: center; }
+    .cs-mb-inner .h-item  { width: auto; text-align: center; }
+    .cs-mb-inner .h-ping  { width: 12mm; text-align: right; }
+    .cs-mb-inner .d-floor { text-align: center; font-weight: 600; }
+    .cs-mb-inner .d-item  { text-align: center; }
+    .cs-mb-inner .d-ping  { text-align: right; font-weight: 700; color: #c92424; }
+
+    /* ====== Row5 底部 ====== */
+    .cs-bottom {
+      display: flex;
+      flex-shrink: 0;
+      height: 64mm;
+    }
+    .cs-bottom > div {
+      border-right: 0.3pt solid #000;
+      display: flex;
+      flex-direction: column;
+    }
+    .cs-bottom > div:last-child { border-right: none; }
+    .cs-bottom .col-extras { width: 62mm; }
+    .cs-bottom .col-map { width: 66mm; }
+    .cs-bottom .col-plan { width: 66mm; }
+    .cs-bottom .col-right { flex: 1; }
+
+    .cs-bottom .extras-table td { height: 5.5mm; padding: 0.5mm 1.5mm; font-size: 10px; }
+    .cs-bottom .extras-table .lbl { width: 13mm; }
+    .cs-bottom .extras-table .val { text-align: right; font-weight: 700; }
+    .cs-bottom .extras-table .unit { width: 8mm; }
+
+    .cs-bottom .media-title {
+      background: #fff8d8;
+      text-align: center;
+      font-weight: 900;
+      font-size: 11px;
+      letter-spacing: 6px;
+      padding: 1mm;
+      border-bottom: 0.3pt solid #000;
+      flex-shrink: 0;
+    }
+    .cs-bottom .media-body {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      background: #fafafa;
+    }
+    .cs-bottom .media-body img, .cs-bottom .media-body iframe {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border: none;
+      display: block;
+    }
+    .cs-bottom .media-body .placeholder {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: #bbb; font-size: 10px;
+    }
+    .cs-bottom .plan-note {
+      padding: 0.5mm 2mm;
+      font-size: 8px;
+      color: #888;
+      border-top: 0.3pt solid #ccc;
+      flex-shrink: 0;
+    }
+
+    .cs-bottom .points-head {
+      background: #c92424;
+      color: #fff;
+      text-align: center;
+      font-weight: 900;
+      font-size: 11px;
+      letter-spacing: 6px;
+      padding: 1mm;
+      flex-shrink: 0;
+    }
+    .cs-bottom .points-body {
+      flex: 1;
+      padding: 2mm 3mm;
+      font-size: 10.5px;
+      line-height: 1.55;
+      color: #c92424;
+      font-weight: 600;
+      overflow: hidden;
+    }
+    .cs-bottom .points-body .p { margin-bottom: 0.5mm; }
+    .cs-bottom .contact {
+      border-top: 0.3pt solid #000;
+      width: 100%;
+      flex-shrink: 0;
+    }
+    .cs-bottom .contact td { padding: 0.8mm 1.5mm; font-size: 10px; height: 5mm; }
+    .cs-bottom .contact .clbl { width: 13mm; background: #fff8d8; text-align: center; font-weight: 800; }
+    .cs-bottom .contact .cval { font-weight: 700; }
+    .cs-bottom .contact .cval.big { font-size: 16px; font-weight: 900; letter-spacing: 2px; color: #000; text-align: center; }
+    .cs-bottom .contact .cval.agent { font-size: 8.5px; }
+
+    /* 頁尾聲明 */
+    .cs-disclaim {
+      padding: 0.8mm 3mm;
+      font-size: 8.5px;
+      color: #c92424;
+      text-align: center;
+      border-top: 0.3pt solid #000;
+      flex-shrink: 0;
+    }
+
+    /* 頂部 CS toggle 按鈕 */
     .btn-toggle-cs {
       background: #fff !important;
       color: var(--yc-deep) !important;
@@ -963,8 +686,14 @@
       background: var(--yc-deep) !important;
       color: #fff !important;
     }
+    .btn-cs-xlsx {
+      background: #1f7a3d;
+      color: #fff;
+      font-weight: 700;
+    }
+    .btn-cs-xlsx:hover { background: #155a2a; }
 
-    /* 列印：CASE STUDY 模式走橫式 */
+    /* 列印：CS 模式橫式 */
     @media print {
       body.cs-mode .cs-card {
         width: 297mm; height: 210mm;
@@ -980,6 +709,7 @@
 <div class="top-bar">
   <span class="top-title">🏠 房屋銷售介紹產生器</span>
   <button class="btn btn-toggle-cs" onclick="toggleCaseStudy()" id="btnCsToggle">📋 CASE STUDY 版型</button>
+  <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載 CASE STUDY Excel（可自行編輯）">📊 下載 Excel</button>
   <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
   <button class="btn btn-reset" onclick="resetAll()">重置</button>
 </div>
@@ -1529,354 +1259,296 @@
 
     </div>
 
-    <!-- ===== CASE STUDY 版型 ===== -->
+    <!-- ===== CASE STUDY 版型（table-based 重寫，比照永慶模板）===== -->
     <section class="cs-card" id="csCard" aria-hidden="true">
-      <!-- 頁首列 -->
-      <div class="cs-head">
-        <div class="cs-head-logo"><span class="brand-mark"></span>賞好賞不動產</div>
-        <div class="cs-head-title">
-          <div class="t1">高雄亞灣中華店</div>
-          <div class="t2">賞好賞不動產有限公司 (07-5375500) ・ 高雄市苓雅區中華四路122號</div>
-        </div>
-        <div class="cs-head-right">
-          <div class="cs-casestudy">CASE STUDY</div>
-          <div class="cs-contract">
-            <span class="lbl">合約編號</span>
-            <span class="cs-contract-val" id="cs-contract">－</span>
-          </div>
-          <div class="cs-keyhold">
-            <span class="lbl">鑰匙存置</span>
+
+      <!-- 頁首 -->
+      <table class="cs-head">
+        <colgroup>
+          <col style="width:48mm"><col><col style="width:22mm"><col style="width:42mm"><col style="width:28mm">
+        </colgroup>
+        <tr>
+          <td class="logo" rowspan="2"><span class="mark">賞</span>賞好賞</td>
+          <td class="shop">
+            高雄亞灣中華加盟店
+            <div class="shop-sub">賞好賞不動產有限公司 (07-5375500)・高雄市苓雅區中華四路 122 號</div>
+          </td>
+          <td class="badge" rowspan="2">CASE<br>STUDY</td>
+          <td class="keyh">
+            <b>鑰匙存置</b>
             <span class="chk" id="cs-key-store">店取</span>
             <span class="chk" id="cs-key-owner">屋主</span>
             <span class="chk" id="cs-key-agent">洽承辦</span>
-          </div>
-        </div>
-      </div>
+          </td>
+          <td class="contract" rowspan="2">
+            <b>合約編號</b>
+            <span id="cs-contract">－</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="border-top:0;font-size:9px;color:#666;padding:0.5mm 2mm;">&nbsp;</td>
+          <td style="border-top:0;font-size:9.5px;padding:0.5mm 2mm;background:#fffbea;">&nbsp;</td>
+        </tr>
+      </table>
 
-      <!-- 案件名稱 | 物件座落 | 建設公司/社區名稱 -->
-      <div class="cs-row2">
-        <div>
-          <div class="cs-label-box">案件<br>名稱</div>
-          <div class="cs-cell-val" id="cs-case-name">－</div>
-        </div>
-        <div>
-          <div class="cs-label-box">物件<br>座落</div>
-          <div class="cs-cell-val cs-addr" id="cs-addr">－</div>
-        </div>
-        <div class="cs-builder-stack">
-          <div>
-            <div class="lbl">建設公司</div>
-            <div class="val" id="cs-builder">－</div>
-          </div>
-          <div>
-            <div class="lbl">社區名稱</div>
-            <div class="val" id="cs-community">－</div>
-          </div>
-        </div>
-      </div>
+      <!-- Row2 案件名稱 / 建設公司 & 物件座落 / 社區名稱 -->
+      <table class="cs-row2">
+        <colgroup>
+          <col style="width:13mm"><col><col style="width:18mm"><col style="width:40mm">
+        </colgroup>
+        <tr>
+          <td class="lbl lbl-case">案件<br>名稱</td>
+          <td class="v-case" id="cs-case-name">－</td>
+          <td class="lbl lbl-bld">建設公司</td>
+          <td class="v-bld" id="cs-builder">－</td>
+        </tr>
+        <tr>
+          <td class="lbl lbl-loc">物件<br>座落</td>
+          <td class="v-addr" id="cs-addr">－</td>
+          <td class="lbl lbl-bld">社區名稱</td>
+          <td class="v-bld" id="cs-community">－</td>
+        </tr>
+      </table>
 
-      <!-- 價格列 -->
-      <div class="cs-row3">
-        <div class="cs-p1">
-          <div>
-            <div class="lbl">總建坪</div>
-            <div class="val" id="cs-total-ping">－</div>
-            <div class="unit">坪</div>
-          </div>
-          <div>
-            <div class="lbl">不含車位</div>
-            <div class="val" id="cs-nopark-ping">－</div>
-            <div class="unit">坪</div>
-          </div>
-        </div>
-        <div class="cs-p2">
-          <div>
-            <div class="lbl">房</div>
-            <div class="val" id="cs-price-house">－</div>
-            <div class="unit">萬</div>
-          </div>
-          <div>
-            <div class="lbl">車</div>
-            <div class="val" id="cs-price-park">－</div>
-            <div class="unit">萬</div>
-          </div>
-        </div>
-        <div class="cs-p3">
-          <div>
-            <div class="lbl">總價</div>
-            <div class="val" id="cs-price-total">－</div>
-            <div class="unit">萬</div>
-          </div>
-          <div>
-            <div class="lbl">單價</div>
-            <div class="val" id="cs-unit-price">－</div>
-            <div class="unit">萬/坪</div>
-          </div>
-        </div>
-        <div class="cs-p4">
-          <div>
-            <span class="chk" id="cs-withpark">含車</span>
-            <span class="chk" id="cs-nopark">不含車</span>
-          </div>
-          <div style="font-size:9.5px;">
-            <span class="lbl">設定</span>
-            <span class="chk" id="cs-mg-no">無</span>
-            <span class="chk" id="cs-mg-yes">有</span>
-            <span id="cs-mg-amt" style="font-weight:700;">－</span>
-            <span>萬</span>
-            <span id="cs-mg-bank" style="font-weight:700;">－</span>
-            <span>銀行</span>
-          </div>
-        </div>
-      </div>
+      <!-- Row3 坪/價 -->
+      <table class="cs-row3">
+        <colgroup>
+          <col style="width:16mm"><col><col style="width:8mm">
+          <col style="width:10mm"><col><col style="width:7mm">
+          <col style="width:16mm"><col><col style="width:12mm">
+          <col style="width:52mm">
+        </colgroup>
+        <tr>
+          <td class="lbl lbl-s">總建坪</td>
+          <td class="v-price" id="cs-total-ping">－</td>
+          <td class="unit u-s">坪</td>
+          <td class="lbl lbl-xs">房</td>
+          <td class="v-price" id="cs-price-house">－</td>
+          <td class="unit u-xs">萬</td>
+          <td class="lbl lbl-s">總價</td>
+          <td class="v-price" id="cs-price-total">－</td>
+          <td class="unit u-s">萬</td>
+          <td class="mixcell" rowspan="1">
+            <span class="chk" id="cs-withpark">含車位</span>
+            <span class="chk" id="cs-nopark">不含車位</span>
+          </td>
+        </tr>
+        <tr>
+          <td class="lbl lbl-s">不含車位</td>
+          <td class="v-price" id="cs-nopark-ping">－</td>
+          <td class="unit u-s">坪</td>
+          <td class="lbl lbl-xs">車</td>
+          <td class="v-price" id="cs-price-park">－</td>
+          <td class="unit u-xs">萬</td>
+          <td class="lbl lbl-s">單價</td>
+          <td class="v-price" id="cs-unit-price">－</td>
+          <td class="unit u-s">萬/坪</td>
+          <td class="mixcell">
+            設定 <span class="chk" id="cs-mg-no">無</span><span class="chk" id="cs-mg-yes">有</span>
+            <span id="cs-mg-amt" style="font-weight:800;">－</span> 萬
+            <span id="cs-mg-bank" style="font-weight:800;">－</span> 銀行
+          </td>
+        </tr>
+      </table>
 
-      <!-- 主建物 | 建築形態 | 格局/座向/警衛... | 挑高/面前道路/車位/公設 -->
-      <div class="cs-row4">
-        <!-- 主建物 樓層列表 -->
-        <div class="cs-main-table" id="cs-main-table">
-          <div class="lbl-主">主建物</div>
-          <div class="hd" style="grid-column: 2;">樓</div>
-          <div class="hd" style="grid-column: 3;">項目</div>
-          <div class="unit" style="grid-column: 4;">坪</div>
-          <!-- 7 rows 由 JS 填入 -->
-        </div>
-
-        <!-- 建築形態 column -->
-        <div class="cs-shape">
-          <div class="row">
-            <div class="lbl">建築<br>形態</div>
-            <div class="val col">
-              <div><span class="chk" id="cs-shape-town">透天 (</span><span id="cs-shape-town-fl" style="min-width:6mm;display:inline-block;text-align:center;"></span><span>樓)</span></div>
-              <div><span class="chk" id="cs-shape-mansion">大樓 (</span><span id="cs-shape-mansion-fl" style="min-width:14mm;display:inline-block;text-align:center;font-weight:700;"></span><span>樓)</span></div>
-              <div><span class="chk" id="cs-shape-apt">公寓 (</span><span id="cs-shape-apt-fl" style="min-width:6mm;display:inline-block;text-align:center;"></span><span>樓)</span></div>
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">基地<br>面積</div>
-            <div class="val"><span id="cs-land-area" style="font-weight:700;">－</span> 坪</div>
-          </div>
-          <div class="row">
-            <div class="lbl">主要<br>建材</div>
-            <div class="val">
-              <span class="chk" id="cs-mat-brick">加強磚造</span>
-              <span class="chk" id="cs-mat-steel">鋼骨結構造</span>
-              <span class="chk" id="cs-mat-rc">鋼筋混凝土造</span>
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">使用<br>用途</div>
-            <div class="val">
-              <span class="chk" id="cs-use-shop">店鋪</span>
-              <span class="chk" id="cs-use-resi">住宅</span>
-              <span class="chk" id="cs-use-office">辦公</span>
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">使用<br>現況</div>
-            <div class="val">
-              <span class="chk" id="cs-occ-empty">空屋</span>
-              <span class="chk" id="cs-occ-self">自用</span>
-              <span class="chk" id="cs-occ-rent">租賃</span>
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">建築<br>完成日</div>
-            <div class="val"><span id="cs-completion" style="font-weight:700;">－</span></div>
-          </div>
+      <!-- Row4 主要內容區（4 欄並排，各自 table）-->
+      <div class="cs-main">
+        <!-- 欄 1：主建物表 -->
+        <div class="col-mb">
+          <table class="cs-mb-inner" id="cs-mb-table">
+            <colgroup>
+              <col style="width:6mm"><col style="width:9mm"><col><col style="width:12mm">
+            </colgroup>
+            <tr>
+              <td class="vlbl" rowspan="8">主建物</td>
+              <td class="hd h-floor">樓</td>
+              <td class="hd h-item">項目</td>
+              <td class="hd h-ping">坪</td>
+            </tr>
+            <tr><td class="d-floor"></td><td class="d-item"></td><td class="d-ping"></td></tr>
+            <tr><td class="d-floor"></td><td class="d-item"></td><td class="d-ping"></td></tr>
+            <tr><td class="d-floor"></td><td class="d-item"></td><td class="d-ping"></td></tr>
+            <tr><td class="d-floor"></td><td class="d-item"></td><td class="d-ping"></td></tr>
+            <tr><td class="d-floor"></td><td class="d-item"></td><td class="d-ping"></td></tr>
+            <tr><td class="d-floor"></td><td class="d-item"></td><td class="d-ping"></td></tr>
+            <tr><td class="d-floor"></td><td class="d-item"></td><td class="d-ping"></td></tr>
+          </table>
         </div>
 
-        <!-- 格局/座向/警衛/管理費/電梯/學區/樂地/生活圈/捷運/登記日期 -->
-        <div class="cs-attr">
-          <div class="row">
-            <div class="lbl">格局</div>
-            <div class="val"><span id="cs-layout" style="font-weight:700;">－</span></div>
-          </div>
-          <div class="row">
-            <div class="lbl">座向</div>
-            <div class="val"><span id="cs-orientation" style="font-weight:700;">－</span></div>
-          </div>
-          <div class="row">
-            <div class="lbl">警衛</div>
-            <div class="val">
+        <!-- 欄 2：建築形態/基地面積/主要建材/使用用途/使用現況/建築完成日 -->
+        <div class="col-shape">
+          <table>
+            <colgroup><col style="width:14mm"><col></colgroup>
+            <tr>
+              <td class="row-lbl">建築<br>形態</td>
+              <td class="row-val chkline">
+                <span class="chk" id="cs-shape-town">透天(<span id="cs-shape-town-fl"></span>)</span>
+                <span class="chk" id="cs-shape-mansion">大樓(<span id="cs-shape-mansion-fl"></span>)</span>
+                <span class="chk" id="cs-shape-apt">公寓(<span id="cs-shape-apt-fl"></span>)</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="row-lbl">基地<br>面積</td>
+              <td class="row-val redv"><span id="cs-land-area">－</span>&nbsp;坪</td>
+            </tr>
+            <tr>
+              <td class="row-lbl">主要<br>建材</td>
+              <td class="row-val chkline">
+                <span class="chk" id="cs-mat-brick">加強磚造</span>
+                <span class="chk" id="cs-mat-steel">鋼骨結構</span>
+                <span class="chk" id="cs-mat-rc">鋼筋混凝土</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="row-lbl">使用<br>用途</td>
+              <td class="row-val chkline">
+                <span class="chk" id="cs-use-shop">店鋪</span>
+                <span class="chk" id="cs-use-resi">住宅</span>
+                <span class="chk" id="cs-use-office">辦公</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="row-lbl">使用<br>現況</td>
+              <td class="row-val chkline">
+                <span class="chk" id="cs-occ-empty">空屋</span>
+                <span class="chk" id="cs-occ-self">自用</span>
+                <span class="chk" id="cs-occ-rent">租賃</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="row-lbl">建築<br>完成日</td>
+              <td class="row-val redv" id="cs-completion">－</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- 欄 3：格局/座向/警衛/管理費/電梯/學區/樂地/生活圈/捷運/登記日期 -->
+        <div class="col-attr1">
+          <table>
+            <colgroup><col style="width:14mm"><col></colgroup>
+            <tr><td class="row-lbl">格　局</td><td class="row-val redv" id="cs-layout">－</td></tr>
+            <tr><td class="row-lbl">座　向</td><td class="row-val redv" id="cs-orientation">－</td></tr>
+            <tr><td class="row-lbl">警　衛</td><td class="row-val chkline">
               <span class="chk" id="cs-sec-yes">有</span>
               <span class="chk" id="cs-sec-no">無</span>
               <span class="chk" id="cs-sec-24h">24H</span>
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">管理費</div>
-            <div class="val" style="font-size:9.5px;">
-              <span id="cs-mgmt-fee" style="font-weight:700;">－</span> 元/月
-              <span style="margin-left:3mm;">每坪：</span>
-              <span id="cs-mgmt-per-ping">－</span> 元/年
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">電梯</div>
-            <div class="val">
-              <span id="cs-elev-unit" style="font-weight:700;">－</span> 戶
-              <span id="cs-elev-count" style="font-weight:700;margin-left:2mm;">－</span> 部
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">學區</div>
-            <div class="val" style="font-size:9px;"><span id="cs-school" style="font-weight:700;">－</span></div>
-          </div>
-          <div class="row">
-            <div class="lbl">樂地</div>
-            <div class="val" style="font-size:9.5px;"><span id="cs-park-area">－</span></div>
-          </div>
-          <div class="row">
-            <div class="lbl">生活圈</div>
-            <div class="val" style="font-size:9.5px;"><span id="cs-life-zone">－</span></div>
-          </div>
-          <div class="row">
-            <div class="lbl">捷運</div>
-            <div class="val" style="font-size:9.5px;"><span id="cs-mrt">－</span></div>
-          </div>
-          <div class="row">
-            <div class="lbl">登記<br>日期</div>
-            <div class="val"><span id="cs-reg-date" style="font-weight:700;">－</span></div>
-          </div>
+            </td></tr>
+            <tr><td class="row-lbl">管理費</td><td class="row-val" style="font-size:9.5px;">
+              <span id="cs-mgmt-fee" style="color:#c92424;font-weight:800;">－</span>&nbsp;元/月
+              &nbsp;每坪 <span id="cs-mgmt-per-ping">－</span>&nbsp;元/年
+            </td></tr>
+            <tr><td class="row-lbl">電　梯</td><td class="row-val" style="font-size:10px;">
+              <span id="cs-elev-unit" style="color:#c92424;font-weight:800;">－</span>&nbsp;戶
+              &nbsp;<span id="cs-elev-count" style="color:#c92424;font-weight:800;">－</span>&nbsp;部
+            </td></tr>
+            <tr><td class="row-lbl">學　區</td><td class="row-val" style="font-size:9.5px;" id="cs-school">－</td></tr>
+            <tr><td class="row-lbl">樂　地</td><td class="row-val" style="font-size:9.5px;" id="cs-park-area">－</td></tr>
+            <tr><td class="row-lbl">生活圈</td><td class="row-val" style="font-size:9.5px;" id="cs-life-zone">－</td></tr>
+            <tr><td class="row-lbl">捷　運</td><td class="row-val" style="font-size:9.5px;" id="cs-mrt">－</td></tr>
+            <tr><td class="row-lbl">登記<br>日期</td><td class="row-val redv" id="cs-reg-date">－</td></tr>
+          </table>
         </div>
 
-        <!-- 本戶挑高/面前道路/車位/編號/機車位/種類/入口/公設 -->
-        <div class="cs-attr">
-          <div class="row">
-            <div class="lbl">本戶<br>挑高</div>
-            <div class="val"><span id="cs-ceiling" style="font-weight:700;">－</span> 米</div>
-          </div>
-          <div class="row">
-            <div class="lbl">面前<br>道路</div>
-            <div class="val"><span id="cs-road-width" style="font-weight:700;">－</span> 米</div>
-          </div>
-          <div class="row">
-            <div class="lbl">車位</div>
-            <div class="val">
+        <!-- 欄 4：本戶挑高/面前道路/車位/編號/機車位/種類/入口/公設 -->
+        <div class="col-attr2">
+          <table>
+            <colgroup><col style="width:14mm"><col></colgroup>
+            <tr><td class="row-lbl">本戶<br>挑高</td><td class="row-val redv"><span id="cs-ceiling">－</span>&nbsp;米</td></tr>
+            <tr><td class="row-lbl">面前<br>道路</td><td class="row-val redv"><span id="cs-road-width">－</span>&nbsp;米</td></tr>
+            <tr><td class="row-lbl">車　位</td><td class="row-val chkline">
               <span class="chk" id="cs-park-yes">有</span>
               <span class="chk" id="cs-park-no">無</span>
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">編號</div>
-            <div class="val" style="font-size:9.5px;"><span id="cs-park-no-num" style="font-weight:700;">－</span></div>
-          </div>
-          <div class="row">
-            <div class="lbl">機車位</div>
-            <div class="val" style="font-size:9.5px;"><span id="cs-moto-num" style="font-weight:700;">－</span></div>
-          </div>
-          <div class="row">
-            <div class="lbl">種類</div>
-            <div class="val">
+            </td></tr>
+            <tr><td class="row-lbl">編　號</td><td class="row-val" id="cs-park-no-num">－</td></tr>
+            <tr><td class="row-lbl">機車位</td><td class="row-val" id="cs-moto-num">－</td></tr>
+            <tr><td class="row-lbl">種　類</td><td class="row-val chkline">
               <span class="chk" id="cs-park-flat">平面車位</span>
               <span class="chk" id="cs-park-mech">機械車位</span>
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">入口</div>
-            <div class="val">
+            </td></tr>
+            <tr><td class="row-lbl">入　口</td><td class="row-val chkline">
               <span class="chk" id="cs-entry-ramp">坡道式</span>
               <span class="chk" id="cs-entry-lift">昇降式</span>
-            </div>
-          </div>
-          <div class="row" style="grid-row: span 3;">
-            <div class="lbl">公設</div>
-            <div class="val" style="font-size:9px;line-height:1.5;align-items:flex-start;padding:1mm 2mm;">
-              <span id="cs-facilities">－</span>
-            </div>
-          </div>
+            </td></tr>
+            <tr><td class="row-lbl">公　設</td><td class="row-val" style="font-size:9px;line-height:1.45;" id="cs-facilities">－</td></tr>
+          </table>
         </div>
       </div>
 
-      <!-- 底部：附屬/公設/車位/地坪/土地 | 位置圖 | 平面圖 | 訴求重點+聯絡 -->
-      <div class="cs-row5">
-        <!-- 附屬建物/公設/車位/地坪/土地/公告現值/總戶數 -->
-        <div class="cs-extras">
-          <div class="row">
-            <div class="lbl">附屬建物</div>
-            <div class="val" style="justify-content:flex-end;"><span id="cs-attached" style="font-weight:600;">－</span></div>
-            <div class="unit">坪</div>
-          </div>
-          <div class="row">
-            <div class="lbl">公設</div>
-            <div class="val" style="justify-content:flex-end;"><span id="cs-pubarea" style="font-weight:600;">－</span></div>
-            <div class="unit">坪</div>
-          </div>
-          <div class="row">
-            <div class="lbl">車位</div>
-            <div class="val" style="justify-content:flex-end;"><span id="cs-park-ping" style="font-weight:600;">－</span></div>
-            <div class="unit">坪</div>
-          </div>
-          <div class="row">
-            <div class="lbl gold">地坪</div>
-            <div class="val" style="justify-content:flex-end;"><span id="cs-land-ping" style="font-weight:700;color:#a06400;">－</span></div>
-            <div class="unit">坪</div>
-          </div>
-          <div class="row full">
-            <div class="lbl" style="line-height:1.2;">土<br>地</div>
-            <div class="val" style="flex-direction:column;align-items:flex-start;gap:0.5mm;padding:1mm 2mm;">
-              <span class="chk" id="cs-land-full">所有權全部</span>
-              <span class="chk" id="cs-land-share">持分</span>
-            </div>
-          </div>
-          <div class="row full">
-            <div class="lbl">使用<br>區分</div>
-            <div class="val" style="flex-direction:column;align-items:flex-start;gap:0.5mm;padding:1mm 2mm;font-size:9.5px;">
-              <span class="chk" id="cs-zone-biz5">第五種商業區</span>
-              <span class="chk" id="cs-zone-biz">商業區</span>
-              <span id="cs-zone-other" style="font-size:9px;"></span>
-            </div>
-          </div>
-          <div class="row">
-            <div class="lbl">公告現值</div>
-            <div class="val" style="justify-content:flex-end;"><span id="cs-pub-val" style="font-weight:600;font-size:9.5px;">－</span></div>
-            <div class="unit" style="font-size:8px;">元/m²</div>
-          </div>
-          <div class="row">
-            <div class="lbl">總戶數</div>
-            <div class="val" style="justify-content:flex-end;"><span id="cs-total-units" style="font-weight:600;">－</span></div>
-            <div class="unit">戶</div>
-          </div>
+      <!-- Row5 底部：附屬/公設/車位/地坪 | 位置圖 | 平面圖 | 訴求+聯絡 -->
+      <div class="cs-bottom">
+        <!-- 附屬/土地/使用區分/公告現值 -->
+        <div class="col-extras">
+          <table class="extras-table">
+            <colgroup><col style="width:13mm"><col><col style="width:8mm"></colgroup>
+            <tr><td class="lbl">附屬建物</td><td class="val" id="cs-attached">－</td><td class="unit">坪</td></tr>
+            <tr><td class="lbl">公　設</td><td class="val" id="cs-pubarea">－</td><td class="unit">坪</td></tr>
+            <tr><td class="lbl">車　位</td><td class="val" id="cs-park-ping">－</td><td class="unit">坪</td></tr>
+            <tr><td class="lbl" style="background:#ffe79a;">地　坪</td><td class="val" style="color:#c92424;font-size:11px;" id="cs-land-ping">－</td><td class="unit">坪</td></tr>
+            <tr>
+              <td class="lbl" rowspan="2">土　地</td>
+              <td colspan="2" style="padding:0.5mm 2mm;text-align:left;">
+                <span class="chk" id="cs-land-full">所有權全部</span>
+                <span class="chk" id="cs-land-share">持分</span>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:0.5mm 2mm;font-size:9px;">&nbsp;</td>
+            </tr>
+            <tr>
+              <td class="lbl" rowspan="2">使用<br>區分</td>
+              <td colspan="2" style="padding:0.5mm 2mm;font-size:9.5px;text-align:left;">
+                <span class="chk" id="cs-zone-biz5">第五種商業區</span>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:0.5mm 2mm;font-size:9.5px;text-align:left;">
+                <span class="chk" id="cs-zone-biz">商業區</span>
+                <span id="cs-zone-other" style="font-size:9px;"></span>
+              </td>
+            </tr>
+            <tr>
+              <td class="lbl">公告<br>現值</td>
+              <td class="val" style="font-size:9.5px;" id="cs-pub-val">－</td>
+              <td class="unit" style="font-size:7.5px;">元/m²</td>
+            </tr>
+          </table>
         </div>
 
         <!-- 位置圖 -->
-        <div class="cs-map-cell">
-          <div class="cs-cell-title">位 置 圖</div>
-          <div class="cs-map-body" id="cs-map-body">
+        <div class="col-map">
+          <div class="media-title">位&nbsp;&nbsp;置&nbsp;&nbsp;圖</div>
+          <div class="media-body" id="cs-map-body">
             <div class="placeholder">位置圖將於上傳謄本後自動顯示</div>
           </div>
         </div>
 
         <!-- 平面參考圖 -->
-        <div class="cs-plan-cell">
-          <div class="cs-cell-title">平 面 參 考 圖</div>
-          <div class="cs-plan-body" id="cs-plan-body">
-            <div class="placeholder">請於左欄上傳平面圖（JPG / PNG）</div>
+        <div class="col-plan">
+          <div class="media-title">平&nbsp;面&nbsp;參&nbsp;考&nbsp;圖</div>
+          <div class="media-body" id="cs-plan-body">
+            <div class="placeholder">請於左欄上傳平面圖</div>
           </div>
-          <div class="cs-plan-footnote">本格圖僅供一定比例描繪，與實況或方向存在差異。</div>
+          <div class="plan-note">本格圖僅供一定比例描繪，與實況或方向存在差異。</div>
         </div>
 
         <!-- 訴求重點 + 聯絡 -->
-        <div class="cs-right">
-          <div class="cs-points-head">訴 求 重 點</div>
-          <div class="cs-points-body" id="cs-points-body">
+        <div class="col-right">
+          <div class="points-head">訴　求　重　點</div>
+          <div class="points-body" id="cs-points-body">
             <div class="p">請於左欄填寫訴求重點</div>
           </div>
-          <div class="cs-contact-block">
-            <div class="lbl">店長</div>
-            <div class="val big">江炳賞</div>
-            <div class="lbl">承辦人</div>
-            <div class="val" id="cs-partner-name">－</div>
-            <div class="lbl">電話</div>
-            <div class="val" id="cs-partner-phone">－</div>
-            <div class="lbl">經紀人</div>
-            <div class="val agent">江炳賞(114)高市字第01680號</div>
-          </div>
+          <table class="contact">
+            <colgroup><col style="width:13mm"><col></colgroup>
+            <tr><td class="clbl">店　長</td><td class="cval big">江炳賞</td></tr>
+            <tr><td class="clbl">承辦人</td><td class="cval" id="cs-partner-name">－</td></tr>
+            <tr><td class="clbl">電　話</td><td class="cval" id="cs-partner-phone">－</td></tr>
+            <tr><td class="clbl">經紀人</td><td class="cval agent">江炳賞 (114) 高市字第01680號</td></tr>
+          </table>
         </div>
       </div>
 
-      <!-- 免責聲明 -->
-      <div class="cs-footer-disclaim">
+      <!-- 頁尾聲明 -->
+      <div class="cs-disclaim">
         本表單係店內部流通資料，不得作為正式銷售文件；如有差異，請從業人員依『不動產說明書』內載資料為準。
       </div>
     </section>
@@ -3198,32 +2870,22 @@
     setCsTextPlain('cs-mg-amt', mgAmt ? mgAmt : (d.mortgageAmt ? Math.round(d.mortgageAmt/10000) : '－'));
     setCsTextPlain('cs-mg-bank', mgBank || shortBank(d.mortgageBank) || '－');
 
-    // 主建物表格（7 列）
-    const tbl = document.getElementById('cs-main-table');
+    // 主建物表格（7 列：第 1 列 header，之後 7 列資料填 tr.cs-mb-row）
+    const tbl = document.getElementById('cs-mb-table');
     if (tbl) {
-      // 清掉前次資料 cell（保留 lbl-主 / hd / unit header）
-      Array.from(tbl.querySelectorAll('.cs-main-cell')).forEach(n => n.remove());
       const rows = (d.floorBreakdown && d.floorBreakdown.length > 0)
         ? d.floorBreakdown.slice(0, 7)
         : (d.mainPing ? [{ name: d.floor ? (typeof d.floor === 'number' ? `${d.floor}F` : d.floor) : '主', ping: d.mainPing, area: d.mainArea }] : []);
-      const maxRows = 7;
-      for (let i = 0; i < maxRows; i++) {
-        const r = rows[i] || {};
-        const c1 = document.createElement('div');
-        c1.className = 'cs-main-cell';
-        c1.style.cssText = 'justify-content:center;font-size:9.5px;';
-        c1.textContent = r.name ? String(r.name) : '';
-        const c2 = document.createElement('div');
-        c2.className = 'cs-main-cell';
-        c2.style.cssText = 'font-size:9.5px;';
-        c2.textContent = r.name ? '主建物' : '';
-        const c3 = document.createElement('div');
-        c3.className = 'cs-main-cell val';
-        c3.style.cssText = 'font-size:9.5px;';
-        c3.textContent = r.ping ? String(r.ping) : '';
-        tbl.appendChild(c1);
-        tbl.appendChild(c2);
-        tbl.appendChild(c3);
+      const dataRows = tbl.querySelectorAll('tr');
+      // dataRows[0] 是 header，dataRows[1..7] 是資料列（8 tr 總共）
+      for (let i = 1; i < dataRows.length; i++) {
+        const r = rows[i - 1] || {};
+        const cells = dataRows[i].querySelectorAll('td');
+        if (cells.length >= 3) {
+          cells[0].textContent = r.name ? String(r.name) : '';
+          cells[1].textContent = r.name ? '主建物' : '';
+          cells[2].textContent = r.ping ? String(r.ping) : '';
+        }
       }
     }
 
@@ -3415,6 +3077,304 @@
       }
     }
   })();
+
+  // ===== CASE STUDY 下載 Excel =====
+  async function downloadCaseStudyXlsx() {
+    const btn = document.getElementById('btnCsXlsx');
+    const origText = btn.textContent;
+    btn.textContent = '⏳ 產生中...';
+    btn.disabled = true;
+    try {
+      // 1. Fetch 範本
+      const resp = await fetch('cs-template.xlsx?v=' + Date.now());
+      if (!resp.ok) throw new Error(`範本下載失敗 ${resp.status}`);
+      const buf = await resp.arrayBuffer();
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buf);
+      const ws = wb.worksheets[0];
+
+      // 2. 蒐集資料
+      const d = (typeof deed === 'object' && deed) ? deed : {};
+      const landEntries = Object.values(typeof _landData === 'object' && _landData ? _landData : {}).filter(e => e.ping > 0);
+      const val = id => (document.getElementById(id)?.value || '').trim();
+      const num = id => parseFloat(val(id)) || 0;
+
+      // 價格
+      const priceTotal = num('s-price-total');
+      const priceHouse = num('s-price-house');
+      const priceCar = num('s-price-car');
+      const noParPrice = priceHouse || (priceTotal && !priceCar ? priceTotal : 0);
+
+      // 設定
+      const mgAmt = num('cs-s-mg-amt');
+      const mgBank = val('cs-s-mg-bank');
+      const hasMg = !!mgAmt || d.hasMortgage;
+      const mgAmtShow = mgAmt || (d.mortgageAmt ? Math.round(d.mortgageAmt / 10000) : 0);
+      const mgBankShow = mgBank || shortBank(d.mortgageBank) || '';
+
+      // 格局/座向
+      const bedroom = num('s-rooms'), hall = num('s-living'), bath = num('s-bath');
+
+      // 學區
+      const schoolStr = val('s-school');
+      const schoolJ = (schoolStr.match(/([^\s、，,]+?)國中/) || [])[1] || '';
+      const schoolP = (schoolStr.match(/([^\s、，,]+?)國小/) || [])[1] || '';
+
+      // 訴求重點
+      const pointsRaw = val('s-points');
+      const points = pointsRaw.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 6);
+
+      // 土地
+      const zones = landEntries.map(e => e.zone).filter(Boolean);
+      const zoneStr = zones.join(' ／ ');
+      const pubValEntry = landEntries.find(e => e.pubVal);
+      const landTotal = (typeof getLandTotal === 'function') ? getLandTotal() : 0;
+
+      // 3. 填入儲存格（mapping 比照 售 (2) 範本）
+      const S = (addr, v) => {
+        if (v === undefined || v === null || v === '') return;
+        const cell = ws.getCell(addr);
+        cell.value = v;
+      };
+
+      // 頁首
+      S('CM4', val('cs-s-contract'));
+      // 鑰匙存置：在對應位置寫 ● 符號
+      const keyhold = val('cs-s-keyhold');
+      if (keyhold === 'store') S('CN2', '●');
+      else if (keyhold === 'owner') S('CT2', '●');
+      else if (keyhold === 'agent') S('DB2', '●');
+
+      // 案件 / 物件 / 建設 / 社區
+      S('F5', val('cs-s-case-name'));
+      S('AR5', d.address ? `${d.district || '高雄市'}${d.address}` : '');
+      S('CW5', val('cs-s-builder'));
+      S('CW7', val('cs-s-community'));
+
+      // 坪 / 價 / 設定
+      // M9 / M13 / BJ9 是公式，不要覆蓋。填主建物各層坪數即可自動加總。
+      S('AB9', priceHouse || noParPrice || '');
+      S('AO9', priceTotal || '');
+      S('AB13', priceCar || '');
+      S('BM14', (priceTotal && priceCar) ? '●' : '');
+      S('BT14', (noParPrice && !priceCar) ? '●' : '');
+
+      // 設定
+      S('CH11', !hasMg ? '●' : '');
+      S('CM11', hasMg ? '●' : '');
+      S('CQ11', hasMg && mgAmtShow ? mgAmtShow : '');
+      S('CY11', hasMg ? mgBankShow : '');
+
+      // 主建物逐層：6 列（row 21/24/27/30/33/36）
+      // Col: D 或 J（依範本為 D21、D24、J27、J30、J33、J36）放樓層；G 放用途；M 放坪數
+      const mbRows = [
+        { r: 21, floorCol: 'D' },
+        { r: 24, floorCol: 'D' },
+        { r: 27, floorCol: 'J' },
+        { r: 30, floorCol: 'J' },
+        { r: 33, floorCol: 'J' },
+        { r: 36, floorCol: 'J' },
+      ];
+      const fb = (d.floorBreakdown && d.floorBreakdown.length > 0)
+        ? d.floorBreakdown.slice(0, 6)
+        : (d.mainPing ? [{ name: d.floor || '主', ping: d.mainPing, use: '主建物' }] : []);
+      fb.forEach((row, i) => {
+        const m = mbRows[i];
+        if (!m) return;
+        let floor = row.name || row.floor || '';
+        floor = String(floor).replace(/F$/i, '').replace(/樓$/, '');
+        S(`${m.floorCol}${m.r}`, floor);
+        S(`G${m.r}`, row.use || '主建物');
+        S(`M${m.r}`, row.ping || '');
+      });
+
+      // 建築屬性欄
+      const shape = val('cs-s-shape') || ((d.totalFloors >= 7) ? 'mansion' : (d.totalFloors >= 2 ? 'apt' : ''));
+      const flStr = d.totalFloors ? `${d.totalFloors}${d.basementFloors ? '/地下' + d.basementFloors : ''}` : '';
+      if (shape === 'town') S('AJ18', '●');
+      if (shape === 'mansion') S('AJ21', '●');
+      if (shape === 'apt') S('AJ24', '●');
+      S('AR18', shape === 'town' ? flStr : '');
+      S('AR21', shape === 'mansion' ? flStr : '');
+      S('AR24', shape === 'apt' ? flStr : '');
+
+      S('AJ27', landTotal || '');  // 基地面積
+      const mat = String(d.material || '');
+      if (/加強磚/.test(mat)) S('AJ30', '●');
+      if (/鋼骨|SRC|SC(?![A-Z])/.test(mat)) S('AT30', '●');
+      if (/鋼筋混凝土|RC/.test(mat)) S('AJ33', '●');
+
+      const useSel = val('cs-s-use');
+      const usage = String(d.usage || '');
+      if (useSel === 'shop' || /店舖|店鋪|商場/.test(usage)) S('AJ36', '●');
+      if (useSel === 'resi' || /住宅|住家/.test(usage)) S('AQ36', '●');
+      if (useSel === 'office' || /辦公/.test(usage)) S('AX36', '●');
+
+      const occ = val('s-occupancy');
+      if (/空屋/.test(occ)) S('AJ39', '●');
+      if (/自住/.test(occ)) S('AQ39', '●');
+      if (/出租/.test(occ)) S('AX39', '●');
+
+      if (d.completionRoc) {
+        S('AJ42', d.completionRoc);
+      }
+
+      // 格局屬性欄
+      if (bedroom) S('BM18', bedroom);
+      if (hall) S('BT18', hall);
+      if (bath) S('BZ18', bath);
+      S('CP18', val('cs-s-ceiling'));
+
+      // 座向
+      const orient = (typeof document !== 'undefined') ? (window._orientation || '') : '';
+      // 座西朝東 → 座欄 = 西, 朝欄 = 東
+      const oMatch = String(orient).match(/座([^朝]+)朝(.+)/);
+      if (oMatch) {
+        S('BP21', oMatch[1]);
+        S('BY21', oMatch[2]);
+      }
+      S('CP21', val('cs-s-road'));
+
+      // 警衛
+      const sec = val('cs-s-security');
+      if (sec === 'yes') S('BP24', '●');
+      if (sec === 'no') S('BU24', '●');
+      if (sec === '24h') S('BZ24', '●');
+
+      // 車位
+      if (d.hasParking) S('CR24', '●');
+      else S('CZ24', '●');
+
+      // 管理費
+      const mgmtFee = num('s-mgmt') || (typeof _lastMgmtFee !== 'undefined' ? _lastMgmtFee : 0);
+      if (mgmtFee) S('BM27', mgmtFee);
+      S('BW27', val('s-moto'));
+
+      // 編號
+      if (d.parkNo) {
+        const pm = String(d.parkNo).match(/地下\s*(\S+?)\s*層?\s*(?:第)?(\d+)\s*號?/);
+        if (pm) {
+          S('CT27', pm[1]);
+          S('CZ27', pm[2]);
+        } else {
+          S('CT27', d.parkNo);
+        }
+      }
+
+      // 電梯
+      S('BN30', num('cs-s-elev-unit'));
+      S('BV30', num('cs-s-elev-count'));
+
+      // 學區
+      S('BN33', schoolJ);
+      S('BW33', schoolP);
+
+      // 綠地 / 捷運 / 生活圈
+      const lifeStr = val('s-life');
+      const trafficStr = val('s-traffic');
+      const locationStr = val('s-location');
+      const mrtLine = trafficStr.split('\n').find(l => /捷運|輕軌|火車|高鐵/.test(l)) || '';
+      const parkLine = lifeStr.split('\n').find(l => /公園|綠地|河岸/.test(l)) || '';
+      S('BN36', parkLine);
+      S('BN39', (locationStr.split('\n')[0] || lifeStr.split('\n')[0] || ''));
+      S('BN42', mrtLine);
+
+      // 登記日期（ROC 年 月 日）
+      if (d.ownerRegDate) {
+        const rm = String(d.ownerRegDate).match(/(\d+)\s*年\s*(\d+)\s*月\s*(\d+)/);
+        if (rm) {
+          S('BN45', rm[1]);
+          S('BT45', rm[2]);
+          S('BZ45', rm[3]);
+        }
+      }
+
+      // 車位種類 / 入口
+      const parkType = val('cs-s-park-type');
+      const parkStatus = val('s-park-status');
+      if (parkType === 'flat' || /平面/.test(parkStatus)) S('CR33', '●');
+      if (parkType === 'mech' || /機械/.test(parkStatus)) S('DA33', '●');
+      const parkEntry = val('cs-s-park-entry');
+      if (parkEntry === 'ramp' || /坡道/.test(parkStatus)) S('CR36', '●');
+      if (parkEntry === 'lift' || /昇降/.test(parkStatus)) S('CZ36', '●');
+
+      // 公設內容（兩行）
+      const facText = (typeof computeFacilities === 'function' ? '' : '') || val('cs-s-facilities') || '';
+      S('CP39', facText);
+
+      // 底部：附屬/公設/車位/地坪 — 填各自的 M 列
+      // 注意：M9/M13 是公式會自動算，所以要把各層坪填進 M 列（已在主建物迴圈完成）
+      // 附屬、公設、車位、地坪是獨立列
+      S('M39', d.attachedPing || '');
+      S('M42', d.pubOnlyPing || '');
+      S('M45', d.parkPing || '');
+      S('M48', landTotal || '');
+
+      // 土地所有權
+      const landOwn = val('cs-s-land-own');
+      if (landOwn === 'full') S('F55', '●');
+      if (landOwn === 'share') S('F58', '●');
+
+      // 使用區分
+      if (/第五種商業區|商業區/.test(zoneStr)) S('B69', '●');
+      if (/住宅/.test(zoneStr)) S('B66', '●');
+      if (/工業/.test(zoneStr)) S('M66', '●');
+      if (zoneStr && !/第五種商業區/.test(zoneStr)) S('E69', zoneStr);
+
+      // 公告現值
+      if (pubValEntry?.pubVal) S('J72', pubValEntry.pubVal);
+
+      // 總戶數
+      S('J75', val('cs-s-total-units'));
+
+      // 訴求重點（★ 6 條：CJ48 / CJ51 / CJ54 / CJ57 / CJ60 / CJ63）
+      const pointCells = ['CJ48', 'CJ51', 'CJ54', 'CJ57', 'CJ60', 'CJ63'];
+      points.forEach((p, i) => { if (pointCells[i]) S(pointCells[i], p); });
+
+      // 店長/承辦人/電話/經紀人
+      S('CP63', val('cs-s-partner-name') || '江 炳 賞');
+      S('CP67', '江炳賞');
+      S('CP71', '0971-115207');
+      S('CP75', '江炳賞(114)高市字第01680號');
+
+      // 4. 圖片（平面圖：使用者上傳過的）
+      const planImg = document.querySelector('#csPlanPreview img, #planPreview img');
+      if (planImg && planImg.src && planImg.src.startsWith('data:')) {
+        try {
+          const base64 = planImg.src.split(',')[1];
+          const ext = (planImg.src.match(/data:image\/(\w+);/) || [])[1] || 'png';
+          const imgId = wb.addImage({
+            base64: base64,
+            extension: ext === 'jpg' ? 'jpeg' : ext,
+          });
+          // 平面圖位置大約是 BE45:CF62 區域
+          ws.addImage(imgId, {
+            tl: { col: 56, row: 46 },   // 約 BE 欄、row 47
+            br: { col: 84, row: 62 },   // 約 CF 欄、row 63
+            editAs: 'oneCell',
+          });
+        } catch (e) { console.warn('平面圖嵌入失敗', e); }
+      }
+
+      // 5. 觸發下載
+      const out = await wb.xlsx.writeBuffer();
+      const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const fname = [val('cs-s-contract') || 'CASE', d.address || '物件'].filter(Boolean).join('-') + '.xlsx';
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+    } catch (err) {
+      console.error(err);
+      alert('產生 Excel 失敗：' + err.message);
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+  }
 
   // ===== Parsed Summary =====
   function showParsedSummary(d) {
