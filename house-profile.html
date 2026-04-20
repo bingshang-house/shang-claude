@@ -2966,25 +2966,23 @@ ${factsText}
     return mins <= 1 ? '1 分鐘' : `${mins} 分鐘`;
   }
 
-  // 依距離決定步行或開車，並換算正確時間
-  // 回傳 { label, mins, text } 或 null（超過30分鐘則不顯示）
-  // 直線距離轉實際通勤時間（短距離走路才用此；長距離/車程一律走 Distance Matrix）
-  // 走路：直線 × 1.3 / 5 km/h ≈ meters / 64
-  function travelInfo(meters) {
-    if (meters <= 1200) {
-      const mins = Math.max(1, Math.round(meters / 64));
-      if (mins > 30) return null;
-      return { label: '步行', mins, text: `步行約 ${mins} 分鐘` };
-    } else {
-      const mins = Math.max(1, Math.round(meters / 286));
-      if (mins > 30) return null;
-      return { label: '車程', mins, text: `車程約 ${mins} 分鐘` };
-    }
+  // 距離文字：<1000 顯示公尺整數，>=1000 顯示公里一位小數
+  // 賞哥 2026-04-21 改版：全站 POI 改用直線距離，不再用步行/車程分鐘
+  function distText(meters) {
+    if (meters == null) return '';
+    if (meters >= 1000) return `距離約 ${(meters / 1000).toFixed(1)} 公里`;
+    return `距離約 ${meters} 公尺`;
   }
 
-  function travelText(mins, mode) {
-    const label = mode === 'DRIVING' ? '車程' : '步行';
-    return `${label}約 ${mins} 分鐘`;
+  function travelInfo(meters) {
+    if (meters == null) return null;
+    return { meters, text: distText(meters) };
+  }
+
+  // 舊介面保留，內部也改走距離（避免還沒改到的呼叫點文字不一致）
+  function travelText(_mins, _mode, meters) {
+    if (meters != null) return distText(meters);
+    return '';
   }
 
   function topN(places, loc, n) {
@@ -3110,11 +3108,13 @@ ${factsText}
     }
   }
 
-  async function topNRouted(places, loc, n, mode = 'DRIVING', maxMins = 30) {
+  // 用實際路徑距離篩選 + 排序（過去用分鐘，2026-04-21 改用公尺）
+  // 預設 1500m（賞哥指定生活機能範圍），devPOI 重點發展呼叫時會傳 5000
+  async function topNRouted(places, loc, n, mode = 'DRIVING', maxMeters = 1500) {
     const rows = await routeMatrix(loc, places, mode);
     return rows
-      .filter(r => r.mins != null && r.mins <= maxMins)
-      .sort((a, b) => a.mins - b.mins)
+      .filter(r => r.d != null && r.d <= maxMeters)
+      .sort((a, b) => a.d - b.d)
       .slice(0, n);
   }
 
@@ -3162,23 +3162,24 @@ ${factsText}
       const [subway, busType, busTransit, busText, ferryText, convenience, market,
              shopee, childcare, clinic, bank, nightmarket,
              districtA, districtB, park, devPOI, interchange] = await Promise.all([
-        nearbySearch(loc, 'subway_station',    null,           3000),
+        // 搜尋半徑 2026-04-21 改版：全站統一 1500m，重點發展除外保留 5000m
+        nearbySearch(loc, 'subway_station',    null,           1500),
         nearbySearch(loc, 'bus_station',       null,           1500),
         nearbySearch(loc, 'transit_station',   null,           1500),
         nearbySearch(loc, null, '公車站 公車站牌 客運站',      1500),
-        nearbySearch(loc, null, '渡輪站 輪渡站 渡船頭',        4000),
-        nearbySearch(loc, 'convenience_store', null,            500),
-        nearbySearch(loc, null, '傳統市場 菜市場',              1200),
-        nearbySearch(loc, null, '蝦皮店到店',                   800),
-        nearbySearch(loc, null, '公共托育 公托 幼兒園',         1000),
-        nearbySearch(loc, 'hospital',          null,           1200),
-        nearbySearch(loc, 'bank',              null,            800),
-        nearbySearch(loc, null, '夜市',                        3000),
-        nearbySearch(loc, null, '商圈',                        4000),
-        nearbySearch(loc, null, '老街 特色街 文創園區 老地名', 4000),
-        nearbySearch(loc, 'park',              null,           1000),
-        nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  5000),
-        nearbySearch(loc, null, '交流道 IC 快速道路交流道',    5000),
+        nearbySearch(loc, null, '渡輪站 輪渡站 渡船頭',        1500),
+        nearbySearch(loc, 'convenience_store', null,           1500),
+        nearbySearch(loc, null, '傳統市場 菜市場',             1500),
+        nearbySearch(loc, null, '蝦皮店到店',                  1500),
+        nearbySearch(loc, null, '公共托育 公托 幼兒園',        1500),
+        nearbySearch(loc, 'hospital',          null,           1500),
+        nearbySearch(loc, 'bank',              null,           1500),
+        nearbySearch(loc, null, '夜市',                        1500),
+        nearbySearch(loc, null, '商圈',                        1500),
+        nearbySearch(loc, null, '老街 特色街 文創園區 老地名', 1500),
+        nearbySearch(loc, 'park',              null,           1500),
+        nearbySearch(loc, null, '展覽館 科技園區 亞洲新灣區',  5000), // 重點發展
+        nearbySearch(loc, null, '交流道 IC 快速道路交流道',    5000), // 重點發展（交流道跨區常見）
       ]);
       // 渡輪站過濾（避免抓到相關店家）
       const ferry = ferryText.filter(p => /渡輪|輪渡|渡船|碼頭/.test(p.displayName || ''));
@@ -3203,48 +3204,48 @@ ${factsText}
 
       // ── 用 Distance Matrix 批次算實際路徑（處理旗津過港隧道等跨地形案例）──
       statusEl.textContent = '🚗 計算實際路徑時間中…';
+      // 預設 1500m（topNRouted 內建），重點發展/交流道呼叫時傳 5000m
       const [subwayDR, busWR, ferryDR, ichDR, nmDR, dA_DR, dB_DR, devDR] = await Promise.all([
         topNRouted(subway,      loc, 3, 'DRIVING'),
-        topNRouted(bus,         loc, 5, 'WALKING', 20), // 公車站只收 20 分鐘步行內的
-        topNRouted(ferry,       loc, 2, 'DRIVING'),      // 渡輪站（旗津/鼓山案例）
-        topNRouted(ichValid,    loc, 5, 'DRIVING'),
+        topNRouted(bus,         loc, 5, 'WALKING'),
+        topNRouted(ferry,       loc, 2, 'DRIVING'),
+        topNRouted(ichValid,    loc, 5, 'DRIVING', 5000), // 交流道跨區
         topNRouted(nightmarket, loc, 1, 'DRIVING'),
         topNRouted(districtA,   loc, 10, 'DRIVING'),
         topNRouted(districtB,   loc, 10, 'DRIVING'),
-        topNRouted(devPOI,      loc, 10, 'DRIVING'),
+        topNRouted(devPOI,      loc, 10, 'DRIVING', 5000), // 重點發展不限 1500m
       ]);
 
-      // ── 1. 交通機能 ──
+      // ── 1. 交通機能 ──（全部顯示距離，不顯示分鐘）
       const trafficLines = [];
-      subwayDR.forEach(({ p, mins, mode }) => {
-        trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（${travelText(mins, mode)}）`);
+      subwayDR.forEach(({ p, d }) => {
+        trafficLines.push(`捷運${p.displayName.replace(/捷運/g, '')}（${distText(d)}）`);
       });
       if (busWR.length) {
-        const busNames = busWR.slice(0, 2).map(r => `${r.p.displayName}（${travelText(r.mins, r.mode)}）`);
+        const busNames = busWR.slice(0, 2).map(r => `${r.p.displayName}（${distText(r.d)}）`);
         trafficLines.push(`公車站：${busNames.join('、')}`);
       }
-      ferryDR.forEach(({ p, mins, mode }) => {
-        trafficLines.push(`${p.displayName}（${travelText(mins, mode)}）`);
+      ferryDR.forEach(({ p, d }) => {
+        trafficLines.push(`${p.displayName}（${distText(d)}）`);
       });
-      // 交流道名稱去重
       const ichSeen = [];
-      ichDR.forEach(({ p, mins, mode }) => {
+      ichDR.forEach(({ p, d }) => {
         const name = p.displayName;
         if (!name || name.length < 3) return;
         if (ichSeen.some(s => isSamePlace(s, name))) return;
         ichSeen.push(name);
-        trafficLines.push(`${name}（${travelText(mins, mode)}）`);
+        trafficLines.push(`${name}（${distText(d)}）`);
       });
       document.getElementById('s-traffic').value = trafficLines.slice(0, 6).join('\n');
 
-      // ── 2. 生活機能（每類只取最近一項）──
-      // 夜市改用 Distance Matrix 結果（跨區情況會準），其他走路類維持直線估算
+      // ── 2. 生活機能（每類只取最近一項）──（直線距離）
       const lifeLines = [];
       const addLife = (results, label) => {
         const top = topN(results, loc, 1);
         if (!top.length) return;
-        const ti = travelInfo(top[0].d);
-        if (ti) lifeLines.push(`${label}：${top[0].p.displayName}（${ti.text}）`);
+        const meters = top[0].d;
+        if (meters > 1500) return; // 超過 1500m 不列入
+        lifeLines.push(`${label}：${top[0].p.displayName}（${distText(meters)}）`);
       };
       addLife(convenience,  '超商');
       addLife(market,       '傳統市場');
@@ -3255,42 +3256,40 @@ ${factsText}
       addLife(bank,         '銀行');
       if (nmDR.length) {
         const nm = nmDR[0];
-        lifeLines.push(`夜市：${nm.p.displayName}（${travelText(nm.mins, nm.mode)}）`);
+        lifeLines.push(`夜市：${nm.p.displayName}（${distText(nm.d)}）`);
       }
       document.getElementById('s-life').value = lifeLines.slice(0, 6).join('\n');
 
-      // ── 3. 商圈特色（用 Distance Matrix 排序 + 標準化去重）──
+      // ── 3. 商圈特色 ──（以距離近排序）
       const locLines = [];
       const locSeen = [];
       [...dA_DR, ...dB_DR]
-        .sort((a, b) => a.mins - b.mins)
-        .forEach(({ p, mins, mode }) => {
+        .sort((a, b) => (a.d ?? 1e9) - (b.d ?? 1e9))
+        .forEach(({ p, d }) => {
           if (locLines.length >= 5) return;
           const name = p.displayName;
           if (!name || name.length < 3) return;
           if (locSeen.some(s => isSamePlace(s, name))) return;
           locSeen.push(name);
-          locLines.push(`${name}（${travelText(mins, mode)}）`);
+          locLines.push(`${name}（${distText(d)}）`);
         });
-      // 找不到商圈名 → 退公園（走路直線）
       if (locLines.length === 0) {
         topN(park, loc, 2).forEach(({ p, d }) => {
-          const ti = travelInfo(d);
-          if (ti) locLines.push(`鄰近 ${p.displayName}（${ti.text}）`);
+          if (d != null && d <= 1500) locLines.push(`鄰近 ${p.displayName}（${distText(d)}）`);
         });
       }
       document.getElementById('s-location').value = locLines.slice(0, 5).join('\n');
 
-      // ── 4. 重要發展（Distance Matrix + 標準化去重）──
+      // ── 4. 重要發展（不限 1500m，最遠 5000m）──
       const devLines = [];
       const devSeen = [];
-      devDR.forEach(({ p, mins, mode }) => {
+      devDR.forEach(({ p, d }) => {
         if (devLines.length >= 2) return;
         const name = p.displayName;
         if (!name || name.length < 3) return;
         if (devSeen.some(s => isSamePlace(s, name))) return;
         devSeen.push(name);
-        devLines.push(`${name}（${travelText(mins, mode)}）`);
+        devLines.push(`${name}（${distText(d)}）`);
       });
       const district = deed.district || '';
       if (district.includes('前鎮') || district.includes('苓雅') || district.includes('鼓山')) {
@@ -3462,11 +3461,13 @@ ${factsText}
     window._schoolTravel = window._schoolTravel || {};
     for (let i = 0; i < walkRes.length; i++) {
       const r = walkRes[i];
-      if (r.mins != null) window._schoolTravel[walkList[i].name] = { text: travelText(r.mins, 'WALKING'), mins: r.mins, mode: 'WALKING' };
+      const d = (r.d != null) ? r.d : calcDist(loc, walkList[i].p);
+      if (d != null) window._schoolTravel[walkList[i].name] = { text: distText(d), meters: d };
     }
     for (let i = 0; i < driveRes.length; i++) {
       const r = driveRes[i];
-      if (r.mins != null) window._schoolTravel[driveList[i].name] = { text: travelText(r.mins, 'DRIVING'), mins: r.mins, mode: 'DRIVING' };
+      const d = (r.d != null) ? r.d : calcDist(loc, driveList[i].p);
+      if (d != null) window._schoolTravel[driveList[i].name] = { text: distText(d), meters: d };
     }
   }
 
