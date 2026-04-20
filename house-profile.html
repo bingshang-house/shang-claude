@@ -543,6 +543,9 @@
       <div class="fg">
         <label>🏫 學區查詢</label>
         <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <select id="s-district" style="flex:1;min-width:90px;" onchange="onVillageInput()">
+            <option value="">區</option>
+          </select>
           <input type="text" id="s-village" placeholder="里（例：瑞隆里）" style="flex:2;" oninput="onVillageInput()">
           <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;" oninput="updateCard()">
           <button onclick="doLookupSchool()" style="white-space:nowrap;padding:4px 8px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">查詢</button>
@@ -814,6 +817,8 @@
 
       // Auto school lookup via NLSC TextQueryMap, fallback to deed village
       const vEl = document.getElementById('s-village');
+      const dEl = document.getElementById('s-district');
+      if (dEl && !dEl.value) dEl.value = normDist(deed.district || '');
       if (!vEl.value.trim()) {
         const fullAddr = (deed.district || '') + (deed.address || '');
         if (fullAddr) {
@@ -821,6 +826,7 @@
           try {
             const geo = await nlscGeocode(fullAddr);
             if (geo && geo.village) {
+              if (geo.district && dEl) dEl.value = normDist(geo.district);
               vEl.value = geo.village;
               document.getElementById('s-neighbor').value = geo.neighbor || '';
               doLookupSchool();
@@ -2696,9 +2702,9 @@ ${factsText}
       if (!content) return null;
       // 全形數字轉半形
       const half = content.replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
-      const m = half.match(/(.+?里)(\d+)鄰/);
+      const m = half.match(/(?:高雄市)?(.+?[區鄉鎮市])(.+?里)(\d+)鄰/);
       if (!m) return null;
-      return { village: m[1], neighbor: parseInt(m[2], 10) || 0 };
+      return { district: m[1], village: m[2], neighbor: parseInt(m[3], 10) || 0 };
     } catch (e) {
       console.error('NLSC lookup failed', e);
       return null;
@@ -2706,42 +2712,68 @@ ${factsText}
   }
 
   // Init
+  (function initDistrictOptions() {
+    const sel = document.getElementById('s-district');
+    if (!sel) return;
+    const DISTRICTS = [
+      '鹽埕區','鼓山區','左營區','楠梓區','三民區','新興區','前金區','苓雅區',
+      '前鎮區','旗津區','小港區','鳳山區','林園區','大寮區','大樹區','大社區',
+      '仁武區','鳥松區','岡山區','橋頭區','燕巢區','田寮區','阿蓮區','路竹區',
+      '湖內區','茄萣區','永安區','彌陀區','梓官區','旗山區','美濃區','六龜區',
+      '甲仙區','杉林區','內門區','茂林區','桃源區','那瑪夏區',
+    ];
+    for (const d of DISTRICTS) {
+      const o = document.createElement('option');
+      o.value = d; o.textContent = d;
+      sel.appendChild(o);
+    }
+  })();
   updateCard();
   updateApiStatus();
   updateGeminiUsageBadge();
 
   // ===== School District Lookup =====
-  // SD 資料搬到外部 school-districts.js（window.SD），方便獨立維護與增補全高雄各區
+  // SD = 人工驗證資料；SD_FALLBACK = 自動解析的全高雄資料（可能有誤）
   const SD = window.SD || {};
+  const SD_FALLBACK = window.SD_FALLBACK || {};
 
   // Check if neighbor falls in any of the ranges [[min,max],...]
   function inRanges(n, ranges) {
     return ranges.some(([lo, hi]) => n >= lo && n <= hi);
   }
 
-  function lookupSchool(village, neighbor) {
-    const entry = SD[village];
+  // 輸入可為「前鎮區」或「高雄市前鎮區」
+  function normDist(d) {
+    return (d || '').replace(/^高雄市/, '').trim();
+  }
+
+  function lookupSchool(district, village, neighbor) {
+    const d = normDist(district);
+    if (!d || !village) return null;
+    const key = d + village;
+    let entry = SD[key];
+    let fallback = false;
+    if (!entry) {
+      entry = SD_FALLBACK[key];
+      fallback = !!entry;
+    }
     if (!entry) return null;
     const nb = parseInt(neighbor) || 0;
 
-    // If entry has per-range rules
     if (entry.ranges) {
-      // Find all matching ranges
       const matched = entry.ranges.filter(rule => {
-        if (!nb) return true;  // no neighbor specified: show all
+        if (!nb) return true;
         return rule.r && inRanges(nb, rule.r);
       });
       if (matched.length === 0 && nb) {
-        // try fallback to base entry e/j
-        return { e: entry.e || [], j: entry.j || [] };
+        return { e: entry.e || [], j: entry.j || [], fallback };
       }
-      // Merge all matched e/j
-      const e = [...new Set(matched.flatMap(r => r.e || []))];
+      const e = [...new Set(matched.flatMap(r => r.e || entry.e || []))];
       const j = [...new Set(matched.flatMap(r => r.j || entry.j || []))];
-      return { e, j };
+      return { e, j, fallback };
     }
 
-    return { e: entry.e || [], j: entry.j || [] };
+    return { e: entry.e || [], j: entry.j || [], fallback };
   }
 
   // A4 卡片的「國小學區／國中學區」格子渲染：每次 updateCard 呼叫，依 s-village + s-neighbor 自動比對 SD
@@ -2750,25 +2782,31 @@ ${factsText}
     return arr.length > 1 ? arr.join('、') + '（共同學區）' : arr[0];
   }
   function renderSchoolCells() {
+    const district = (document.getElementById('s-district')?.value || '').trim()
+                  || normDist(deed?.district || '');
     const village  = (document.getElementById('s-village')?.value || '').trim();
     const neighbor = (document.getElementById('s-neighbor')?.value || '').trim();
-    if (!village) { setText('td-school-e','－'); setText('td-school-j','－'); return; }
-    const r = lookupSchool(village, neighbor);
+    if (!village || !district) { setText('td-school-e','－'); setText('td-school-j','－'); return; }
+    const r = lookupSchool(district, village, neighbor);
     if (!r) { setText('td-school-e','－'); setText('td-school-j','－'); return; }
-    setText('td-school-e', fmtSchools(r.e));
-    setText('td-school-j', fmtSchools(r.j));
+    const suffix = r.fallback ? '＊' : '';
+    setText('td-school-e', fmtSchools(r.e) + suffix);
+    setText('td-school-j', fmtSchools(r.j) + suffix);
   }
 
   function doLookupSchool() {
+    const district = (document.getElementById('s-district')?.value || '').trim()
+                  || normDist(deed?.district || '');
     const village  = document.getElementById('s-village').value.trim();
     const neighbor = document.getElementById('s-neighbor').value.trim();
     const resEl    = document.getElementById('school-result');
 
     if (!village) { resEl.innerHTML = '<span style="color:#e11">請輸入里名</span>'; return; }
+    if (!district) { resEl.innerHTML = '<span style="color:#e11">請選擇行政區</span>'; return; }
 
-    const result = lookupSchool(village, neighbor);
+    const result = lookupSchool(district, village, neighbor);
     if (!result) {
-      resEl.innerHTML = `<span style="color:#999">查無「${village}」資料（目前僅收錄前鎮區）</span>`;
+      resEl.innerHTML = `<span style="color:#999">查無「${district}${village}」資料</span>`;
       return;
     }
 
@@ -2778,9 +2816,12 @@ ${factsText}
 
     const eText = fmt(result.e);
     const jText = fmt(result.j);
+    const warn = result.fallback
+      ? '<div style="color:#c80;font-size:11px;margin-top:4px;">⚠️ 自動解析資料，建議對照教育局公告查證</div>'
+      : '';
     resEl.innerHTML =
       `<div>🏫 國小：<strong>${eText}</strong></div>` +
-      `<div>🏫 國中：<strong>${jText}</strong></div>`;
+      `<div>🏫 國中：<strong>${jText}</strong></div>` + warn;
 
     const schoolText = `國小：${result.e.join('、')}${result.e.length > 1 ? '（共同學區）' : ''}\n國中：${result.j.join('、')}${result.j.length > 1 ? '（共同學區）' : ''}`;
     document.getElementById('s-school').value = schoolText;
