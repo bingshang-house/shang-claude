@@ -2167,13 +2167,15 @@
         type: 'pattern', pattern: 'solid',
         fgColor: { argb: 'FFFFFFFF' }, bgColor: { argb: 'FFFFFFFF' }
       };
-      // 所有勾選格恢復白底
-      Object.values(TICK).forEach(range => {
-        const [s, e] = range.split(':');
-        const sc = ws.getCell(s), ec = ws.getCell(e || s);
-        for (let r = sc.row; r <= ec.row; r++)
-          for (let c = sc.col; c <= ec.col; c++)
-            ws.getCell(r, c).fill = WHITE_FILL;
+      // ExcelJS 4.4.0 有 shared styleIndex bug：多格共用同一 style，改一格會連帶
+      // 影響其他共用格 → 多勾的紅色其實都是這個問題。解法：掃全 sheet，
+      // 每個 cell 的 style 深拷貝一份（破除 shared index），同時順手把範本
+      // 原有的紅色（範本樣本勾選）全部改回白色，確保從乾淨起點開始塗。
+      ws.eachRow({ includeEmpty: true }, (row) => {
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          if (cell.style) cell.style = JSON.parse(JSON.stringify(cell.style));
+          if (cell.fill?.fgColor?.argb === 'FFFF0000') cell.fill = WHITE_FILL;
+        });
       });
       // 所有會被填值的格子清空
       [
