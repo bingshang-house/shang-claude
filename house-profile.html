@@ -2301,9 +2301,13 @@
       fb.forEach((row, i) => {
         const m = mbRows[i];
         if (!m) return;
+        // 樓層：謄本原字「二層/一層」→ 轉數字 2/1（範本 D 格不加「層」「F」）
         let floor = row.name || row.floor || '';
-        floor = String(floor).replace(/F$/i, '').replace(/樓$/, '').trim();
-        if (floor) SF(`${m.fc}${m.r}`, floor, 20);
+        if (typeof floor === 'string') {
+          const mapped = chFloor(floor);
+          floor = (mapped != null && mapped !== '') ? mapped : floor.replace(/[層樓F]$/i, '').trim();
+        }
+        if (floor !== '' && floor != null) SF(`${m.fc}${m.r}`, floor, 20);
         if (m.uc && row.use) SF(`${m.uc}${m.r}`, row.use, 20);
         if (row.ping) SF(`M${m.r}`, Number(row.ping), 20);
       });
@@ -2449,14 +2453,13 @@
       if (/坡道/.test(parkStatusStr)) tick('entRamp');
       if (/昇降|升降/.test(parkStatusStr)) tick('entLift');
 
-      // 綠地 / 生活圈 / 捷運
-      if (parkLine)     S('BN36', parkLine);
-      // 生活圈主題：抓生活機能裡的「市場」+「公園/綠地」行（賞哥指定）
+      // 綠地 BN36 / 生活圈 BN39（賞哥指定：各自只抓最近一個，去前綴）
+      const stripLabel = s => String(s || '').replace(/^[^：:]*[：:]\s*/, '');
+      if (parkLine) S('BN36', stripLabel(parkLine));
       const marketLine = lifeStr.split('\n').find(l => /市場/.test(l)) || '';
-      const greenLine = lifeStr.split('\n').find(l => /公園|綠地|園道|河岸/.test(l)) || '';
-      const lifeZone = [marketLine, greenLine].filter(Boolean).join('、')
-        || locationStr.split('\n')[0]
-        || lifeStr.split('\n')[0]
+      const lifeZone = stripLabel(marketLine)
+        || stripLabel(locationStr.split('\n')[0] || '')
+        || stripLabel(lifeStr.split('\n')[0] || '')
         || '';
       if (lifeZone) S('BN39', lifeZone);
       if (mrtLine)  S('BN42', mrtLine);
