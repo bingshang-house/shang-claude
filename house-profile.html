@@ -2381,7 +2381,12 @@
       if (bath)    S('BZ18', bath);
 
       // 本戶挑高（= 樓板高度，從 buildmis td-lic-floorheight）
-      const ceiling = tdNum('td-lic-floorheight');
+      // 文字格式「2F 3.2m」— tdNum 會抓第一個數字變 2F 的 2，要抓 m 前面的高度
+      const ceilingText = tdClean('td-lic-floorheight');
+      const ceilingM = ceilingText.match(/([\d.]+)\s*m/i)
+                    || ceilingText.match(/F\s*([\d.]+)/)
+                    || ceilingText.match(/([\d.]+)\s*米/);
+      const ceiling = ceilingM ? parseFloat(ceilingM[1]) : 0;
       if (ceiling) S('CP18', ceiling);
       if (val('cs-s-road')) S('CP21', num('cs-s-road'));
 
@@ -2468,12 +2473,11 @@
         tick(allFull ? 'landFull' : 'landShare');
       }
 
-      // 使用區分（勾選 + 文字）
-      if (/第五種商業區/.test(zoneStr)) {
+      // 使用區分：不論哪一種分區，都寫入上方大格 E69 並勾 B69:C70（保持視覺一致）
+      // E69:W70 是文字主顯示區，B69:C70 是勾選格；下方 B72:C73/E72 的小選項不用
+      if (zoneStr) {
+        S('E69', zoneStr);
         tick('zone5Com');
-      } else if (zoneStr) {
-        tick('zoneOther');
-        S('E72', zoneStr);
       }
 
       // 公告現值
