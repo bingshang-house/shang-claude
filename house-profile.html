@@ -3146,6 +3146,35 @@
         ws.getCell(addr).value = v;
       };
 
+      // ===== 清空範本預設資料（範本帶星海灣樣本值+紅色勾選，沒清會殘留）=====
+      const WHITE_FILL = {
+        type: 'pattern', pattern: 'solid',
+        fgColor: { argb: 'FFFFFFFF' }, bgColor: { argb: 'FFFFFFFF' }
+      };
+      // 所有勾選格恢復白底
+      Object.values(TICK).forEach(range => {
+        const [s, e] = range.split(':');
+        const sc = ws.getCell(s), ec = ws.getCell(e || s);
+        for (let r = sc.row; r <= ec.row; r++)
+          for (let c = sc.col; c <= ec.col; c++)
+            ws.getCell(r, c).fill = WHITE_FILL;
+      });
+      // 所有會被填值的格子清空
+      [
+        'CM4','F5','AR5','CW5','CW7',
+        'AB9','AO9','AB13','CQ11','CY11',
+        'M9','M13','M21','M24','M27','M30','M33','M36','M39','M43','M47','M51',
+        'D21','G21','D24','G24','J27','J30','J33','J36',
+        'AR18','AR21','AR24','AW21','AW24','AJ27',
+        'AJ42','AQ42','AX42',
+        'BM18','BT18','BZ18','BP21','BY21','CP18','CP21',
+        'BM27','CA27','CT27','CZ27','BN30','BV30',
+        'BN33','BW33','BN36','BN39','BN42','CP39','CH41',
+        'BN45','BT45','BZ45','E72','J75','J78',
+        'CJ51','CJ54','CJ57','CJ60','CJ63',
+        'CP66','CP70','CP74','CP78',
+      ].forEach(a => { ws.getCell(a).value = null; });
+
       // ===== 蒐集資料 =====
       const d = (typeof deed === 'object' && deed) ? deed : {};
       const landEntries = Object.values(typeof _landData === 'object' && _landData ? _landData : {}).filter(e => e.ping > 0);
