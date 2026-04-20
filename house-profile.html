@@ -544,7 +544,7 @@
         <label>🏫 學區查詢</label>
         <div style="display:flex;gap:6px;margin-bottom:6px;">
           <input type="text" id="s-village" placeholder="里（例：瑞隆里）" style="flex:2;" oninput="onVillageInput()">
-          <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;">
+          <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;" oninput="updateCard()">
           <button onclick="doLookupSchool()" style="white-space:nowrap;padding:4px 8px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">查詢</button>
         </div>
         <div id="school-result" style="font-size:12px;color:#444;margin-bottom:6px;min-height:0;"></div>
@@ -679,6 +679,10 @@
               <tr>
                 <td class="key">太陽能</td><td class="val" id="td-lic-solar">－</td>
                 <td class="key"></td><td class="val"></td>
+              </tr>
+              <tr>
+                <td class="key">國小學區</td><td class="val" id="td-school-e">－</td>
+                <td class="key">國中學區</td><td class="val" id="td-school-j">－</td>
               </tr>
               <tr class="full-row">
                 <td class="key">社區公設</td><td class="val" colspan="3" id="td-facilities">－</td>
@@ -1890,6 +1894,7 @@
     }
     setText('td-mgmt', mgmtStr);
     setText('td-facilities', facilities || '－');
+    renderSchoolCells();
     // 使用執照：字號 + 查詢按鈕；「執照細項」列非同步載入
     renderLicenseCell(d);
     loadLicenseDetail(d);
@@ -2886,6 +2891,21 @@ ${factsText}
     return { e: entry.e || [], j: entry.j || [] };
   }
 
+  // A4 卡片的「國小學區／國中學區」格子渲染：每次 updateCard 呼叫，依 s-village + s-neighbor 自動比對 SD
+  function fmtSchools(arr) {
+    if (!arr || !arr.length) return '－';
+    return arr.length > 1 ? arr.join('、') + '（共同學區）' : arr[0];
+  }
+  function renderSchoolCells() {
+    const village  = (document.getElementById('s-village')?.value || '').trim();
+    const neighbor = (document.getElementById('s-neighbor')?.value || '').trim();
+    if (!village) { setText('td-school-e','－'); setText('td-school-j','－'); return; }
+    const r = lookupSchool(village, neighbor);
+    if (!r) { setText('td-school-e','－'); setText('td-school-j','－'); return; }
+    setText('td-school-e', fmtSchools(r.e));
+    setText('td-school-j', fmtSchools(r.j));
+  }
+
   function doLookupSchool() {
     const village  = document.getElementById('s-village').value.trim();
     const neighbor = document.getElementById('s-neighbor').value.trim();
@@ -2915,8 +2935,8 @@ ${factsText}
   }
 
   function onVillageInput() {
-    // clear result when user changes village
     document.getElementById('school-result').innerHTML = '';
+    updateCard();
   }
 </script>
 
