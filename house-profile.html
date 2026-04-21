@@ -2128,6 +2128,33 @@
       img.src = dataUrl;
     });
   }
+  // 用 Google Static Maps API 抓地圖截圖 → JPEG bytes
+  // 需要在 GCP 啟用「Maps Static API」
+  function fetchStaticMapJpegBytes(address) {
+    return new Promise((resolve, reject) => {
+      if (!address) return reject(new Error('no address'));
+      const center = stripFloor(address);
+      const key = getGMKey();
+      if (!key) return reject(new Error('no gm key'));
+      const url = 'https://maps.googleapis.com/maps/api/staticmap'
+        + '?center=' + encodeURIComponent(center)
+        + '&zoom=17&size=640x480&scale=2&maptype=roadmap'
+        + '&markers=' + encodeURIComponent('color:red|' + center)
+        + '&language=zh-TW&region=TW'
+        + '&key=' + encodeURIComponent(key);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const w = img.naturalWidth || 1280;
+          const h = img.naturalHeight || 960;
+          resolve(canvasToJpegBytes(w, h, img));
+        } catch (e) { reject(e); }
+      };
+      img.onerror = () => reject(new Error('static map fetch failed'));
+      img.src = url;
+    });
+  }
 
   async function downloadCaseStudyXlsx() {
     const btn = document.getElementById('btnCsXlsx');
@@ -2664,9 +2691,16 @@
       zip.file('xl/styles.xml', stylesXml);
       zip.file('xl/sharedStrings.xml', sharedXml);
 
-      // image2 = 位置地圖樣本（星海灣）→ 蓋空白；image3 = 平面圖 → 使用者圖或空白
+      // image2 = 位置地圖樣本（星海灣）→ 自動抓 Static Maps；image3 = 平面圖 → 使用者圖或空白
       const blankJpeg = canvasToJpegBytes(10, 10, null);
-      zip.file('xl/media/image2.jpeg', blankJpeg);
+      const fullAddress = (d.district || '高雄市前鎮區') + (d.address || '');
+      try {
+        const mapJpeg = await fetchStaticMapJpegBytes(fullAddress);
+        zip.file('xl/media/image2.jpeg', mapJpeg);
+      } catch (e) {
+        console.warn('位置圖產製失敗', e);
+        zip.file('xl/media/image2.jpeg', blankJpeg);
+      }
       if (planDataUrl) {
         try {
           const planJpeg = await dataUrlToJpegBytes(planDataUrl);
