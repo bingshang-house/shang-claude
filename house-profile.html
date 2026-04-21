@@ -1894,7 +1894,7 @@
     }
 
     // Price
-    const noParPrice = price && parkPrice ? price - parkPrice : 0;
+    const noParPrice = price > 0 ? price - parkPrice : 0;
     const unitPrice  = (noParPrice > 0 && d.totalNoPark > 0)
       ? (noParPrice / d.totalNoPark).toFixed(2) : '－';
 
@@ -2450,6 +2450,18 @@
       else if (priceTotal && !priceCar) S('AB9', priceTotal);
       if (priceTotal) S('AO9', priceTotal);
       if (priceCar)   S('AB13', priceCar);
+
+      // 範本 BJ9 公式 =AB9/M13（房屋單價）：重算 cachedValue，否則非 MS Excel 會顯示範本舊值
+      const ab9Val = priceHouse || (priceTotal && !priceCar ? priceTotal : 0);
+      const m13Val = Number(d.totalNoPark) || 0;
+      if (ab9Val > 0 && m13Val > 0) {
+        const bj9 = ab9Val / m13Val;
+        sheetXml = sheetXml.replace(
+          /<c r="BJ9"[^>]*>[\s\S]*?<\/c>/,
+          s => s.replace(/<v>[^<]*<\/v>/, `<v>${bj9}</v>`)
+        );
+      }
+
       // 含車/不含車 勾選
       if (isWithPark) tick('withPark');
       else if (priceTotal) tick('noPark');
