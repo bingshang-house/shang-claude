@@ -1,0 +1,13 @@
+/**
+ * Cloudflare Worker：Gemini API 代發（付費 key 保護）
+ * 前端走此 proxy 轉發到 generativelanguage.googleapis.com，GEMINI_KEY 以 secret 儲存
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "shang-gemini-proxy",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-04-21",
+	"observability": {
+		"enabled": true
+	}
+}
