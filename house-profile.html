@@ -2941,7 +2941,7 @@ ${factsText}
 
 直接輸出完整文案，不要加任何前言、說明或結語。全文 150 字以內。`;
 
-      const url = 'https://kcg-urban-proxy.bingshang1019.workers.dev/gemini?model=gemini-2.5-flash';
+      const url = 'https://shang-gemini-proxy.bingshang1019.workers.dev/v1beta/models/gemini-2.5-flash:generateContent';
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
