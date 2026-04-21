@@ -38,6 +38,11 @@
 - 全形轉半形：`s.replace(/[\uFF01-\uFF5E]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0))`
 - 有區段概念的欄位（所有權部 vs 標示部 vs 他項權利部）要先 `t.search()` 切片再 match，不要對全文 regex
 
+### regex 字符類撞字陷阱
+- **不要用 `[區鄉鎮市]` `[村里鄰]` 這種把尾字湊在一起的字符類** — `.+?` non-greedy 會在**任何一個字符類成員**先停。遇到「前鎮區」regex `(.+?[區鄉鎮市])` 會捕到「前鎮」（「鎮」在字符類裡先命中），剩下的「區」漏進下一組 capture
+- 正解：中文地區後綴一律寫完整字 `區`，或用 group `(?:區|鄉|鎮|市)` 替代字符類（non-greedy 會把 group 視為一個整體去嘗試），並要求前面至少 2 字 `(.{2,}?(?:區|鄉|鎮|市))` 避開「前鎮」「大市」這類二字撞點
+- 2026-04-21 NLSC TextQueryMap 踩過一次，讓「前鎮區瑞祥里20鄰...」被解成 district=「前鎮」、village=「區瑞祥里」。詳見 `reference_nlsc_api.md`
+
 ### Cloudflare Worker proxy 打政府 API
 - 一律 retry 3 次，退避 600ms → 1400ms（上游 522 超時很常見）
 - updateCard 等會多次觸發的函式，重查失敗時要**保留上一次成功的快取**，不要洗畫面
