@@ -2138,9 +2138,121 @@
       const resp = await fetch('cs-template.xlsx?v=' + Date.now());
       if (!resp.ok) throw new Error(`範本下載失敗 ${resp.status}`);
       const origBuf = await resp.arrayBuffer();
-      const wb = new ExcelJS.Workbook();
-      await wb.xlsx.load(origBuf);
-      const ws = wb.worksheets[0];
+      // ExcelJS 4.4 會重寫 drawing1.xml / styles.xml / workbook.xml / sharedStrings，
+      // Text Box 尺寸跑掉導致 CASE STUDY、合約編號斷字。
+      // 改純 JSZip 直改範本 XML，只動要填的 cell，其他原封不動。
+      const zip = await JSZip.loadAsync(origBuf);
+      let sheetXml = await zip.file('xl/worksheets/sheet1.xml').async('string');
+      let stylesXml = await zip.file('xl/styles.xml').async('string');
+      let sharedXml = await zip.file('xl/sharedStrings.xml').async('string');
+
+      const xfsBlockRe = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/;
+      const fontsBlockRe = /<fonts\b[^>]*>([\s\S]*?)<\/fonts>/;
+      const xfs = []; {
+        const re = /<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g;
+        const inner = stylesXml.match(xfsBlockRe)[1];
+        let m; while ((m = re.exec(inner)) !== null) xfs.push(m[0]);
+      }
+      const fonts = []; {
+        const re = /<font\b[^>]*?(?:\/>|>[\s\S]*?<\/font>)/g;
+        const inner = stylesXml.match(fontsBlockRe)[1];
+        let m; while ((m = re.exec(inner)) !== null) fonts.push(m[0]);
+      }
+
+      const sstM = sharedXml.match(/<sst[^>]*count="(\d+)"[^>]*uniqueCount="(\d+)"/);
+      let sstCount = parseInt(sstM[1]), sstUnique = parseInt(sstM[2]);
+      const addSharedString = s => {
+        const esc = String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const idx = sstUnique;
+        sharedXml = sharedXml.replace('</sst>', `<si><t xml:space="preserve">${esc}</t></si></sst>`);
+        sstUnique++; sstCount++;
+        return idx;
+      };
+
+      const colLet = n => { let s=''; while(n>0){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);} return s; };
+      const colNum = L => { let n=0; for (const ch of L) n = n*26 + (ch.charCodeAt(0)-64); return n; };
+      const parseAddr = a => { const m = a.match(/^([A-Z]+)(\d+)$/); return [colNum(m[1]), parseInt(m[2])]; };
+
+      const cellRe = a => new RegExp(`<c r="${a}"[^>]*?(?:\\/>|>[\\s\\S]*?<\\/c>)`);
+      const findCell = a => { const m = sheetXml.match(cellRe(a)); return m ? m[0] : null; };
+      const getCellS = a => { const c = findCell(a); if (!c) return 0; const m = c.match(/\ss="(\d+)"/); return m ? parseInt(m[1]) : 0; };
+      const setCellS = (a, idx) => {
+        const cur = findCell(a); if (!cur) return;
+        const next = /\ss="\d+"/.test(cur)
+          ? cur.replace(/\ss="\d+"/, ` s="${idx}"`)
+          : cur.replace(/^<c r="([^"]+)"/, `<c r="$1" s="${idx}"`);
+        sheetXml = sheetXml.replace(cur, next);
+      };
+      const setCellValue = (a, value) => {
+        const cur = findCell(a); if (!cur) return;
+        const sM = cur.match(/\ss="\d+"/); const sAttr = sM ? sM[0] : '';
+        let repl;
+        if (value === null || value === undefined || value === '') {
+          repl = `<c r="${a}"${sAttr}/>`;
+        } else if (typeof value === 'number') {
+          repl = `<c r="${a}"${sAttr}><v>${value}</v></c>`;
+        } else {
+          const idx = addSharedString(value);
+          repl = `<c r="${a}"${sAttr} t="s"><v>${idx}</v></c>`;
+        }
+        sheetXml = sheetXml.replace(cur, repl);
+      };
+
+      const appendXfFill = (origIdx, fillId) => {
+        let xf = xfs[origIdx];
+        xf = /fillId="\d+"/.test(xf) ? xf.replace(/fillId="\d+"/, `fillId="${fillId}"`) : xf.replace(/^<xf\b/, `<xf fillId="${fillId}"`);
+        if (!/applyFill="1"/.test(xf)) xf = xf.replace(/^<xf\b/, '<xf applyFill="1"');
+        const idx = xfs.length; xfs.push(xf); return idx;
+      };
+      const appendFontSize = (origFontIdx, size) => {
+        let f = fonts[origFontIdx];
+        f = /<sz\s+val="[^"]+"\s*\/>/.test(f) ? f.replace(/<sz\s+val="[^"]+"\s*\/>/, `<sz val="${size}"/>`) : f.replace(/^<font>/, `<font><sz val="${size}"/>`);
+        const idx = fonts.length; fonts.push(f); return idx;
+      };
+      const appendXfFont = (origIdx, fontIdx) => {
+        let xf = xfs[origIdx];
+        xf = /fontId="\d+"/.test(xf) ? xf.replace(/fontId="\d+"/, `fontId="${fontIdx}"`) : xf.replace(/^<xf\b/, `<xf fontId="${fontIdx}"`);
+        if (!/applyFont="1"/.test(xf)) xf = xf.replace(/^<xf\b/, '<xf applyFont="1"');
+        const idx = xfs.length; xfs.push(xf); return idx;
+      };
+
+      // 範本預設紅底（22 個 fillId=6 的 xf）整批改為 fillId=0，取代原本 eachRow 逐 cell 清紅。
+      for (let i = 0; i < xfs.length; i++) {
+        if (/fillId="6"/.test(xfs[i])) {
+          xfs[i] = xfs[i].replace(/fillId="6"/, 'fillId="0"').replace(/\sapplyFill="1"/, '');
+        }
+      }
+
+      const ws = {
+        getCell(a, b) {
+          const addr = (b !== undefined) ? (colLet(b) + a) : String(a);
+          const [col, row] = parseAddr(addr);
+          return {
+            row, col,
+            set value(v) { setCellValue(addr, v); },
+            get value() { return null; },
+            set fill(f) {
+              const argb = f && (f.fgColor?.argb || f.argb) || '';
+              if (argb === 'FFFF0000') {
+                const idx = appendXfFill(getCellS(addr), 6);
+                setCellS(addr, idx);
+              }
+            },
+            get fill() { return null; },
+            set font(f) {
+              const size = f && f.size;
+              if (!size) return;
+              const origS = getCellS(addr);
+              const fm = xfs[origS].match(/fontId="(\d+)"/);
+              const origFontIdx = fm ? parseInt(fm[1]) : 0;
+              const newFontIdx = appendFontSize(origFontIdx, size);
+              const newXfIdx = appendXfFont(origS, newFontIdx);
+              setCellS(addr, newXfIdx);
+            },
+            get font() { return {}; },
+          };
+        },
+      };
 
       // ===== 勾選塗紅 helper =====
       const RED_FILL = {
@@ -2201,21 +2313,7 @@
         c.font = { ...(c.font || {}), size };
       };
 
-      // ===== 清空範本預設資料（範本帶星海灣樣本值+紅色勾選，沒清會殘留）=====
-      const WHITE_FILL = {
-        type: 'pattern', pattern: 'solid',
-        fgColor: { argb: 'FFFFFFFF' }, bgColor: { argb: 'FFFFFFFF' }
-      };
-      // ExcelJS 4.4.0 有 shared styleIndex bug：多格共用同一 style，改一格會連帶
-      // 影響其他共用格 → 多勾的紅色其實都是這個問題。解法：掃全 sheet，
-      // 每個 cell 的 style 深拷貝一份（破除 shared index），同時順手把範本
-      // 原有的紅色（範本樣本勾選）全部改回白色，確保從乾淨起點開始塗。
-      ws.eachRow({ includeEmpty: true }, (row) => {
-        row.eachCell({ includeEmpty: true }, (cell) => {
-          if (cell.style) cell.style = JSON.parse(JSON.stringify(cell.style));
-          if (cell.fill?.fgColor?.argb === 'FFFF0000') cell.fill = WHITE_FILL;
-        });
-      });
+      // 範本預設紅底已在 xf 層統一清除（上面迴圈），這裡不用再掃 cell。
       // 所有會被填值的格子清空
       [
         'CM4','F5','AR5','CW5','CW7',
@@ -2545,37 +2643,30 @@
       const planImg = document.querySelector('#csPlanPreview img, #planPreview img');
       const planDataUrl = (planImg && planImg.src && planImg.src.startsWith('data:')) ? planImg.src : null;
 
-      // 下載：先寫出 xlsx，再用 JSZip 把原範本的 Text Box（永慶抬頭 / 公司資訊）與
-      // logo 圖覆蓋回去（ExcelJS 4.4 不保留 drawing1.xml 的 Text Box，會整塊丟失）
-      const outBuf = await wb.xlsx.writeBuffer();
-      const [origZip, outZip] = await Promise.all([
-        JSZip.loadAsync(origBuf),
-        JSZip.loadAsync(outBuf),
-      ]);
-      // 把原範本的 drawings + media + drawing rels 全部搬回 out
-      for (const name of Object.keys(origZip.files)) {
-        if (origZip.files[name].dir) continue;
-        if (/^xl\/drawings\//.test(name) || /^xl\/media\//.test(name)) {
-          const data = await origZip.file(name).async('uint8array');
-          outZip.file(name, data);
-        }
-      }
-      // image2 = 位置地圖樣本（星海灣）→ 覆蓋成白底避免殘留
-      // image3 = 平面圖樣本 → 若使用者有上傳，換成使用者圖；沒有則白底
+      // flush：把改好的 xml 寫回 zip
+      stylesXml = stylesXml.replace(xfsBlockRe, `<cellXfs count="${xfs.length}">${xfs.join('')}</cellXfs>`);
+      stylesXml = stylesXml.replace(fontsBlockRe, `<fonts count="${fonts.length}">${fonts.join('')}</fonts>`);
+      sharedXml = sharedXml.replace(/<sst[^>]*count="\d+"[^>]*uniqueCount="\d+"/,
+        m => m.replace(/count="\d+"/, `count="${sstCount}"`).replace(/uniqueCount="\d+"/, `uniqueCount="${sstUnique}"`));
+      zip.file('xl/worksheets/sheet1.xml', sheetXml);
+      zip.file('xl/styles.xml', stylesXml);
+      zip.file('xl/sharedStrings.xml', sharedXml);
+
+      // image2 = 位置地圖樣本（星海灣）→ 蓋空白；image3 = 平面圖 → 使用者圖或空白
       const blankJpeg = canvasToJpegBytes(10, 10, null);
-      outZip.file('xl/media/image2.jpeg', blankJpeg);
+      zip.file('xl/media/image2.jpeg', blankJpeg);
       if (planDataUrl) {
         try {
           const planJpeg = await dataUrlToJpegBytes(planDataUrl);
-          outZip.file('xl/media/image3.jpeg', planJpeg);
+          zip.file('xl/media/image3.jpeg', planJpeg);
         } catch (e) {
           console.warn('平面圖轉檔失敗', e);
-          outZip.file('xl/media/image3.jpeg', blankJpeg);
+          zip.file('xl/media/image3.jpeg', blankJpeg);
         }
       } else {
-        outZip.file('xl/media/image3.jpeg', blankJpeg);
+        zip.file('xl/media/image3.jpeg', blankJpeg);
       }
-      const blob = await outZip.generateAsync({
+      const blob = await zip.generateAsync({
         type: 'blob',
         mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
