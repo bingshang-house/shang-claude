@@ -3519,7 +3519,8 @@ ${factsText}
       if (!content) return null;
       // 全形數字轉半形
       const half = content.replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
-      const m = half.match(/(?:高雄市)?(.+?[區鄉鎮市])(.+?里)(\d+)鄰/);
+      // 高雄行政區都以「區」結尾；別用 [區鄉鎮市]，否則「前鎮區」會在「鎮」斷開，剩下的「區」漏進里名
+      const m = half.match(/(?:高雄市)?(.+?區)(.+?里)(\d+)鄰/);
       if (!m) return null;
       return { district: m[1], village: m[2], neighbor: parseInt(m[3], 10) || 0 };
     } catch (e) {
