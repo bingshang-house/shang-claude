@@ -283,6 +283,7 @@
       font-weight: 500;
       color: #FFF8E0;
       letter-spacing: 0.3px;
+      text-align: center;
     }
 
     /* Price Bar */
@@ -594,6 +595,11 @@
       </div>
 
       <div class="fg">
+        <label>⚠ 帶看注意事項（A4 會用紅字顯示）</label>
+        <textarea id="s-viewing-notes" rows="3" placeholder="例：請脫鞋、屋主下午兩點後才在、管委會須事先預約" oninput="updateCard()" style="white-space:pre-wrap;"></textarea>
+      </div>
+
+      <div class="fg">
         <label>格局圖</label>
         <div class="plan-upload-btn" onclick="document.getElementById('planInput').click()">
           <input type="file" id="planInput" accept="image/*" onchange="loadPlan(event)">
@@ -823,6 +829,10 @@
               <tr>
                 <td class="key">建　材</td><td class="val" id="td-mat">－</td>
                 <td class="key">格　局</td><td class="val" id="td-layout"><span class="pending">待補充</span></td>
+              </tr>
+              <tr class="full-row" id="tr-viewing-notes" style="display:none;">
+                <td class="key" style="color:#dc2626;">⚠ 帶看注意</td>
+                <td class="val" colspan="3" id="td-viewing-notes" style="color:#dc2626;font-weight:700;white-space:pre-wrap;word-break:break-word;line-height:1.55;"></td>
               </tr>
 
               <tr class="group-title"><td colspan="4">土地與都計</td></tr>
@@ -2703,6 +2713,14 @@
       } else {
         _titleEl.innerHTML = `<span style="color:#FFE066;">我忘了填我忘了填我忘了填</span>`;
       }
+      // 案名長度 → 字體自動縮放，避免超出標題列
+      const _dispLen = _caseName.length || 12;  // 空白用預設占位字數
+      let _fs = 19, _ls = 3;
+      if (_dispLen >= 16)      { _fs = 15; _ls = 2; }
+      else if (_dispLen >= 14) { _fs = 16; _ls = 2; }
+      else if (_dispLen >= 12) { _fs = 17; _ls = 2.5; }
+      _titleEl.style.fontSize = _fs + 'px';
+      _titleEl.style.letterSpacing = _ls + 'px';
     }
 
     // 案件名稱 16 字計數器
@@ -2720,6 +2738,18 @@
     setHtml('td-community', _commName ? escH(_commName) : `<span class="pending">待補充</span>`);
     setText('td-contract', _contract || '－');
     setText('td-keyhold', _keyholdLabel[_keyhold] || '－');
+
+    // 帶看注意事項：有填才顯示該列（A4 用紅字粗體）
+    const _viewNotes = (document.getElementById('s-viewing-notes')?.value || '').trim();
+    const _vnRow = document.getElementById('tr-viewing-notes');
+    if (_vnRow) {
+      if (_viewNotes) {
+        _vnRow.style.display = '';
+        setText('td-viewing-notes', _viewNotes);
+      } else {
+        _vnRow.style.display = 'none';
+      }
+    }
     // 地址（原本塞在 out-title，改放這）
     if (d.address) {
       const _tags = [d.age === '全新' ? '全新成屋' : '', effHasPark ? '含車位' : ''].filter(Boolean).join('｜');
