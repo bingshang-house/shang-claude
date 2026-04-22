@@ -311,7 +311,7 @@
     /* 位置圖 + 地籍圖 並排 */
     .map-cadastral-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .cadastral-box { cursor: zoom-in; }
-    .cadastral-box #out-cadastral { height: 220px; background: #FFF8E0; display: flex; align-items: center; justify-content: center; }
+    .cadastral-box #out-cadastral { height: 220px; background: #FFF8E0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .cadastral-box #out-cadastral svg { width: 100%; height: 100%; display: block; }
 
     /* 地籍圖放大 modal */
@@ -1681,38 +1681,63 @@
     return `<a href="${url}" target="_blank" rel="noopener" title="點擊開啟 NLSC 地籍圖" style="color:#7A5500;text-decoration:underline;font-weight:600;">${txt}</a>`;
   }
 
-  // ===== 地籍圖 SVG 渲染（含邊長標註，多筆相鄰自動合併） =====
-  // 輸入座標是 EPSG:3826 TWD97 TM2（單位公尺），Y 軸正方向朝北
-  // 為了讓 font-size / stroke-width 不被 viewBox scale，所有座標先 pre-scale 成固定 viewBox (0 0 800 600)
-  function renderCadastralSvg(polygons, labels) {
+  // ===== 地籍圖 SVG 渲染（含邊長標註，多筆相鄰自動合併 + 周邊鄰地） =====
+  // 座標 EPSG:3826 TWD97 TM2（公尺），座標先 pre-scale 到固定 viewBox 避免 SVG font-size 被 scale
+  // selfPolys:   union 後的 polygon rings（畫 highlight 填色 + 邊長）
+  // selfEntries: 原始每筆 {ring, cadaText}（畫地號中心 label）— 用來 neighbor 去重
+  // neighbors:   周邊鄰地 [{ring, cadaText}, ...]（淡線 + 小字地號）
+  function renderCadastralSvg(selfPolys, selfEntries, neighbors) {
+    const polygons = selfPolys;
     if (!polygons || !polygons.length) return null;
     const rings = polygons.filter(p => p && p.length >= 3);
     if (!rings.length) return null;
 
-    // bounding box
+    // bounding box — 只以自己的土地為準 + 固定擴張（決定周邊顯示範圍）
+    // 超出這個 bbox 的 neighbor path 會被 SVG viewBox 自動裁切
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
     for (const r of rings) for (const [x,y] of r) {
       if (x<minX) minX=x; if (y<minY) minY=y;
       if (x>maxX) maxX=x; if (y>maxY) maxY=y;
     }
+    // 擴張距離：自己 bbox 的 1.5 倍或至少 40m（看哪個大）
+    const selfSize = Math.max(maxX-minX, maxY-minY);
+    const EXPAND = Math.max(selfSize * 0.7, 40);
+    minX -= EXPAND; minY -= EXPAND; maxX += EXPAND; maxY += EXPAND;
     const w = maxX - minX, h = maxY - minY;
     if (w <= 0 || h <= 0) return null;
 
-    const VB_W = 800, VB_H = 600, MARGIN = 60;
+    const VB_W = 1200, VB_H = 900, MARGIN = 40;
     const scale = Math.min((VB_W - 2*MARGIN) / w, (VB_H - 2*MARGIN) / h);
     const offsetX = VB_W/2 - (minX + w/2) * scale;
-    const offsetY = VB_H/2 + (minY + h/2) * scale;  // y 翻轉：+y 朝上，SVG +y 朝下
+    const offsetY = VB_H/2 + (minY + h/2) * scale;  // y 翻轉
     const tx = x => x * scale + offsetX;
     const ty = y => -y * scale + offsetY;
 
-    // 字體 / stroke 用固定 viewport unit（VB 0..800 / 0..600 對應顯示的 CSS px）
-    const styleEdge  = `font:700 16px 'PingFang TC',sans-serif;stroke-width:3.5;paint-order:stroke;`;
-    const styleLabel = `font:800 22px 'PingFang TC',sans-serif;stroke-width:3.5;paint-order:stroke;`;
+    // 樣式（CSS style 單位在 viewBox 系下仍是相對值 — 但配 pre-scaled 座標就穩定）
+    const styleEdge     = `font:700 16px 'PingFang TC',sans-serif;stroke-width:3.5;paint-order:stroke;`;
+    const styleLabel    = `font:800 22px 'PingFang TC',sans-serif;stroke-width:3.5;paint-order:stroke;`;
+    const styleNbLabel  = `font:500 11px 'PingFang TC',sans-serif;fill:#666;pointer-events:none;`;
 
-    let paths = '', edges = '', centers = '';
-    rings.forEach((r, idx) => {
+    // 1. 周邊鄰地（背景層）
+    let neighborPaths = '', neighborLabels = '';
+    if (neighbors?.length) {
+      neighbors.forEach(n => {
+        if (!n.ring || n.ring.length < 3) return;
+        const d = n.ring.map(([x,y], i) => `${i===0?'M':'L'}${tx(x)} ${ty(y)}`).join(' ') + ' Z';
+        neighborPaths += `<path d="${d}" fill="rgba(255,255,255,0.25)" stroke="#BBB" stroke-width="0.6" stroke-linejoin="round"/>`;
+        if (n.cadaText) {
+          const cx = n.ring.reduce((s,p)=>s+p[0],0)/n.ring.length;
+          const cy = n.ring.reduce((s,p)=>s+p[1],0)/n.ring.length;
+          neighborLabels += `<text x="${tx(cx)}" y="${ty(cy)}" text-anchor="middle" dominant-baseline="middle" style="${styleNbLabel}">${escH(n.cadaText)}</text>`;
+        }
+      });
+    }
+
+    // 2. 自己的土地（前景層，粗色 highlight + 邊長）
+    let paths = '', edges = '';
+    rings.forEach(r => {
       const d = r.map(([x,y], i) => `${i===0?'M':'L'}${tx(x)} ${ty(y)}`).join(' ') + ' Z';
-      paths += `<path d="${d}" fill="rgba(255,183,0,0.3)" stroke="#CC8F00" stroke-width="2.5" stroke-linejoin="round"/>`;
+      paths += `<path d="${d}" fill="rgba(255,183,0,0.42)" stroke="#CC8F00" stroke-width="2.5" stroke-linejoin="round"/>`;
 
       for (let i = 0; i < r.length; i++) {
         const a = r[i], b = r[(i+1) % r.length];
@@ -1722,15 +1747,57 @@
         const mx = (a[0]+b[0])/2, my = (a[1]+b[1])/2;
         edges += `<text x="${tx(mx)}" y="${ty(my)}" text-anchor="middle" dominant-baseline="middle" fill="#B91C1C" stroke="#FFF8E0" style="${styleEdge}">${dist.toFixed(1)}m</text>`;
       }
-
-      if (labels && labels[idx]) {
-        const cx = r.reduce((s,p)=>s+p[0],0)/r.length;
-        const cy = r.reduce((s,p)=>s+p[1],0)/r.length;
-        centers += `<text x="${tx(cx)}" y="${ty(cy)}" text-anchor="middle" dominant-baseline="middle" fill="#7A5500" stroke="#FFF8E0" style="${styleLabel}">${escH(labels[idx])}</text>`;
-      }
     });
 
-    return `<svg viewBox="0 0 ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="background:#FFF8E0;width:100%;height:100%;">${paths}${centers}${edges}</svg>`;
+    // 3. 自己的地號 label（用原始各筆 entry 的 ring 中心，不用 union 後的 polys）
+    let centers = '';
+    if (selfEntries?.length) {
+      selfEntries.forEach(e => {
+        if (!e.ring || e.ring.length < 3 || !e.cadaText) return;
+        const cx = e.ring.reduce((s,p)=>s+p[0],0)/e.ring.length;
+        const cy = e.ring.reduce((s,p)=>s+p[1],0)/e.ring.length;
+        centers += `<text x="${tx(cx)}" y="${ty(cy)}" text-anchor="middle" dominant-baseline="middle" fill="#7A5500" stroke="#FFF8E0" style="${styleLabel}">${escH(e.cadaText)}</text>`;
+      });
+    }
+
+    return `<svg viewBox="0 0 ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="background:#FFF8E0;width:100%;height:100%;">${neighborPaths}${neighborLabels}${paths}${centers}${edges}</svg>`;
+  }
+
+  // 周邊鄰地 features 快取（key：bbox 字串）
+  let _neighborCadastralCache = null;
+  let _neighborCadastralFetching = false;
+
+  async function fetchNeighborCadastral(bbox) {
+    // bbox = {minX, minY, maxX, maxY} in EPSG:3826，已含 padding
+    if (_neighborCadastralFetching) return null;
+    _neighborCadastralFetching = true;
+    try {
+      const geom = JSON.stringify({
+        xmin: bbox.minX, ymin: bbox.minY, xmax: bbox.maxX, ymax: bbox.maxY,
+        spatialReference: { wkid: 3826 }
+      });
+      const q = new URLSearchParams({
+        f: 'json',
+        geometry: geom,
+        geometryType: 'esriGeometryEnvelope',
+        inSR: '3826',
+        spatialRel: 'esriSpatialRelIntersects',
+        returnGeometry: 'true',
+        outFields: 'CADA_TEXT',
+        outSR: '3826'
+      });
+      const url = `${MAPGIS2}/G97_E_LNPAR_P/MapServer/0/query?${q}`;
+      const data = await proxyFetch(url);
+      const feats = (data.features || [])
+        .map(f => ({ ring: f.geometry?.rings?.[0], cadaText: f.attributes?.CADA_TEXT }))
+        .filter(n => n.ring && n.ring.length >= 3);
+      return feats;
+    } catch (e) {
+      console.warn('周邊地籍查詢失敗', e);
+      return null;
+    } finally {
+      _neighborCadastralFetching = false;
+    }
   }
 
   // 用 Turf.js union 合併多筆相鄰土地；回傳 [polygon, ...]（MultiPolygon 展平成多個 polygon）
@@ -1799,9 +1866,56 @@
       container.innerHTML = `<div class="map-placeholder"><span style="font-size:28px">📐</span><span>上傳土地謄本後自動帶入</span></div>`;
       return;
     }
-    const { polys, labels } = mergeLandPolygons(entries);
-    const svg = renderCadastralSvg(polys, labels);
-    container.innerHTML = svg || `<div class="map-placeholder">地籍渲染失敗</div>`;
+    const { polys } = mergeLandPolygons(entries);
+
+    // selfEntries：每筆原始 {ring, cadaText} — 畫地號 label + neighbor 去重
+    const loNoToCada = (loNo) => {
+      const m = String(loNo || '').match(/(\d+)(?:-0*(\d+))?/);
+      if (!m) return '';
+      return m[2] && m[2] !== '0' ? `${parseInt(m[1])}-${parseInt(m[2])}` : `${parseInt(m[1])}`;
+    };
+    const selfEntries = entries.map(e => ({ ring: e.polygon, cadaText: loNoToCada(e.loNo) }));
+    const selfCadaSet = new Set(selfEntries.map(e => e.cadaText).filter(Boolean));
+
+    // 算自己土地 bbox + padding → 拿周邊鄰地
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    for (const r of polys) for (const [x,y] of r) {
+      if (x<minX) minX=x; if (y<minY) minY=y;
+      if (x>maxX) maxX=x; if (y>maxY) maxY=y;
+    }
+    const PAD = 80;
+    const bbox = { minX: minX-PAD, minY: minY-PAD, maxX: maxX+PAD, maxY: maxY+PAD };
+    const bboxKey = `${Math.round(bbox.minX)},${Math.round(bbox.minY)},${Math.round(bbox.maxX)},${Math.round(bbox.maxY)}`;
+
+    const cacheHit = _neighborCadastralCache?.key === bboxKey ? _neighborCadastralCache.features : null;
+    const filterNeighbors = (nbs) => {
+      if (!nbs) return null;
+      const selfSize = Math.max(maxX-minX, maxY-minY);
+      const NEAR = Math.max(selfSize * 0.8, 50);
+      const nearMinX = minX-NEAR, nearMaxX = maxX+NEAR;
+      const nearMinY = minY-NEAR, nearMaxY = maxY+NEAR;
+      return nbs.filter(n => {
+        if (selfCadaSet.has(n.cadaText)) return false;   // 用 CADA_TEXT 比對排除自己
+        const cx = n.ring.reduce((s,p)=>s+p[0],0)/n.ring.length;
+        const cy = n.ring.reduce((s,p)=>s+p[1],0)/n.ring.length;
+        return cx >= nearMinX && cx <= nearMaxX && cy >= nearMinY && cy <= nearMaxY;
+      });
+    };
+    container.innerHTML = renderCadastralSvg(polys, selfEntries, filterNeighbors(cacheHit)) || `<div class="map-placeholder">地籍渲染失敗</div>`;
+
+    if (!cacheHit && !_neighborCadastralFetching) {
+      fetchNeighborCadastral(bbox).then(features => {
+        if (features) {
+          _neighborCadastralCache = { key: bboxKey, features };
+          // 重新從 _landData 最新狀態渲染（避免 then closure 抓到舊的 polys/selfEntries）
+          updateCadastralMap();
+          const modalContent = document.getElementById('cadastralModalContent');
+          if (modalContent && document.getElementById('cadastralModal')?.style.display === 'flex') {
+            modalContent.innerHTML = container.innerHTML;
+          }
+        }
+      });
+    }
   }
 
   function openCadastralModal() {
