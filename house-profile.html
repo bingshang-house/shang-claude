@@ -476,6 +476,28 @@
       font-weight: 700;
     }
     .btn-cs-xlsx:hover { background: #155a2a; }
+
+    /* 嫌惡設施查核（左欄 + A4） */
+    .hazard-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #fff; margin-left: 8px; cursor: pointer; user-select: none; }
+    .hazard-toggle input { accent-color: #FFB700; }
+    .hz-panel-empty { color: #999; font-size: 11.5px; padding: 6px; }
+    .hz-cat { margin-bottom: 8px; }
+    .hz-cat-head { font-weight: 700; color: #7A5500; font-size: 12px; margin-bottom: 3px; padding-left: 2px; }
+    .hz-item { display: flex; justify-content: space-between; align-items: center; padding: 3px 6px; background: #FFFBF0; border-radius: 3px; margin-bottom: 2px; font-size: 11.5px; }
+    .hz-item .d { color: #666; font-size: 11px; }
+    .hz-item .rm { background: none; border: none; color: #c00; cursor: pointer; font-size: 13px; padding: 0 4px; line-height: 1; }
+    .hazard-page { display: none; margin-top: 10px; border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; background: #fff; }
+    .hazard-page.show { display: block; }
+    .hz-page-header { background: #A87500; color: #fff; padding: 8px 14px; font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+    .hz-page-body { padding: 10px 14px; }
+    .hz-page-cat { margin-bottom: 8px; }
+    .hz-page-cat-title { font-weight: 700; color: #7A5500; font-size: 12.5px; border-left: 3px solid #FFB700; padding-left: 6px; margin-bottom: 4px; }
+    .hz-page-item { display: flex; justify-content: space-between; padding: 2px 8px; font-size: 11.5px; color: #333; line-height: 1.7; }
+    .hz-page-item .d { color: #666; }
+    .hz-page-note { font-size: 10px; color: #888; padding: 6px 14px 10px; border-top: 1px dashed #E8E0CC; background: #FFFBF0; }
+    @media print {
+      .hazard-page.show { page-break-before: always; display: block !important; }
+    }
   </style>
 </head>
 <body>
@@ -484,6 +506,7 @@
 <div class="top-bar">
   <span class="top-title">🏠 房屋銷售介紹產生器</span>
   <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載 Excel 銷售資料表">📊 下載 Excel</button>
+  <label class="hazard-toggle" title="勾選時列印會包含 300m 內嫌惡設施清單（自動分頁）"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含嫌惡設施</label>
   <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
   <button class="btn btn-reset" onclick="resetAll()">重置</button>
 </div>
@@ -768,6 +791,15 @@
         <textarea id="s-school" rows="2" oninput="updateCard()" placeholder="查詢後自動填入，或手動輸入"></textarea>
       </div>
 
+      <!-- 嫌惡設施查核（300m 內，Google Maps） -->
+      <div class="form-sep">嫌惡設施查核</div>
+      <div class="fg">
+        <button id="btnHazard" onclick="doHazardSearch()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">🔍 重新查詢 300m 內嫌惡設施</button>
+        <div id="hazard-status" style="font-size:11px;color:#666;margin-bottom:6px;min-height:0;"></div>
+        <div id="hazard-panel"><div class="hz-panel-empty">（尚未查詢）</div></div>
+        <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">上傳謄本後自動查；誤判項可按 ✕ 手動移除</div>
+      </div>
+
       <!-- AI 文案生成（訴求重點 + Gemini 改寫，下移） -->
       <div class="form-sep">AI 文案生成</div>
       <div class="fg">
@@ -1027,6 +1059,12 @@
           </div>
         </div>
 
+        <!-- 嫌惡設施查核（列印自動分第 2 頁；未勾選「列印含嫌惡設施」時整塊隱藏） -->
+        <section class="hazard-page" id="out-hazard-page">
+          <div class="hz-page-header">300m 內嫌惡設施查核</div>
+          <div class="hz-page-body" id="out-hazard-body"></div>
+          <div class="hz-page-note">本清單依 Google Maps 300 公尺內查詢結果；距離為直線距離；實地請現場查核。</div>
+        </section>
 
       </div>
 
@@ -1047,6 +1085,10 @@
   let _buildingData = {};   // { idx: { _raw, _fileName, address, district, village, ...parseDeed, expectedLandNos:Set, expectedBuildingNos:Set } }
   let _buildingIdx  = 0;
   let _ignoreValidation = false;
+
+  // 嫌惡設施查核 state
+  let _hazardResults = [];            // [{ key, label, items:[{ name, d, id }] }]
+  let _hazardIgnored = new Set();     // 使用者手動移除的 id / name，重查時自動過濾
 
   // ===== Init date =====
   (function() {
@@ -1170,6 +1212,7 @@
           }
         }
         doNearbySearch(true);
+        doHazardSearch(true);
       }
     } catch (err) {
       if (label) label.textContent = '解析失敗';
@@ -3834,6 +3877,10 @@
     _buildingData = {}; _buildingIdx = 0;
     _landData = {};     _landIdx = 0;
     _ignoreValidation = false;
+    _hazardResults = []; _hazardIgnored = new Set();
+    renderHazardPanel(); renderHazardA4();
+    const hzStatus = document.getElementById('hazard-status');
+    if (hzStatus) hzStatus.textContent = '';
     document.getElementById('building-entries').innerHTML = '';
     document.getElementById('land-entries').innerHTML = '';
     addBuildingEntry();
@@ -4551,6 +4598,144 @@ ${factsText}
       btn.disabled = false;
       btn.textContent = '🗺️ 重新查詢周邊機能';
     }
+  }
+
+  // ===== 嫌惡設施查核（300m，Google Places）=====
+  // 有 Google type 的用 type；否則用 keyword textQuery
+  const HAZARD_CATEGORIES = [
+    { key: 'funeral',  label: '殯葬設施', queries: [
+      { type: 'funeral_home' }, { type: 'cemetery' },
+      { keyword: '殯儀館' }, { keyword: '納骨塔' }, { keyword: '靈骨塔' },
+    ]},
+    { key: 'env',      label: '環保設施', queries: [
+      { keyword: '焚化爐' }, { keyword: '垃圾掩埋場' }, { keyword: '污水處理廠' },
+    ]},
+    { key: 'law',      label: '執法設施', queries: [
+      { keyword: '監獄' }, { keyword: '看守所' },
+    ]},
+    { key: 'energy',   label: '能源設施', queries: [
+      { type: 'gas_station' },
+      { keyword: '瓦斯行' }, { keyword: '變電所' }, { keyword: '高壓電塔' },
+    ]},
+    { key: 'medical',  label: '醫療設施', queries: [
+      { type: 'hospital' },
+    ]},
+    { key: 'religion', label: '宗教設施', queries: [
+      { type: 'place_of_worship' }, { keyword: '宮廟 寺廟' },
+    ]},
+    { key: 'noise',    label: '噪音設施', queries: [
+      { keyword: '夜市' }, { keyword: '傳統市場' }, { keyword: 'KTV' }, { keyword: '酒店' },
+    ]},
+  ];
+
+  async function doHazardSearch(silent = false) {
+    const addr = (deed.district || '') + (deed.address || '');
+    if (!addr) {
+      if (!silent) alert('請先上傳謄本 PDF，解析地址後再查詢');
+      return;
+    }
+    const btn = document.getElementById('btnHazard');
+    const statusEl = document.getElementById('hazard-status');
+    if (btn) btn.disabled = true;
+    if (statusEl) statusEl.textContent = '🔍 查詢中…';
+    try {
+      await loadGoogleMaps();
+      const loc = await gmGeocode(addr);
+      const RADIUS = 300;
+      const results = [];
+      for (const cat of HAZARD_CATEGORIES) {
+        const lists = await Promise.all(cat.queries.map(q => {
+          if (q.type)    return nearbySearch(loc, q.type, null,    RADIUS);
+          else           return nearbySearch(loc, null,   q.keyword, RADIUS);
+        }));
+        const merged = [].concat(...lists);
+        const seen = new Set();
+        const items = [];
+        for (const p of merged) {
+          const name = (p.displayName || '').trim();
+          if (!name) continue;
+          const id = p.id || name;
+          if (seen.has(id) || seen.has(name)) continue;
+          if (_hazardIgnored.has(id) || _hazardIgnored.has(name)) continue;
+          const d = calcDist(loc, p);
+          if (d > RADIUS) continue;
+          seen.add(id); seen.add(name);
+          items.push({ name, d, id });
+        }
+        items.sort((a, b) => a.d - b.d);
+        if (items.length) results.push({ key: cat.key, label: cat.label, items });
+      }
+      _hazardResults = results;
+      renderHazardPanel();
+      renderHazardA4();
+      if (statusEl) {
+        const total = results.reduce((s, r) => s + r.items.length, 0);
+        statusEl.innerHTML = total === 0
+          ? '<span style="color:#16a34a;">✓ 300m 內無顯著嫌惡設施</span>'
+          : `<span style="color:#16a34a;">✓ 300m 內找到 ${total} 項</span>`;
+      }
+    } catch (e) {
+      console.warn('doHazardSearch:', e);
+      if (statusEl) statusEl.innerHTML = `<span style="color:#dc2626;">✗ 查詢失敗：${e.message || ''}</span>`;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function renderHazardPanel() {
+    const el = document.getElementById('hazard-panel');
+    if (!el) return;
+    if (!_hazardResults.length) {
+      el.innerHTML = '<div class="hz-panel-empty">（尚未查詢或 300m 內無項）</div>';
+      return;
+    }
+    el.innerHTML = _hazardResults.map(cat => `
+      <div class="hz-cat">
+        <div class="hz-cat-head">${escH(cat.label)}（${cat.items.length}）</div>
+        ${cat.items.map(it => `
+          <div class="hz-item">
+            <span>${escH(it.name)}　<span class="d">約 ${it.d} m</span></span>
+            <button class="rm" title="誤判，從清單移除" onclick="removeHazardItem(${JSON.stringify(it.id)})">✕</button>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+  }
+
+  function removeHazardItem(id) {
+    if (id == null) return;
+    _hazardIgnored.add(id);
+    _hazardResults = _hazardResults
+      .map(cat => ({ ...cat, items: cat.items.filter(it => it.id !== id) }))
+      .filter(cat => cat.items.length > 0);
+    renderHazardPanel();
+    renderHazardA4();
+  }
+
+  function toggleHazardPrint() {
+    renderHazardA4();
+  }
+
+  function renderHazardA4() {
+    const page = document.getElementById('out-hazard-page');
+    const body = document.getElementById('out-hazard-body');
+    const chk  = document.getElementById('s-print-hazard');
+    if (!page || !body) return;
+    const include  = !chk || chk.checked;
+    const hasItems = _hazardResults.reduce((s, r) => s + r.items.length, 0) > 0;
+    if (!include || !hasItems) {
+      page.classList.remove('show');
+      return;
+    }
+    page.classList.add('show');
+    body.innerHTML = _hazardResults.map(cat => `
+      <div class="hz-page-cat">
+        <div class="hz-page-cat-title">${escH(cat.label)}</div>
+        ${cat.items.map(it => `
+          <div class="hz-page-item"><span>${escH(it.name)}</span><span class="d">約 ${it.d} m</span></div>
+        `).join('')}
+      </div>
+    `).join('');
   }
 
   // ===== NLSC Geocoding (地址→里鄰) =====
