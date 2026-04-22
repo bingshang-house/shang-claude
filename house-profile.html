@@ -3372,8 +3372,8 @@
         views: [{ showGridLines: false, showRowColHeaders: true }],
       });
 
-      // ── 欄寬：20 欄（A-T），總寬 ≈ 190mm 對應 A4 可印刷寬度 ──
-      for (let i = 1; i <= 20; i++) ws.getColumn(i).width = 4.6;
+      // ── 欄寬：20 欄（A-T），每欄 5.1 units × 20 ≈ 190mm 貼滿 A4 可印寬 ──
+      for (let i = 1; i <= 20; i++) ws.getColumn(i).width = 5.1;
 
       // ── 樣式常數（金黃系實色對照 CSS 漸層）──
       const FONT = '微軟正黑體';
@@ -3468,18 +3468,17 @@
 
       const pName = val('cs-s-partner-name');
       const pPhone = val('cs-s-partner-phone');
-      // 對齊網頁 updateCard 的聯絡資訊：有專員 → 專員+電話 ｜ 店長名（不含電話）；無 → 店長+電話
+      // 拆兩行避免單行放不下導致專員被左側截斷；有專員時店長不再印電話（對齊網頁）
       const contactText = pName
-        ? `專員 ${pName}　電話 ${pPhone}　｜　店長 江炳賞`
+        ? `專員 ${pName}　電話 ${pPhone}\n店長 江炳賞`
         : '店長 江炳賞　0971-115207';
       const contactCell = ws.getCell(row, 13);
       contactCell.value = contactText;
-      // 單行不 wrap，字體 11pt 才塞得進 8 欄（約 69mm）
       setStyle(contactCell, {
         font: { name: FONT, size: 11, bold: true, color: { argb: COLOR.deepBrown } },
-        alignment: { horizontal: 'right', vertical: 'middle', indent: 1, wrapText: false },
+        alignment: { horizontal: 'right', vertical: 'middle', indent: 1, wrapText: true },
       });
-      ws.getRow(row).height = 28;
+      ws.getRow(row).height = pName ? 34 : 24;
       row++;
 
       // R3: 公司資訊
@@ -3587,7 +3586,7 @@
         for (const seg of s.split('\n')) {
           lines += Math.max(1, Math.ceil(seg.length / charsPerLine));
         }
-        return Math.min(lines, 6); // 上限 6 行，避免單列爆高；超出由 Excel 自動 wrap 隱藏
+        return Math.min(lines, 12); // 上限 12 行，主建物多層樓面積需要空間
       }
       // 單列高 9pt 字型行高約 14pt；保守一行 15pt
       const ROW_H = 15;
@@ -3657,49 +3656,15 @@
       fullRow('建物面寬', td('td-bld-width'));
       fullRow('電梯', td('td-elevator'));
 
-      groupTitle('使用執照與細項');
-      dualRow('使用執照', td('td-lic'), '總戶數', td('td-lic-units'));
-      dualRow('總樓層', td('td-lic-floors'), '建商', td('td-lic-builder'));
-      dualRow('本樓樓板高度', td('td-lic-floorheight'), '使用類組', td('td-lic-usage'));
-      dualRow('中繼水箱', td('td-lic-watertank'), '綠建築', td('td-lic-green'));
-      dualRow('太陽能', td('td-lic-solar'), '', '');
+      // 使用執照只留號碼（賞哥：Excel 只需文字沒要搜尋，其他細項可不印）+ 學區 + 社區公設
+      groupTitle('使用執照與學區');
+      fullRow('使用執照', td('td-lic'));
       dualRow('國小學區', td('td-school-e'), '國中學區', td('td-school-j'));
       fullRow('社區公設', td('td-facilities'));
 
       row++; // 分隔
 
-      // ============ 周遭機能（2×2）============
-      groupTitle('周遭機能分析');
-      const surrLabels = [
-        ['🚌 交通機能', td('out-traffic', '－')],
-        ['🛒 生活機能', td('out-life', '－')],
-        ['🏪 商圈特色', td('out-location', '－')],
-        ['🏗️ 重要發展', td('out-develop', '－')],
-      ];
-      for (let i = 0; i < 4; i += 2) {
-        // label row
-        ws.mergeCells(row, 1, row, 10);
-        ws.mergeCells(row, 11, row, 20);
-        kvCell(1,  surrLabels[i][0],   true);
-        kvCell(11, surrLabels[i+1][0], true);
-        ws.getRow(row).height = 15;
-        row++;
-        // content row（wrapText 多行）
-        ws.mergeCells(row, 1, row, 10);
-        ws.mergeCells(row, 11, row, 20);
-        kvCell(1,  surrLabels[i][1],   false);
-        kvCell(11, surrLabels[i+1][1], false);
-        const maxLines = Math.max(
-          String(surrLabels[i][1]).split('\n').length,
-          String(surrLabels[i+1][1]).split('\n').length,
-        );
-        ws.getRow(row).height = Math.max(34, maxLines * 14);
-        row++;
-      }
-
-      row++; // 分隔
-
-      // ============ 訴求重點（全寬）============
+      // ============ 訴求重點（上移到周遭機能上方）============
       groupTitle('訴求重點');
       const pointsEl = document.getElementById('out-points');
       const pointsText = pointsEl
@@ -3714,7 +3679,40 @@
         border: borderAll,
       });
       const ptLines = (pointsText || '').split('\n').length || 1;
-      ws.getRow(row).height = Math.max(48, ptLines * 14);  // 網頁 11px 訴求重點，對應 8-9pt + 緊行距
+      ws.getRow(row).height = Math.max(48, ptLines * 14);
+      row++;
+
+      row++; // 分隔
+
+      // ============ 周遭機能（砍重要發展：剩 3 項 → 交通/生活 + 商圈全寬）============
+      groupTitle('周遭機能分析');
+      // 第一排：交通 + 生活
+      ws.mergeCells(row, 1, row, 10);
+      ws.mergeCells(row, 11, row, 20);
+      kvCell(1,  '🚌 交通機能', true);
+      kvCell(11, '🛒 生活機能', true);
+      ws.getRow(row).height = 15;
+      row++;
+      const traffic = td('out-traffic', '－');
+      const life    = td('out-life', '－');
+      ws.mergeCells(row, 1, row, 10);
+      ws.mergeCells(row, 11, row, 20);
+      kvCell(1,  traffic, false);
+      kvCell(11, life,    false);
+      {
+        const maxL = Math.max(String(traffic).split('\n').length, String(life).split('\n').length);
+        ws.getRow(row).height = Math.max(34, maxL * 14);
+      }
+      row++;
+      // 第二排：商圈全寬
+      const loc = td('out-location', '－');
+      ws.mergeCells(row, 1, row, 20);
+      kvCell(1, '🏪 商圈特色', true);
+      ws.getRow(row).height = 15;
+      row++;
+      ws.mergeCells(row, 1, row, 20);
+      kvCell(1, loc, false);
+      ws.getRow(row).height = Math.max(24, String(loc).split('\n').length * 14);
       row++;
 
       row++; // 分隔
