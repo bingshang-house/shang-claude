@@ -3195,6 +3195,43 @@
     });
   }
 
+  // SVG 地籍圖 → PNG bytes（給 A4 Excel 用，重用 saveCadastralImage 的 pipeline）
+  async function getCadastralPngBytes() {
+    const svg = document.querySelector('#cadastralModalContent svg') || document.querySelector('#out-cadastral svg');
+    if (!svg) return null;
+    const clone = svg.cloneNode(true);
+    if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    if (!clone.getAttribute('xmlns:xlink')) clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    const svgStr = new XMLSerializer().serializeToString(clone);
+    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('svg load')); img.src = svgUrl; });
+      const vb = (svg.getAttribute('viewBox') || '0 0 1200 900').split(/\s+/);
+      const vbW = parseFloat(vb[2]) || 1200;
+      const vbH = parseFloat(vb[3]) || 900;
+      const SCALE = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = vbW * SCALE; canvas.height = vbH * SCALE;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFF8E0'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      return new Uint8Array(await blob.arrayBuffer());
+    } finally {
+      URL.revokeObjectURL(svgUrl);
+    }
+  }
+
+  // 格局圖 dataURL → JPEG bytes
+  async function getPlanImgBytes() {
+    const img = document.querySelector('#csPlanPreview img, #planPreview img');
+    if (!img || !img.src || !img.src.startsWith('data:')) return null;
+    return await dataUrlToJpegBytes(img.src);
+  }
+
   // ============================================================================
   // A4 銷售表 Excel 下載（2026-04-22 開工，C1：骨架 + 資料 + 樣式）
   // 目標：右側 A4 預覽版面 → 可下載、可編輯、可列印的 Excel
@@ -3554,19 +3591,80 @@
 
       row++; // 分隔
 
-      // ============ 位置圖 / 地籍圖 / 格局圖 框（C2 再嵌圖，先留空位）============
-      groupTitle('附圖（位置圖 / 地籍圖 / 格局圖，下版自動嵌入，目前先留空）');
-      ws.mergeCells(row, 1, row, 20);
-      const placeholder = ws.getCell(row, 1);
-      placeholder.value = '（此區下一版將自動嵌入位置圖、地籍圖、格局圖。）';
-      setStyle(placeholder, {
-        font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
-        alignment: { horizontal: 'center', vertical: 'middle' },
-        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } },
-        border: borderAll,
-      });
-      ws.getRow(row).height = 140;
-      row++;
+      // ============ 位置圖 + 地籍圖（左右並排）============
+      // 並行抓三張圖（失敗回 null，不阻斷下載）
+      const addrForMap = (deed?.district || '') + (deed?.address || '');
+      const [mapBytes, cadaBytes, planBytes] = await Promise.all([
+        addrForMap ? fetchStaticMapJpegBytes(addrForMap).catch(() => null) : Promise.resolve(null),
+        getCadastralPngBytes().catch(() => null),
+        getPlanImgBytes().catch(() => null),
+      ]);
+
+      groupTitle('位置圖　／　地籍圖（含邊長）');
+      const mapRowStart = row;
+      const MAP_ROWS = 11;
+      for (let i = 0; i < MAP_ROWS; i++) ws.getRow(row + i).height = 16;
+      // 底色佔位 + 邊框
+      for (let rr = row; rr < row + MAP_ROWS; rr++) {
+        for (let col = 1; col <= 20; col++) {
+          const cc = ws.getCell(rr, col);
+          cc.border = borderAll;
+          if (!cc.fill) cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } };
+        }
+      }
+      if (mapBytes) {
+        const id = wb.addImage({ buffer: mapBytes, extension: 'jpeg' });
+        // ExcelJS addImage col/row 0-indexed
+        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 9.8, row: row - 1 + MAP_ROWS - 0.2 } });
+      } else {
+        ws.mergeCells(row, 1, row + MAP_ROWS - 1, 10);
+        const c = ws.getCell(row, 1);
+        c.value = '（未取得位置圖 — 需解析地址成功）';
+        setStyle(c, {
+          font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
+          alignment: { horizontal: 'center', vertical: 'middle' },
+        });
+      }
+      if (cadaBytes) {
+        const id = wb.addImage({ buffer: cadaBytes, extension: 'png' });
+        ws.addImage(id, { tl: { col: 10.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + MAP_ROWS - 0.2 } });
+      } else {
+        ws.mergeCells(row, 11, row + MAP_ROWS - 1, 20);
+        const c = ws.getCell(row, 11);
+        c.value = '（未取得地籍圖 — 需上傳土地謄本）';
+        setStyle(c, {
+          font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
+          alignment: { horizontal: 'center', vertical: 'middle' },
+        });
+      }
+      row += MAP_ROWS;
+
+      row++; // 分隔
+
+      // ============ 格局圖（全寬）============
+      groupTitle('格局參考圖');
+      const PLAN_ROWS = 10;
+      for (let i = 0; i < PLAN_ROWS; i++) ws.getRow(row + i).height = 16;
+      for (let rr = row; rr < row + PLAN_ROWS; rr++) {
+        for (let col = 1; col <= 20; col++) {
+          const cc = ws.getCell(rr, col);
+          cc.border = borderAll;
+          if (!cc.fill) cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } };
+        }
+      }
+      if (planBytes) {
+        const id = wb.addImage({ buffer: planBytes, extension: 'jpeg' });
+        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + PLAN_ROWS - 0.2 } });
+      } else {
+        ws.mergeCells(row, 1, row + PLAN_ROWS - 1, 20);
+        const c = ws.getCell(row, 1);
+        c.value = '（未取得格局圖 — 需從左側上傳）';
+        setStyle(c, {
+          font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
+          alignment: { horizontal: 'center', vertical: 'middle' },
+        });
+      }
+      row += PLAN_ROWS;
 
       // ============ 嫌惡設施頁（決策 1a 自然 2 頁）============
       // 在此插入分頁符（row break），讓嫌惡頁獨立到第 2 頁列印
