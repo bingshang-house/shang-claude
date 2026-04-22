@@ -4633,6 +4633,11 @@ ${factsText}
   const HAZARD_NAME_BLACKLIST = {
     noise: /飯店|Hotel|Inn\b|商旅|旅店|旅館|旅居|Hostel/i,
   };
+  // 類別層名稱白名單：Google type 過鬆時用
+  // medical：hospital type 台灣覆蓋含診所/牙醫 → 要求名稱必須含「醫院」
+  const HAZARD_NAME_WHITELIST = {
+    medical: /醫院/,
+  };
 
   async function doHazardSearch(silent = false) {
     const addr = (deed.district || '') + (deed.address || '');
@@ -4658,10 +4663,12 @@ ${factsText}
         const seen = new Set();
         const items = [];
         const bl = HAZARD_NAME_BLACKLIST[cat.key];
+        const wl = HAZARD_NAME_WHITELIST[cat.key];
         for (const p of merged) {
           const name = (p.displayName || '').trim();
           if (!name) continue;
           if (bl && bl.test(name)) continue;   // 黑名單（如飯店被當 hotel 誤抓）
+          if (wl && !wl.test(name)) continue;  // 白名單（如醫療只留含「醫院」字樣）
           const id = p.id || name;
           if (seen.has(id) || seen.has(name)) continue;
           if (_hazardIgnored.has(id) || _hazardIgnored.has(name)) continue;
