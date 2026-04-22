@@ -265,22 +265,24 @@
       white-space: nowrap;
     }
     .header-contact {
-      font-size: 14px;
-      font-weight: 700;
+      font-size: 18px;
+      font-weight: 800;
       color: #FFB700;
       white-space: nowrap;
       letter-spacing: 0.5px;
       margin-left: auto;
     }
-    .header-contact .sep { color: rgba(255,248,224,0.55); font-weight: 500; margin: 0 6px; }
-    .header-contact .role { color: #FFF8E0; font-size: 11px; font-weight: 600; margin-right: 3px; letter-spacing: 0; }
+    .header-contact .sep { color: rgba(255,248,224,0.7); font-weight: 500; margin: 0 8px; }
+    .header-contact .role { color: #FFF8E0; font-size: 13px; font-weight: 700; margin-right: 4px; letter-spacing: 0; }
     .header-prop-addr { font-size: 11px; color: #FFF8E0; margin-top: 3px; }
     .header-company-row {
       margin-top: 8px;
       padding-top: 7px;
       border-top: 1px solid rgba(255,248,224,.3);
-      font-size: 10px;
+      font-size: 12.5px;
+      font-weight: 500;
       color: #FFF8E0;
+      letter-spacing: 0.3px;
     }
 
     /* Price Bar */
@@ -527,8 +529,8 @@
 
       <div class="fg-row">
         <div class="fg">
-          <label>案件名稱</label>
-          <input type="text" id="cs-s-case-name" placeholder="例：亞灣朗闊豪宅" oninput="updateCard()">
+          <label>案件名稱　<span id="cs-case-name-counter" style="font-size:11px;font-weight:500;color:#dc2626;">0 / 16</span></label>
+          <input type="text" id="cs-s-case-name" placeholder="例：亞灣朗闊豪宅（請滿 16 字）" maxlength="16" oninput="updateCard()">
         </div>
         <div class="fg">
           <label>社區名稱</label>
@@ -775,6 +777,19 @@
               <colgroup>
                 <col class="c-key"><col class="c-val"><col class="c-key"><col class="c-val">
               </colgroup>
+              <tr class="group-title"><td colspan="4">案件資訊</td></tr>
+              <tr>
+                <td class="key">案件名稱</td><td class="val" id="td-case-name"><span class="pending">待補充</span></td>
+                <td class="key">社區名稱</td><td class="val" id="td-community"><span class="pending">待補充</span></td>
+              </tr>
+              <tr>
+                <td class="key">合約編號</td><td class="val" id="td-contract">－</td>
+                <td class="key">鑰匙存置</td><td class="val" id="td-keyhold">－</td>
+              </tr>
+              <tr class="full-row">
+                <td class="key">地　址</td><td class="val" colspan="3" id="td-addr">－</td>
+              </tr>
+
               <tr class="group-title"><td colspan="4">基本資料</td></tr>
               <tr>
                 <td class="key">樓　層</td><td class="val" id="td-floor">－</td>
@@ -2658,12 +2673,46 @@
     const effParkNo  = d.hasParking ? (d.parkNo || '') : (_parkManualChk ? _parkNoManual : '');
     const effParkPing = d.hasParking ? (d.parkPing || 0) : 0;
 
-    // Title & address
+    // 標題：有填案件名稱就用案件名稱，否則顯示案件資訊（待補）
+    const _caseName = (document.getElementById('cs-s-case-name')?.value || '').trim();
+    const _commName = (document.getElementById('cs-s-community')?.value || '').trim();
+    const _titleEl = document.getElementById('out-title');
+    if (_titleEl) {
+      if (_caseName) _titleEl.textContent = _caseName;
+      else if (_commName) _titleEl.textContent = _commName;
+      else if (d.address) _titleEl.textContent = `${d.district || '高雄市前鎮區'}${d.address}`;
+      else _titleEl.textContent = '請上傳謄本 PDF';
+    }
+
+    // 案件名稱 16 字計數器
+    const _cnt = document.getElementById('cs-case-name-counter');
+    if (_cnt) {
+      const len = _caseName.length;
+      _cnt.textContent = `${len} / 16`;
+      _cnt.style.color = len === 16 ? '#16a34a' : '#dc2626';
+    }
+
+    // 案件資訊 A4 顯示
+    const _keyholdLabel = { store: '店取', owner: '屋主', agent: '洽承辦' };
+    const _keyhold = document.getElementById('cs-s-keyhold')?.value || '';
+    const _contract = (document.getElementById('cs-s-contract')?.value || '').trim();
+    // 案件名稱：滿 16 字 → 正常；未滿 → 紅字+字數標記；空 → 待補充
+    if (_caseName.length === 16) {
+      setText('td-case-name', _caseName);
+    } else if (_caseName.length > 0) {
+      setHtml('td-case-name', `<span style="color:#dc2626;font-weight:600;">${escH(_caseName)}　<span style="font-size:10px;">（${_caseName.length}/16，請補足）</span></span>`);
+    } else {
+      setHtml('td-case-name', `<span class="pending">待補充</span>`);
+    }
+    setHtml('td-community', _commName ? escH(_commName) : `<span class="pending">待補充</span>`);
+    setText('td-contract', _contract || '－');
+    setText('td-keyhold', _keyholdLabel[_keyhold] || '－');
+    // 地址（原本塞在 out-title，改放這）
     if (d.address) {
-      const floorStr = d.floor ? ` ${d.floor} 樓` : '';
-      const tags = [d.age === '全新' ? '全新成屋' : '', effHasPark ? '含車位' : ''].filter(Boolean).join('｜');
-      document.getElementById('out-title').textContent =
-        `${d.district || '高雄市前鎮區'}${d.address}${tags ? '　' + tags : ''}`;
+      const _tags = [d.age === '全新' ? '全新成屋' : '', effHasPark ? '含車位' : ''].filter(Boolean).join('｜');
+      setText('td-addr', `${d.district || '高雄市前鎮區'}${d.address}${_tags ? '　' + _tags : ''}`);
+    } else {
+      setText('td-addr', '－');
     }
 
     // 表頭右側聯絡資訊：夥伴有填則以夥伴為主 + 店長江炳賞；未填則店長江炳賞全段
