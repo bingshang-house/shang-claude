@@ -325,13 +325,18 @@
     .cadastral-box #out-cadastral svg { width: 100%; height: 100%; display: block; }
 
     /* 地籍圖放大 modal */
-    .cadastral-modal { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+    .cadastral-modal { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; cursor: default; }
     .cadastral-modal-inner { position: relative; width: 92vw; height: 90vh; background: #FFF8E0; border-radius: 8px; overflow: hidden; cursor: default; }
     .cadastral-modal-inner #cadastralModalContent { width: 100%; height: 100%; }
-    .cadastral-modal-inner #cadastralModalContent svg { width: 100%; height: 100%; display: block; }
+    .cadastral-modal-inner #cadastralModalContent svg { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+    .cadastral-modal-inner #cadastralModalContent svg.grabbing { cursor: grabbing; }
     .cadastral-modal-close { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border-radius: 50%; background: #7A5500; color: #fff; border: none; font-size: 24px; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center; }
     .cadastral-modal-close:hover { background: #CC8F00; }
-    .cadastral-modal-hint { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font-size: 11px; color: #7A5500; }
+    .cadastral-modal-hint { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font-size: 11px; color: #7A5500; pointer-events: none; }
+    .cadastral-modal-toolbar { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; align-items: center; z-index: 2; background: rgba(255, 248, 224, 0.92); border: 1px solid #E8E0CC; border-radius: 8px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+    .cadastral-modal-toolbar button { font: 600 13px 'PingFang TC', 'Microsoft JhengHei', sans-serif; padding: 6px 12px; border: 1px solid #CC8F00; border-radius: 6px; background: #FFB700; color: #7A5500; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+    .cadastral-modal-toolbar button:hover { background: #CC8F00; color: #fff; }
+    .cadastral-modal-toolbar .pz-zoom { font: 600 12px 'PingFang TC', sans-serif; color: #7A5500; padding: 0 6px; min-width: 48px; text-align: center; border-left: 1px solid #E8E0CC; }
     @media print {
       .cadastral-modal { display: none !important; }
     }
@@ -870,9 +875,14 @@
 
         <div id="cadastralModal" class="cadastral-modal" style="display:none;" onclick="closeCadastralModal(event)">
           <div class="cadastral-modal-inner">
+            <div class="cadastral-modal-toolbar">
+              <button type="button" onclick="resetCadastralZoom()" title="重置視角">↻ 重置</button>
+              <button type="button" onclick="saveCadastralImage()" title="儲存為 PNG 圖片">💾 儲存圖片</button>
+              <span class="pz-zoom" id="pz-zoom">100%</span>
+            </div>
             <button class="cadastral-modal-close" onclick="closeCadastralModal(event)">×</button>
             <div id="cadastralModalContent"></div>
-            <div class="cadastral-modal-hint">點擊空白處或按 ESC 關閉</div>
+            <div class="cadastral-modal-hint">滑鼠滾輪縮放 / 拖曳平移 / ESC 關閉</div>
           </div>
         </div>
 
@@ -1926,30 +1936,252 @@
           updateCadastralMap();
           const modalContent = document.getElementById('cadastralModalContent');
           if (modalContent && document.getElementById('cadastralModal')?.style.display === 'flex') {
-            modalContent.innerHTML = container.innerHTML;
+            // 保留當前 pan/zoom，重新 wrap 新的 SVG 內容
+            const savedScale = _PZ.scale, savedTx = _PZ.tx, savedTy = _PZ.ty;
+            unbindPZEvents();
+            const src = container.innerHTML;
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(src, 'image/svg+xml');
+            const svgEl = doc.documentElement;
+            const g = doc.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'pz-wrap');
+            while (svgEl.firstChild) g.appendChild(svgEl.firstChild);
+            svgEl.appendChild(g);
+            modalContent.innerHTML = new XMLSerializer().serializeToString(svgEl);
+            _PZ.svg = modalContent.querySelector('svg');
+            _PZ.g = modalContent.querySelector('g.pz-wrap');
+            _PZ.scale = savedScale; _PZ.tx = savedTx; _PZ.ty = savedTy;
+            applyPZ(); updateZoomDisplay();
+            bindPZEvents();
           }
         }
       });
     }
   }
 
+  // 地籍圖 modal pan/zoom 狀態
+  const _PZ = {
+    svg: null, g: null,
+    scale: 1, tx: 0, ty: 0,
+    vbW: 1200, vbH: 900,
+    dragging: false, dragStarted: false, lastX: 0, lastY: 0,
+    moveHandler: null, upHandler: null
+  };
+
   function openCadastralModal() {
-    const svg = document.getElementById('out-cadastral')?.innerHTML || '';
-    if (!svg || svg.includes('map-placeholder')) return;
-    document.getElementById('cadastralModalContent').innerHTML = svg;
-    document.getElementById('cadastralModal').style.display = 'flex';
+    const src = document.getElementById('out-cadastral')?.innerHTML || '';
+    if (!src || src.includes('map-placeholder')) return;
+    const modal = document.getElementById('cadastralModal');
+    const content = document.getElementById('cadastralModalContent');
+
+    // 把 SVG 內容包進 <g class="pz-wrap">，透過 transform 控制縮放/平移
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(src, 'image/svg+xml');
+    const svgEl = doc.documentElement;
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    const g = doc.createElementNS(SVGNS, 'g');
+    g.setAttribute('class', 'pz-wrap');
+    while (svgEl.firstChild) g.appendChild(svgEl.firstChild);
+    svgEl.appendChild(g);
+    content.innerHTML = new XMLSerializer().serializeToString(svgEl);
+    modal.style.display = 'flex';
+
+    _PZ.svg = content.querySelector('svg');
+    _PZ.g = content.querySelector('g.pz-wrap');
+    const vb = (_PZ.svg?.getAttribute('viewBox') || '0 0 1200 900').split(/\s+/).map(Number);
+    _PZ.vbW = vb[2] || 1200; _PZ.vbH = vb[3] || 900;
+    _PZ.scale = 1; _PZ.tx = 0; _PZ.ty = 0;
+    applyPZ(); updateZoomDisplay();
+    bindPZEvents();
   }
+
+  function applyPZ() {
+    if (_PZ.g) _PZ.g.setAttribute('transform', `translate(${_PZ.tx} ${_PZ.ty}) scale(${_PZ.scale})`);
+  }
+  function updateZoomDisplay() {
+    const el = document.getElementById('pz-zoom');
+    if (el) el.textContent = Math.round(_PZ.scale * 100) + '%';
+  }
+
+  function screenToVB(clientX, clientY) {
+    if (!_PZ.svg) return null;
+    const pt = _PZ.svg.createSVGPoint();
+    pt.x = clientX; pt.y = clientY;
+    const ctm = _PZ.svg.getScreenCTM();
+    if (!ctm) return null;
+    const loc = pt.matrixTransform(ctm.inverse());
+    return { x: loc.x, y: loc.y };
+  }
+
+  function bindPZEvents() {
+    const svg = _PZ.svg;
+    if (!svg) return;
+
+    svg.addEventListener('wheel', onPZWheel, { passive: false });
+    svg.addEventListener('mousedown', onPZMouseDown);
+    svg.addEventListener('touchstart', onPZTouchStart, { passive: false });
+    svg.addEventListener('touchmove',  onPZTouchMove,  { passive: false });
+    svg.addEventListener('touchend',   onPZTouchEnd);
+
+    _PZ.moveHandler = onPZMouseMove;
+    _PZ.upHandler = onPZMouseUp;
+    window.addEventListener('mousemove', _PZ.moveHandler);
+    window.addEventListener('mouseup', _PZ.upHandler);
+  }
+  function unbindPZEvents() {
+    if (_PZ.moveHandler) window.removeEventListener('mousemove', _PZ.moveHandler);
+    if (_PZ.upHandler)   window.removeEventListener('mouseup', _PZ.upHandler);
+    _PZ.moveHandler = null; _PZ.upHandler = null;
+    _PZ.svg = null; _PZ.g = null;
+    _PZ.dragging = false; _PZ.dragStarted = false;
+  }
+
+  function onPZWheel(e) {
+    e.preventDefault();
+    const p = screenToVB(e.clientX, e.clientY);
+    if (!p) return;
+    const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+    const newScale = Math.max(0.3, Math.min(20, _PZ.scale * factor));
+    const af = newScale / _PZ.scale;
+    _PZ.tx = p.x - (p.x - _PZ.tx) * af;
+    _PZ.ty = p.y - (p.y - _PZ.ty) * af;
+    _PZ.scale = newScale;
+    applyPZ(); updateZoomDisplay();
+  }
+  function onPZMouseDown(e) {
+    if (e.button !== 0) return;
+    _PZ.dragging = true; _PZ.dragStarted = false;
+    _PZ.lastX = e.clientX; _PZ.lastY = e.clientY;
+    if (_PZ.svg) _PZ.svg.classList.add('grabbing');
+    e.preventDefault();
+  }
+  function onPZMouseMove(e) {
+    if (!_PZ.dragging || !_PZ.svg) return;
+    const rect = _PZ.svg.getBoundingClientRect();
+    // preserveAspectRatio=xMidYMid meet → 單一縮放因子 = max(vbW/rect.w, vbH/rect.h)
+    const vbScale = Math.max(_PZ.vbW / rect.width, _PZ.vbH / rect.height);
+    _PZ.tx += (e.clientX - _PZ.lastX) * vbScale;
+    _PZ.ty += (e.clientY - _PZ.lastY) * vbScale;
+    _PZ.lastX = e.clientX; _PZ.lastY = e.clientY;
+    _PZ.dragStarted = true;
+    applyPZ();
+  }
+  function onPZMouseUp() {
+    if (!_PZ.dragging) return;
+    _PZ.dragging = false;
+    if (_PZ.svg) _PZ.svg.classList.remove('grabbing');
+    // 讓瀏覽器下一輪再把 dragStarted 重置，避免拖曳後 click 誤觸
+    setTimeout(() => { _PZ.dragStarted = false; }, 0);
+  }
+
+  // touch 支援：單指平移 + 雙指 pinch 縮放
+  let _touchPrev = null;
+  function onPZTouchStart(e) {
+    if (e.touches.length === 1) {
+      _touchPrev = { x: e.touches[0].clientX, y: e.touches[0].clientY, d: null };
+    } else if (e.touches.length === 2) {
+      const [a, b] = e.touches;
+      _touchPrev = { x: (a.clientX+b.clientX)/2, y: (a.clientY+b.clientY)/2, d: Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY) };
+    }
+    e.preventDefault();
+  }
+  function onPZTouchMove(e) {
+    if (!_touchPrev || !_PZ.svg) return;
+    e.preventDefault();
+    const rect = _PZ.svg.getBoundingClientRect();
+    const vbScale = Math.max(_PZ.vbW / rect.width, _PZ.vbH / rect.height);
+    if (e.touches.length === 1 && _touchPrev.d === null) {
+      const t = e.touches[0];
+      _PZ.tx += (t.clientX - _touchPrev.x) * vbScale;
+      _PZ.ty += (t.clientY - _touchPrev.y) * vbScale;
+      _touchPrev.x = t.clientX; _touchPrev.y = t.clientY;
+      applyPZ();
+    } else if (e.touches.length === 2 && _touchPrev.d != null) {
+      const [a, b] = e.touches;
+      const cx = (a.clientX+b.clientX)/2, cy = (a.clientY+b.clientY)/2;
+      const d = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+      const factor = d / _touchPrev.d;
+      const p = screenToVB(cx, cy);
+      if (p) {
+        const newScale = Math.max(0.3, Math.min(20, _PZ.scale * factor));
+        const af = newScale / _PZ.scale;
+        _PZ.tx = p.x - (p.x - _PZ.tx) * af;
+        _PZ.ty = p.y - (p.y - _PZ.ty) * af;
+        _PZ.scale = newScale;
+      }
+      _PZ.tx += (cx - _touchPrev.x) * vbScale;
+      _PZ.ty += (cy - _touchPrev.y) * vbScale;
+      _touchPrev = { x: cx, y: cy, d };
+      applyPZ(); updateZoomDisplay();
+    }
+  }
+  function onPZTouchEnd(e) {
+    if (e.touches.length === 0) _touchPrev = null;
+    else if (e.touches.length === 1) _touchPrev = { x: e.touches[0].clientX, y: e.touches[0].clientY, d: null };
+  }
+
+  function resetCadastralZoom() {
+    _PZ.scale = 1; _PZ.tx = 0; _PZ.ty = 0;
+    applyPZ(); updateZoomDisplay();
+  }
+
+  async function saveCadastralImage() {
+    if (!_PZ.svg) return;
+    // clone svg 並確保 xmlns（某些情況 serialize 會漏）
+    const clone = _PZ.svg.cloneNode(true);
+    if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    if (!clone.getAttribute('xmlns:xlink')) clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    const svgStr = new XMLSerializer().serializeToString(clone);
+    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = () => rej(new Error('SVG 載入失敗'));
+        img.src = svgUrl;
+      });
+      const SCALE = 2; // 2x 提高輸出解析度
+      const canvas = document.createElement('canvas');
+      canvas.width = _PZ.vbW * SCALE;
+      canvas.height = _PZ.vbH * SCALE;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFF8E0';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const pngBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      const pngUrl = URL.createObjectURL(pngBlob);
+      // 檔名含地號（盡力而為）
+      const labels = (typeof _landData === 'object')
+        ? Object.values(_landData || {}).map(e => (String(e.loNo||'').match(/(\d+)(?:-0*(\d+))?/)||[]).slice(1).filter(Boolean).join('-')).filter(Boolean).slice(0,3).join('_')
+        : '';
+      const ts = new Date().toISOString().slice(0,19).replace(/[-:T]/g,'');
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = `地籍圖${labels ? '_' + labels : ''}_${ts}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(pngUrl), 2000);
+    } catch (err) {
+      alert('存圖失敗：' + (err?.message || err));
+    } finally {
+      URL.revokeObjectURL(svgUrl);
+    }
+  }
+
   function closeCadastralModal(e) {
-    if (!e) { document.getElementById('cadastralModal').style.display = 'none'; return; }
-    // 只有點到 modal 背景（cadastral-modal 本身）或 close button 才關
+    const modal = document.getElementById('cadastralModal');
+    if (!e) { modal.style.display = 'none'; unbindPZEvents(); return; }
+    // drag 剛結束的 click 不關閉
+    if (_PZ.dragStarted) return;
     const isBg = e.target.classList?.contains('cadastral-modal');
     const isClose = e.target.classList?.contains('cadastral-modal-close');
-    if (isBg || isClose) document.getElementById('cadastralModal').style.display = 'none';
+    if (isBg || isClose) { modal.style.display = 'none'; unbindPZEvents(); }
   }
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       const m = document.getElementById('cadastralModal');
-      if (m && m.style.display === 'flex') m.style.display = 'none';
+      if (m && m.style.display === 'flex') { m.style.display = 'none'; unbindPZEvents(); }
     }
   });
 
