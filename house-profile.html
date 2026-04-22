@@ -596,7 +596,16 @@
 
       <div class="fg">
         <label>⚠ 帶看注意事項（A4 會用紅字顯示）</label>
-        <textarea id="s-viewing-notes" rows="3" placeholder="例：請脫鞋、屋主下午兩點後才在、管委會須事先預約" oninput="updateCard()" style="white-space:pre-wrap;"></textarea>
+        <textarea id="s-viewing-notes" rows="4" placeholder="例：請脫鞋、屋主下午兩點後才在、管委會須事先預約" oninput="updateCard()" style="white-space:pre-wrap;"></textarea>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <select id="s-viewing-notes-preset" style="flex:1;font-size:12px;" onchange="addViewingNotePreset(this)">
+            <option value="">📋 常用事項（點選會追加到上方）</option>
+            <option value="房屋老舊，無論已知或未知瑕疪，賣方均不負擔瑕疪擔保責任，由買方自行翻修整新。">房屋老舊免責聲明</option>
+            <option value="地上權向國產署承租，年租金為每年公告地價×3.5%×土地持分比例，本戶為114年，每月約1114元。">地上權租金說明（每月約 1114 元）</option>
+            <option value="地上權存續時間從103/01/16起計70年為止。">地上權存續期間（103/01/16 起 70 年）</option>
+          </select>
+          <button type="button" onclick="clearViewingNotes()" style="padding:6px 12px;background:#fff;border:1px solid #CC8F00;color:#CC8F00;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">🗑️ 清空</button>
+        </div>
       </div>
 
       <div class="fg">
@@ -3001,6 +3010,22 @@
         `<img src="${ev.target.result}" alt="格局圖">`;
     };
     reader.readAsDataURL(file);
+  }
+
+  // 帶看注意事項下拉預設：選到就追加到 textarea
+  function addViewingNotePreset(sel) {
+    const val = sel.value;
+    if (!val) return;
+    const ta = document.getElementById('s-viewing-notes');
+    const cur = (ta.value || '').trim();
+    ta.value = cur ? `${cur}\n${val}` : val;
+    sel.value = '';  // 重置成預設 option，下次可再選
+    updateCard();
+  }
+  function clearViewingNotes() {
+    const ta = document.getElementById('s-viewing-notes');
+    ta.value = '';
+    updateCard();
   }
 
 
