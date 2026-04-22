@@ -446,6 +446,28 @@
       .top-bar, .left-panel { display: none !important; }
       .right-panel { padding: 0; overflow: visible; }
       .a4-card { box-shadow: none; width: 100%; min-height: auto; }
+      /* 印刷：標題 + 聯絡資訊強制同一行，自動縮字避免 wrap */
+      .header-title-row {
+        flex-wrap: nowrap !important;
+        gap: 10px;
+        align-items: center;
+      }
+      .header-doc-title {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        font-size: 15px !important;
+        letter-spacing: 1px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      .header-contact {
+        flex: 0 0 auto !important;
+        font-size: 14px !important;
+        white-space: nowrap !important;
+      }
+      .header-contact .role { font-size: 10px !important; }
+      .header-contact .sep { margin: 0 4px !important; }
     }
     /* Excel 下載按鈕 */
     .btn-cs-xlsx {
