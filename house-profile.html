@@ -548,8 +548,8 @@
 
       <div class="fg-row">
         <div class="fg">
-          <label>案件名稱　<span id="cs-case-name-counter" style="font-size:11px;font-weight:500;color:#dc2626;">0 / 16</span></label>
-          <input type="text" id="cs-s-case-name" placeholder="例：亞灣朗闊豪宅（請滿 16 字）" maxlength="16" oninput="updateCard()">
+          <label>案件名稱　<span id="cs-case-name-counter" style="font-size:11px;font-weight:500;color:#dc2626;">0 字（至少 16）</span></label>
+          <input type="text" id="cs-s-case-name" placeholder="例：亞灣朗闊豪宅（至少 16 字，可再多）" oninput="updateCard()">
         </div>
         <div class="fg">
           <label>社區名稱</label>
@@ -2700,12 +2700,12 @@
     const effParkNo  = d.hasParking ? (d.parkNo || '') : (_parkManualChk ? _parkNoManual : '');
     const effParkPing = d.hasParking ? (d.parkPing || 0) : 0;
 
-    // 標題 = 案件名稱；滿 16 字正常顯示、1~15 字紅色加字數提示、空則「我忘了填我忘了填我忘了填」
+    // 標題 = 案件名稱；≥16 字正常顯示、1~15 字紅色加字數提示、空則「我忘了填我忘了填我忘了填」
     const _caseName = (document.getElementById('cs-s-case-name')?.value || '').trim();
     const _commName = (document.getElementById('cs-s-community')?.value || '').trim();
     const _titleEl = document.getElementById('out-title');
     if (_titleEl) {
-      if (_caseName.length === 16) {
+      if (_caseName.length >= 16) {
         _titleEl.innerHTML = escH(_caseName);
         _titleEl.style.color = '';
       } else if (_caseName.length > 0) {
@@ -2713,22 +2713,30 @@
       } else {
         _titleEl.innerHTML = `<span style="color:#FFE066;">我忘了填我忘了填我忘了填</span>`;
       }
-      // 案名長度 → 字體自動縮放，避免超出標題列
-      const _dispLen = _caseName.length || 12;  // 空白用預設占位字數
+      // 案名長度 → 字體自動縮放，避免超出標題列（長案名也縮小）
+      const _dispLen = _caseName.length || 12;
       let _fs = 19, _ls = 3;
-      if (_dispLen >= 16)      { _fs = 15; _ls = 2; }
+      if      (_dispLen >= 24) { _fs = 12; _ls = 1; }
+      else if (_dispLen >= 20) { _fs = 13; _ls = 1.5; }
+      else if (_dispLen >= 18) { _fs = 14; _ls = 1.5; }
+      else if (_dispLen >= 16) { _fs = 15; _ls = 2; }
       else if (_dispLen >= 14) { _fs = 16; _ls = 2; }
       else if (_dispLen >= 12) { _fs = 17; _ls = 2.5; }
       _titleEl.style.fontSize = _fs + 'px';
       _titleEl.style.letterSpacing = _ls + 'px';
     }
 
-    // 案件名稱 16 字計數器
+    // 案件名稱字數計數器：≥16 綠、<16 紅
     const _cnt = document.getElementById('cs-case-name-counter');
     if (_cnt) {
       const len = _caseName.length;
-      _cnt.textContent = `${len} / 16`;
-      _cnt.style.color = len === 16 ? '#16a34a' : '#dc2626';
+      if (len >= 16) {
+        _cnt.textContent = `${len} 字 ✓`;
+        _cnt.style.color = '#16a34a';
+      } else {
+        _cnt.textContent = `${len} 字（至少 16）`;
+        _cnt.style.color = '#dc2626';
+      }
     }
 
     // 案件資訊（表格內，不再有 td-case-name）
