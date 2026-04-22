@@ -1682,10 +1682,9 @@
   }
 
   // ===== 地籍圖 SVG 渲染（含邊長標註，多筆相鄰自動合併） =====
-  // 輸入座標是 EPSG:3826 TWD97 TM2（單位公尺），Y 軸正方向朝北，SVG Y 軸朝下需翻轉
+  // 輸入座標是 EPSG:3826 TWD97 TM2（單位公尺），Y 軸正方向朝北
+  // 為了讓 font-size / stroke-width 不被 viewBox scale，所有座標先 pre-scale 成固定 viewBox (0 0 800 600)
   function renderCadastralSvg(polygons, labels) {
-    // polygons: [[[x,y], [x,y], ...], ...]（每個 polygon 是一圈已閉合或未閉合的 ring）
-    // labels:  [string] 每個 polygon 對應的地號文字，顯示在中心
     if (!polygons || !polygons.length) return null;
     const rings = polygons.filter(p => p && p.length >= 3);
     if (!rings.length) return null;
@@ -1698,41 +1697,40 @@
     }
     const w = maxX - minX, h = maxY - minY;
     if (w <= 0 || h <= 0) return null;
-    const pad = Math.max(w, h) * 0.12;
-    const scaleBase = Math.max(w, h);
-    const strokeW = scaleBase / 180;
-    const fontSizeEdge = scaleBase / 32;
-    const fontSizeLabel = scaleBase / 24;
-    const haloW = strokeW * 2.5;
 
-    // Path 與邊長標註
+    const VB_W = 800, VB_H = 600, MARGIN = 60;
+    const scale = Math.min((VB_W - 2*MARGIN) / w, (VB_H - 2*MARGIN) / h);
+    const offsetX = VB_W/2 - (minX + w/2) * scale;
+    const offsetY = VB_H/2 + (minY + h/2) * scale;  // y 翻轉：+y 朝上，SVG +y 朝下
+    const tx = x => x * scale + offsetX;
+    const ty = y => -y * scale + offsetY;
+
+    // 字體 / stroke 用固定 viewport unit（VB 0..800 / 0..600 對應顯示的 CSS px）
+    const styleEdge  = `font:700 16px 'PingFang TC',sans-serif;stroke-width:3.5;paint-order:stroke;`;
+    const styleLabel = `font:800 22px 'PingFang TC',sans-serif;stroke-width:3.5;paint-order:stroke;`;
+
     let paths = '', edges = '', centers = '';
     rings.forEach((r, idx) => {
-      const d = r.map(([x,y], i) => `${i===0?'M':'L'}${x} ${-y}`).join(' ') + ' Z';
-      paths += `<path d="${d}" fill="rgba(255,183,0,0.28)" stroke="#CC8F00" stroke-width="${strokeW}" stroke-linejoin="round"/>`;
+      const d = r.map(([x,y], i) => `${i===0?'M':'L'}${tx(x)} ${ty(y)}`).join(' ') + ' Z';
+      paths += `<path d="${d}" fill="rgba(255,183,0,0.3)" stroke="#CC8F00" stroke-width="2.5" stroke-linejoin="round"/>`;
 
-      // 每邊中點標長度
       for (let i = 0; i < r.length; i++) {
         const a = r[i], b = r[(i+1) % r.length];
         if (a[0] === b[0] && a[1] === b[1]) continue;
         const dist = Math.hypot(b[0]-a[0], b[1]-a[1]);
-        if (dist < 1) continue; // 太短就不標
+        if (dist < 1) continue;
         const mx = (a[0]+b[0])/2, my = (a[1]+b[1])/2;
-        // 外推一點點（向 polygon 外側），但簡化起見直接壓邊上
-        const text = `${dist.toFixed(1)}m`;
-        edges += `<text x="${mx}" y="${-my}" font-size="${fontSizeEdge}" text-anchor="middle" dominant-baseline="middle" fill="#B91C1C" stroke="#FFF8E0" stroke-width="${haloW}" paint-order="stroke" font-weight="700" style="font-family:'PingFang TC',sans-serif;">${text}</text>`;
+        edges += `<text x="${tx(mx)}" y="${ty(my)}" text-anchor="middle" dominant-baseline="middle" fill="#B91C1C" stroke="#FFF8E0" style="${styleEdge}">${dist.toFixed(1)}m</text>`;
       }
 
-      // 中心標地號
       if (labels && labels[idx]) {
         const cx = r.reduce((s,p)=>s+p[0],0)/r.length;
         const cy = r.reduce((s,p)=>s+p[1],0)/r.length;
-        centers += `<text x="${cx}" y="${-cy}" font-size="${fontSizeLabel}" text-anchor="middle" dominant-baseline="middle" fill="#7A5500" stroke="#FFF8E0" stroke-width="${haloW}" paint-order="stroke" font-weight="800" style="font-family:'PingFang TC',sans-serif;">${escH(labels[idx])}</text>`;
+        centers += `<text x="${tx(cx)}" y="${ty(cy)}" text-anchor="middle" dominant-baseline="middle" fill="#7A5500" stroke="#FFF8E0" style="${styleLabel}">${escH(labels[idx])}</text>`;
       }
     });
 
-    const vb = `${minX-pad} ${-(maxY+pad)} ${w+2*pad} ${h+2*pad}`;
-    return `<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="background:#FFF8E0;">${paths}${centers}${edges}</svg>`;
+    return `<svg viewBox="0 0 ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="background:#FFF8E0;width:100%;height:100%;">${paths}${centers}${edges}</svg>`;
   }
 
   // 用 Turf.js union 合併多筆相鄰土地；回傳 [polygon, ...]（MultiPolygon 展平成多個 polygon）
@@ -1754,12 +1752,17 @@
         if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
         return window.turf.polygon([ring]);
       });
-      let merged = features[0];
-      for (let i = 1; i < features.length; i++) {
+      // Turf 7 的 union 改成傳 FeatureCollection（Turf 6 是兩個個別 polygon），
+      // 不相鄰 polygon 會合併成 MultiPolygon、相鄰會 merge 成單一 Polygon
+      let merged;
+      if (features.length === 1) {
+        merged = features[0];
+      } else {
         try {
-          const u = window.turf.union(merged, features[i]);
-          if (u) merged = u;
-        } catch {}
+          merged = window.turf.union(window.turf.featureCollection(features));
+        } catch {
+          merged = features[0];
+        }
       }
       // 攤平 MultiPolygon / Polygon
       const geom = merged.geometry;
@@ -1861,9 +1864,14 @@
       const pubPrice = d4.features?.[0]?.attributes?.AA12 || 0;
 
       // 5. 取地籍坐標（空間查詢用）
+      // CADA_TEXT 格式：母號 '900'、子號 '900-47'（不含前導零，不含 dash 後的 padding）
+      // 謄本 '0900-0047' → '900-47'；'0900-0000' → '900'
       let urbanPlan = '', detailPlan = '', bcr = '', far = '';
-      const cadaText = String(parseInt(landNo.split('-')[0], 10));
-      const wG = encodeURIComponent(`AA46N='${data.distName}' AND AA48='${sectCode}' AND CADA_TEXT IN ('${cadaText}')`);
+      const _parts = landNo.split('-');
+      const _main = parseInt(_parts[0], 10);
+      const _sub  = parseInt(_parts[1] || '0', 10);
+      const cadaText = _sub > 0 ? `${_main}-${_sub}` : String(_main);
+      const wG = encodeURIComponent(`AA46N='${data.distName}' AND AA48='${sectCode}' AND CADA_TEXT='${cadaText}'`);
       const dG = await proxyFetch(`${MAPGIS2}/G97_E_LNPAR_P/MapServer/0/query?f=json&where=${wG}&returnGeometry=true&outFields=AA49&outSR=3826`);
       if (dG.features?.length && dG.features[0].geometry?.rings?.[0]) {
         const ring = dG.features[0].geometry.rings[0];
