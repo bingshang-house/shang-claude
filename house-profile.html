@@ -683,6 +683,10 @@
         <textarea id="s-traffic" rows="3" oninput="updateCard()"></textarea>
       </div>
       <div class="fg">
+        <label>🛒 生活機能</label>
+        <textarea id="s-life" rows="3" oninput="updateCard()"></textarea>
+      </div>
+      <div class="fg">
         <label>🏪 商圈特色</label>
         <textarea id="s-location" rows="3" oninput="updateCard()"></textarea>
       </div>
@@ -714,13 +718,6 @@
         <button type="button" onclick="autoPoints()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">✨ AI 改寫文案（Gemini）</button>
         <textarea id="s-points" rows="12" oninput="_pointsTouched=true; updateCard()" style="line-height:1.55;"></textarea>
         <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">預設依物件資料自動帶出結構化版面；想要有溫度的生活場景文案再按上方 AI 改寫</div>
-      </div>
-
-      <!-- 生活機能（最底） -->
-      <div class="form-sep">生活機能</div>
-      <div class="fg">
-        <label>🛒 生活機能</label>
-        <textarea id="s-life" rows="3" oninput="updateCard()"></textarea>
       </div>
 
     </div>
