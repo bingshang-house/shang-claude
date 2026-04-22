@@ -4624,9 +4624,15 @@ ${factsText}
       { type: 'place_of_worship' }, { keyword: '宮廟 寺廟' },
     ]},
     { key: 'noise',    label: '噪音設施', queries: [
-      { keyword: '夜市' }, { keyword: '傳統市場' }, { keyword: 'KTV' }, { keyword: '酒店' },
+      { keyword: '夜市' }, { keyword: '傳統市場' }, { keyword: 'KTV' }, { keyword: '酒家 酒店小姐' },
     ]},
   ];
+
+  // 類別層名稱黑名單：Google textQuery 語意擴散時用
+  // noise：「酒店」會被 Google 當 hotel → 排除所有飯店/旅店/商旅
+  const HAZARD_NAME_BLACKLIST = {
+    noise: /飯店|Hotel|Inn\b|商旅|旅店|旅館|旅居|Hostel/i,
+  };
 
   async function doHazardSearch(silent = false) {
     const addr = (deed.district || '') + (deed.address || '');
@@ -4651,9 +4657,11 @@ ${factsText}
         const merged = [].concat(...lists);
         const seen = new Set();
         const items = [];
+        const bl = HAZARD_NAME_BLACKLIST[cat.key];
         for (const p of merged) {
           const name = (p.displayName || '').trim();
           if (!name) continue;
+          if (bl && bl.test(name)) continue;   // 黑名單（如飯店被當 hotel 誤抓）
           const id = p.id || name;
           if (seen.has(id) || seen.has(name)) continue;
           if (_hazardIgnored.has(id) || _hazardIgnored.has(name)) continue;
