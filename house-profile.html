@@ -3398,11 +3398,21 @@
         if (s.border) cell.border = s.border;
       }
 
-      // 取 A4 上顯示用的文字（若 HTML 還沒 render 值就拿 innerText）
+      // 取 A4 上顯示用的文字
+      // 排除按鈕/連結（如「完整細項 ↗」「🔍 手動查」）
+      // 保留 <br> 為 \n + block 元素（div/p）後加 \n（主建物面積多層樓需分行）
       function td(id, fallback = '－') {
         const el = document.getElementById(id);
         if (!el) return fallback;
-        const t = (el.textContent || '').trim();
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('a, button, input, select, .pending').forEach(n => n.remove());
+        clone.querySelectorAll('br').forEach(br => br.replaceWith(document.createTextNode('\n')));
+        // div/p 等 block 結尾補 \n，textContent 才會保留換行
+        clone.querySelectorAll('div, p, h1, h2, h3, h4, h5, h6, li').forEach(n => {
+          n.appendChild(document.createTextNode('\n'));
+        });
+        let t = (clone.textContent || '').replace(/[ \t]+/g, ' ');
+        t = t.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
         return t || fallback;
       }
       function val(id) {
@@ -3468,29 +3478,26 @@
 
       const pName = val('cs-s-partner-name');
       const pPhone = val('cs-s-partner-phone');
-      // 拆兩行避免單行放不下導致專員被左側截斷；有專員時店長不再印電話（對齊網頁）
-      const contactText = pName
-        ? `專員 ${pName}　電話 ${pPhone}\n店長 江炳賞`
-        : '店長 江炳賞　0971-115207';
+      // 專員資訊獨立大字（無則留空），店長移到下一行公司資訊
       const contactCell = ws.getCell(row, 13);
-      contactCell.value = contactText;
+      contactCell.value = pName ? `專員 ${pName}　電話 ${pPhone}` : '';
       setStyle(contactCell, {
-        font: { name: FONT, size: 11, bold: true, color: { argb: COLOR.deepBrown } },
-        alignment: { horizontal: 'right', vertical: 'middle', indent: 1, wrapText: true },
+        font: { name: FONT, size: 13, bold: true, color: { argb: COLOR.deepBrown } },
+        alignment: { horizontal: 'right', vertical: 'middle', indent: 1, wrapText: false },
       });
-      ws.getRow(row).height = pName ? 34 : 24;
+      ws.getRow(row).height = 26;
       row++;
 
-      // R3: 公司資訊
+      // R3: 公司資訊（最後面加店長聯絡，取代原獨立一行）
       ws.mergeCells(row, 1, row, 20);
       const compCell = ws.getCell(row, 1);
-      compCell.value = '賞好賞不動產有限公司　｜　高雄市苓雅區中華四路122號　｜　經紀人：江炳賞　114年高市字第01680號';
+      compCell.value = '賞好賞不動產有限公司　｜　高雄市苓雅區中華四路122號　｜　經紀人：江炳賞 114年高市字第01680號　｜　店長 江炳賞 0971-115207';
       setStyle(compCell, {
-        font: { name: FONT, size: 9, color: { argb: COLOR.deepBrown } },
-        alignment: { horizontal: 'center', vertical: 'middle' },
+        font: { name: FONT, size: 8, color: { argb: COLOR.deepBrown } },
+        alignment: { horizontal: 'center', vertical: 'middle', wrapText: false },
         fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale } },
       });
-      ws.getRow(row).height = 16;
+      ws.getRow(row).height = 18;
       row++;
 
       row++; // 空白分隔
@@ -3656,9 +3663,12 @@
       fullRow('建物面寬', td('td-bld-width'));
       fullRow('電梯', td('td-elevator'));
 
-      // 使用執照只留號碼（賞哥：Excel 只需文字沒要搜尋，其他細項可不印）+ 學區 + 社區公設
-      groupTitle('使用執照與學區');
-      fullRow('使用執照', td('td-lic'));
+      groupTitle('使用執照與細項');
+      dualRow('使用執照', td('td-lic'), '總戶數', td('td-lic-units'));
+      dualRow('總樓層', td('td-lic-floors'), '建商', td('td-lic-builder'));
+      dualRow('本樓樓板高度', td('td-lic-floorheight'), '使用類組', td('td-lic-usage'));
+      dualRow('中繼水箱', td('td-lic-watertank'), '綠建築', td('td-lic-green'));
+      dualRow('太陽能', td('td-lic-solar'), '', '');
       dualRow('國小學區', td('td-school-e'), '國中學區', td('td-school-j'));
       fullRow('社區公設', td('td-facilities'));
 
