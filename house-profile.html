@@ -861,6 +861,11 @@
           <div class="p-label">含車位總坪</div>
           <div class="p-value"><span id="out-ping-total">－</span><span class="p-unit">坪</span></div>
         </div>
+        <div class="price-divider"></div>
+        <div class="price-item">
+          <div class="p-label">土地坪數</div>
+          <div class="p-value"><span id="out-land-ping">－</span><span class="p-unit">坪</span></div>
+        </div>
       </div>
 
       <div class="card-body">
@@ -914,6 +919,10 @@
               <tr>
                 <td class="key">土地持分</td><td class="val" id="td-land">－</td>
                 <td class="key">使用分區</td><td class="val" id="td-zone">－</td>
+              </tr>
+              <tr id="tr-base-area" style="display:none;">
+                <td class="key">基地總面積</td><td class="val" id="td-base-area">－</td>
+                <td class="key">建物型態</td><td class="val" id="td-bld-type">區分所有建物</td>
               </tr>
               <tr>
                 <td class="key">公告現值</td><td class="val" id="td-pub-val">－</td>
@@ -2930,6 +2939,9 @@
     document.getElementById('out-ping').textContent       = d.totalNoPark   || '－';
     document.getElementById('out-unit').textContent       = unitPrice;
     document.getElementById('out-ping-total').textContent = d.totalWithPark || '－';
+    // 土地坪數（持分坪數合計）
+    const _landPingTotal = p2(getLandTotal());
+    document.getElementById('out-land-ping').textContent  = _landPingTotal || '－';
     document.getElementById('out-price-label').textContent = parkPrice
       ? `售價（含車位價 ${parkPrice} 萬）`
       : '售價（含車位）';
@@ -2971,6 +2983,25 @@
       landHtml = landEntries.map(e => `${landNoHtml(e)}（${e.ping}坪）`).join(' ＋ ') + `　合計 ${landTotal} 坪`;
     }
     setHtml('td-land', landHtml);
+
+    // 基地總面積（區分所有建物才顯示：d.pubArea > 0 或 d.pubTotal > 0 表示有共有部分）
+    // 同一地號可能有多份謄本（多共有人持分），用 loNo 去重只加一次 fullArea
+    const _uniqueLandArea = new Map();
+    for (const e of landEntries) {
+      if (e.loNo && e.fullArea > 0 && !_uniqueLandArea.has(e.loNo)) {
+        _uniqueLandArea.set(e.loNo, e.fullArea);
+      }
+    }
+    const _baseTotalSqm = [...(_uniqueLandArea.values())].reduce((s, a) => s + a, 0);
+    const _isCondo = (d.pubArea > 0) || (d.pubTotal > 0);
+    const _baseTr = document.getElementById('tr-base-area');
+    if (_isCondo && _baseTotalSqm > 0) {
+      if (_baseTr) _baseTr.style.display = '';
+      const _basePing = p2(sqm2ping(_baseTotalSqm));
+      setText('td-base-area', `${p2(_baseTotalSqm)} m²（${_basePing} 坪）`);
+    } else {
+      if (_baseTr) _baseTr.style.display = 'none';
+    }
 
     // 多筆土地的欄位差異化顯示：同值 → 合併；異值 → 每筆一行、地號前綴
     // 地號短名：'旗津段 0900-0054' → '900-54'
@@ -3464,15 +3495,16 @@
 
       row++; // 空白分隔
 
-      // ============ Price Bar ============
-      const priceLabels = ['售價（含車位）', '不含車位坪數', '單價（不含車位）', '含車位總坪'];
-      const priceUnits  = ['萬元', '坪', '萬／坪', '坪'];
-      const priceVals   = [td('out-price'), td('out-ping'), td('out-unit'), td('out-ping-total')];
+      // ============ Price Bar（5 格：售價 / 不含車位坪 / 單價 / 含車位總坪 / 土地坪數）============
+      const priceLabels = ['售價（含車位）', '不含車位坪數', '單價（不含車位）', '含車位總坪', '土地坪數'];
+      const priceUnits  = ['萬元', '坪', '萬／坪', '坪', '坪'];
+      const priceVals   = [td('out-price'), td('out-ping'), td('out-unit'), td('out-ping-total'), td('out-land-ping')];
 
-      // labels (4×5 columns each)
-      for (let i = 0; i < 4; i++) {
-        const s = i * 5 + 1;
-        ws.mergeCells(row, s, row, s + 4);
+      // 20 欄 / 5 格 = 每格 4 欄
+      // labels
+      for (let i = 0; i < 5; i++) {
+        const s = i * 4 + 1;
+        ws.mergeCells(row, s, row, s + 3);
         const c = ws.getCell(row, s);
         c.value = priceLabels[i];
         setStyle(c, {
@@ -3484,18 +3516,17 @@
       ws.getRow(row).height = 18;
       row++;
 
-      // values — 網頁 .p-value 22px ≈ 16pt
-      // 決策：售價（i=0）/ 單價（i=2）紅字 18pt 明顯突出；坪數維持金底白字
-      for (let i = 0; i < 4; i++) {
-        const s = i * 5 + 1;
-        ws.mergeCells(row, s, row, s + 4);
+      // values — 售價（i=0）/ 單價（i=2）紅字突出；坪數維持金底白字
+      for (let i = 0; i < 5; i++) {
+        const s = i * 4 + 1;
+        ws.mergeCells(row, s, row, s + 3);
         const c = ws.getCell(row, s);
         c.value = `${priceVals[i]} ${priceUnits[i]}`;
         const isMoney = (i === 0 || i === 2);
         setStyle(c, {
           font: {
             name: FONT,
-            size: isMoney ? 18 : 16,
+            size: isMoney ? 16 : 14,  // 5 格較擠，整體小一點避免擠爆
             bold: true,
             color: { argb: isMoney ? COLOR.red : COLOR.white },
           },
@@ -3503,7 +3534,7 @@
           fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: isMoney ? COLOR.white : COLOR.darkGold } },
         });
       }
-      ws.getRow(row).height = 30;
+      ws.getRow(row).height = 28;
       row++;
 
       row++; // 分隔
@@ -3604,6 +3635,9 @@
 
       groupTitle('土地與都計');
       dualRow('土地持分', td('td-land'), '使用分區', td('td-zone'));
+      // 基地總面積（區分所有建物才有值，HTML 端 tr-base-area 控 display，Excel 端 td 空值就略）
+      const baseArea = td('td-base-area', '');
+      if (baseArea) dualRow('基地總面積', baseArea, '建物型態', '區分所有建物');
       dualRow('公告現值', td('td-pub-val'), '建蔽容積', td('td-bcr-far'));
       dualRow('都市計畫', td('td-urban-plan'), '細部計畫', td('td-detail-plan'));
       fullRow('臨路面寬×深度', td('td-land-dim'));
