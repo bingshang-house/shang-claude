@@ -7,6 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -306,6 +307,24 @@
     .map-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; }
     .map-box iframe { width: 100%; height: 220px; border: none; display: block; }
     .map-placeholder { height: 220px; background: #FFF8E0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #7A5500; font-size: 11px; gap: 4px; }
+
+    /* 位置圖 + 地籍圖 並排 */
+    .map-cadastral-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .cadastral-box { cursor: zoom-in; }
+    .cadastral-box #out-cadastral { height: 220px; background: #FFF8E0; display: flex; align-items: center; justify-content: center; }
+    .cadastral-box #out-cadastral svg { width: 100%; height: 100%; display: block; }
+
+    /* 地籍圖放大 modal */
+    .cadastral-modal { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+    .cadastral-modal-inner { position: relative; width: 92vw; height: 90vh; background: #FFF8E0; border-radius: 8px; overflow: hidden; cursor: default; }
+    .cadastral-modal-inner #cadastralModalContent { width: 100%; height: 100%; }
+    .cadastral-modal-inner #cadastralModalContent svg { width: 100%; height: 100%; display: block; }
+    .cadastral-modal-close { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border-radius: 50%; background: #7A5500; color: #fff; border: none; font-size: 24px; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center; }
+    .cadastral-modal-close:hover { background: #CC8F00; }
+    .cadastral-modal-hint { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font-size: 11px; color: #7A5500; }
+    @media print {
+      .cadastral-modal { display: none !important; }
+    }
 
     /* Plan + Points */
     .plan-points-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -608,19 +627,15 @@
           <input type="number" id="s-bld-width" step="0.1" placeholder="例：7.5" oninput="updateCard()">
         </div>
         <div class="fg">
-          <label>土地臨路面寬（M）
-            <span style="font-size:10px;color:#888;font-weight:normal;">自動</span>
-          </label>
-          <input type="number" id="s-land-front" step="0.1" placeholder="查地籍後自動帶入" oninput="this.dataset.auto=''; updateCard()">
+          <label>土地臨路面寬（M）</label>
+          <input type="number" id="s-land-front" step="0.1" placeholder="看右側地籍圖填" oninput="updateCard()">
         </div>
         <div class="fg">
-          <label>土地深度（M）
-            <span style="font-size:10px;color:#888;font-weight:normal;">自動</span>
-          </label>
-          <input type="number" id="s-land-depth" step="0.1" placeholder="查地籍後自動帶入" oninput="this.dataset.auto=''; updateCard()">
+          <label>土地深度（M）</label>
+          <input type="number" id="s-land-depth" step="0.1" placeholder="看右側地籍圖填" oninput="updateCard()">
         </div>
       </div>
-      <div style="font-size:10.5px;color:#888;margin:-4px 0 6px;line-height:1.5;">臨路面寬／深度會依地籍 polygon 最小外接矩形自動估算（短邊=面寬、長邊=深度），可手動修改</div>
+      <div style="font-size:10.5px;color:#888;margin:-4px 0 6px;line-height:1.5;">尺寸請參考 A4 右側地籍圖（點擊可放大）自行判讀填入</div>
 
       <div class="form-sep">Excel 文件欄位</div>
       <div style="font-size:10.5px;color:#888;margin-bottom:6px;line-height:1.5;">僅用於下載 Excel 銷售資料表頁首</div>
@@ -816,14 +831,33 @@
             </table>
           </div>
 
-          <div class="map-box">
-            <div class="section-bar bar-blue">▌ 位置圖</div>
-            <div id="out-map">
-              <div class="map-placeholder">
-                <span style="font-size:28px">🗺️</span>
-                <span>上傳 PDF 後自動帶入地圖</span>
+          <div class="map-cadastral-row">
+            <div class="map-box">
+              <div class="section-bar bar-blue">▌ 位置圖</div>
+              <div id="out-map">
+                <div class="map-placeholder">
+                  <span style="font-size:28px">🗺️</span>
+                  <span>上傳 PDF 後自動帶入地圖</span>
+                </div>
               </div>
             </div>
+            <div class="map-box cadastral-box" id="out-cadastral-box" onclick="openCadastralModal()" title="點擊放大">
+              <div class="section-bar bar-blue">▌ 地籍圖（含邊長）</div>
+              <div id="out-cadastral">
+                <div class="map-placeholder">
+                  <span style="font-size:28px">📐</span>
+                  <span>上傳土地謄本後自動帶入</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="cadastralModal" class="cadastral-modal" style="display:none;" onclick="closeCadastralModal(event)">
+          <div class="cadastral-modal-inner">
+            <button class="cadastral-modal-close" onclick="closeCadastralModal(event)">×</button>
+            <div id="cadastralModalContent"></div>
+            <div class="cadastral-modal-hint">點擊空白處或按 ESC 關閉</div>
           </div>
         </div>
 
@@ -1647,57 +1681,145 @@
     return `<a href="${url}" target="_blank" rel="noopener" title="點擊開啟 NLSC 地籍圖" style="color:#7A5500;text-decoration:underline;font-weight:600;">${txt}</a>`;
   }
 
-  // ===== 最小外接矩形（土地臨路面寬/深度估算） =====
-  // 輸入：ESRI polygon rings[0] 格式 [[x,y],[x,y],...]（EPSG:3826，單位公尺）
-  // 輸出：{short, long}（m，四捨五入到 0.1）；polygon 退化回傳 null
-  function minBoundingRect(pts) {
-    if (!pts || pts.length < 3) return null;
-    const hull = convexHull(pts);
-    if (hull.length < 3) return null;
-    let best = null;
-    for (let i = 0; i < hull.length; i++) {
-      const p1 = hull[i], p2 = hull[(i+1) % hull.length];
-      const dx = p2[0]-p1[0], dy = p2[1]-p1[1];
-      const len = Math.hypot(dx, dy);
-      if (len < 1e-6) continue;
-      const ux = dx/len, uy = dy/len;   // 沿邊方向
-      const nx = -uy, ny = ux;           // 垂直方向
-      let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
-      for (const p of hull) {
-        const u = (p[0]-p1[0])*ux + (p[1]-p1[1])*uy;
-        const v = (p[0]-p1[0])*nx + (p[1]-p1[1])*ny;
-        if (u < minU) minU = u; if (u > maxU) maxU = u;
-        if (v < minV) minV = v; if (v > maxV) maxV = v;
-      }
-      const w = maxU - minU, h = maxV - minV;
-      const area = w * h;
-      if (!best || area < best.area) best = { area, w, h };
+  // ===== 地籍圖 SVG 渲染（含邊長標註，多筆相鄰自動合併） =====
+  // 輸入座標是 EPSG:3826 TWD97 TM2（單位公尺），Y 軸正方向朝北，SVG Y 軸朝下需翻轉
+  function renderCadastralSvg(polygons, labels) {
+    // polygons: [[[x,y], [x,y], ...], ...]（每個 polygon 是一圈已閉合或未閉合的 ring）
+    // labels:  [string] 每個 polygon 對應的地號文字，顯示在中心
+    if (!polygons || !polygons.length) return null;
+    const rings = polygons.filter(p => p && p.length >= 3);
+    if (!rings.length) return null;
+
+    // bounding box
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    for (const r of rings) for (const [x,y] of r) {
+      if (x<minX) minX=x; if (y<minY) minY=y;
+      if (x>maxX) maxX=x; if (y>maxY) maxY=y;
     }
-    if (!best) return null;
-    const short = Math.round(Math.min(best.w, best.h) * 10) / 10;
-    const long  = Math.round(Math.max(best.w, best.h) * 10) / 10;
-    return { short, long };
+    const w = maxX - minX, h = maxY - minY;
+    if (w <= 0 || h <= 0) return null;
+    const pad = Math.max(w, h) * 0.12;
+    const scaleBase = Math.max(w, h);
+    const strokeW = scaleBase / 180;
+    const fontSizeEdge = scaleBase / 32;
+    const fontSizeLabel = scaleBase / 24;
+    const haloW = strokeW * 2.5;
+
+    // Path 與邊長標註
+    let paths = '', edges = '', centers = '';
+    rings.forEach((r, idx) => {
+      const d = r.map(([x,y], i) => `${i===0?'M':'L'}${x} ${-y}`).join(' ') + ' Z';
+      paths += `<path d="${d}" fill="rgba(255,183,0,0.28)" stroke="#CC8F00" stroke-width="${strokeW}" stroke-linejoin="round"/>`;
+
+      // 每邊中點標長度
+      for (let i = 0; i < r.length; i++) {
+        const a = r[i], b = r[(i+1) % r.length];
+        if (a[0] === b[0] && a[1] === b[1]) continue;
+        const dist = Math.hypot(b[0]-a[0], b[1]-a[1]);
+        if (dist < 1) continue; // 太短就不標
+        const mx = (a[0]+b[0])/2, my = (a[1]+b[1])/2;
+        // 外推一點點（向 polygon 外側），但簡化起見直接壓邊上
+        const text = `${dist.toFixed(1)}m`;
+        edges += `<text x="${mx}" y="${-my}" font-size="${fontSizeEdge}" text-anchor="middle" dominant-baseline="middle" fill="#B91C1C" stroke="#FFF8E0" stroke-width="${haloW}" paint-order="stroke" font-weight="700" style="font-family:'PingFang TC',sans-serif;">${text}</text>`;
+      }
+
+      // 中心標地號
+      if (labels && labels[idx]) {
+        const cx = r.reduce((s,p)=>s+p[0],0)/r.length;
+        const cy = r.reduce((s,p)=>s+p[1],0)/r.length;
+        centers += `<text x="${cx}" y="${-cy}" font-size="${fontSizeLabel}" text-anchor="middle" dominant-baseline="middle" fill="#7A5500" stroke="#FFF8E0" stroke-width="${haloW}" paint-order="stroke" font-weight="800" style="font-family:'PingFang TC',sans-serif;">${escH(labels[idx])}</text>`;
+      }
+    });
+
+    const vb = `${minX-pad} ${-(maxY+pad)} ${w+2*pad} ${h+2*pad}`;
+    return `<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="background:#FFF8E0;">${paths}${centers}${edges}</svg>`;
   }
 
-  // Andrew's monotone chain convex hull
-  function convexHull(pts) {
-    const pp = pts.map(p => [p[0], p[1]]).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-    if (pp.length < 3) return pp;
-    const cross = (O,A,B) => (A[0]-O[0])*(B[1]-O[1]) - (A[1]-O[1])*(B[0]-O[0]);
-    const lower = [];
-    for (const p of pp) {
-      while (lower.length >= 2 && cross(lower[lower.length-2], lower[lower.length-1], p) <= 0) lower.pop();
-      lower.push(p);
+  // 用 Turf.js union 合併多筆相鄰土地；回傳 [polygon, ...]（MultiPolygon 展平成多個 polygon）
+  function mergeLandPolygons(entries) {
+    const valid = entries.filter(e => e.polygon && e.polygon.length >= 3);
+    if (!valid.length) return { polys: [], labels: [] };
+    if (!window.turf) {
+      // turf 還沒載入，fallback 各自顯示
+      return {
+        polys: valid.map(e => e.polygon),
+        labels: valid.map(e => landShortLabel(e))
+      };
     }
-    const upper = [];
-    for (let i = pp.length-1; i >= 0; i--) {
-      const p = pp[i];
-      while (upper.length >= 2 && cross(upper[upper.length-2], upper[upper.length-1], p) <= 0) upper.pop();
-      upper.push(p);
+    try {
+      const features = valid.map(e => {
+        const ring = [...e.polygon];
+        // turf 要求閉合 ring
+        const first = ring[0], last = ring[ring.length-1];
+        if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
+        return window.turf.polygon([ring]);
+      });
+      let merged = features[0];
+      for (let i = 1; i < features.length; i++) {
+        try {
+          const u = window.turf.union(merged, features[i]);
+          if (u) merged = u;
+        } catch {}
+      }
+      // 攤平 MultiPolygon / Polygon
+      const geom = merged.geometry;
+      let polys = [];
+      if (geom.type === 'Polygon') {
+        polys = [geom.coordinates[0]];   // 只取外環（hole 先忽略）
+      } else if (geom.type === 'MultiPolygon') {
+        polys = geom.coordinates.map(p => p[0]);
+      }
+      // labels：合併後失去單筆對應，只在分離情境顯示；這裡若 polys.length 跟 valid.length 一致，各自貼標
+      const labels = polys.length === valid.length ? valid.map(e => landShortLabel(e)) : [];
+      return { polys, labels };
+    } catch (err) {
+      console.warn('Turf union 失敗，改為各自顯示', err);
+      return {
+        polys: valid.map(e => e.polygon),
+        labels: valid.map(e => landShortLabel(e))
+      };
     }
-    lower.pop(); upper.pop();
-    return lower.concat(upper);
   }
+
+  function landShortLabel(entry) {
+    // entry.loNo 形如「愛群段 0064-0000」→ 取尾號 4-4 或精簡成 64
+    const m = String(entry.loNo || '').match(/(\d+)(?:-0*(\d+))?/);
+    if (!m) return '';
+    return m[2] && m[2] !== '0' ? `${parseInt(m[1])}-${m[2]}` : `${parseInt(m[1])}`;
+  }
+
+  function updateCadastralMap() {
+    const container = document.getElementById('out-cadastral');
+    if (!container) return;
+    const entries = Object.values(_landData || {}).filter(e => e.polygon && e.polygon.length >= 3);
+    if (!entries.length) {
+      container.innerHTML = `<div class="map-placeholder"><span style="font-size:28px">📐</span><span>上傳土地謄本後自動帶入</span></div>`;
+      return;
+    }
+    const { polys, labels } = mergeLandPolygons(entries);
+    const svg = renderCadastralSvg(polys, labels);
+    container.innerHTML = svg || `<div class="map-placeholder">地籍渲染失敗</div>`;
+  }
+
+  function openCadastralModal() {
+    const svg = document.getElementById('out-cadastral')?.innerHTML || '';
+    if (!svg || svg.includes('map-placeholder')) return;
+    document.getElementById('cadastralModalContent').innerHTML = svg;
+    document.getElementById('cadastralModal').style.display = 'flex';
+  }
+  function closeCadastralModal(e) {
+    if (!e) { document.getElementById('cadastralModal').style.display = 'none'; return; }
+    // 只有點到 modal 背景（cadastral-modal 本身）或 close button 才關
+    const isBg = e.target.classList?.contains('cadastral-modal');
+    const isClose = e.target.classList?.contains('cadastral-modal-close');
+    if (isBg || isClose) document.getElementById('cadastralModal').style.display = 'none';
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      const m = document.getElementById('cadastralModal');
+      if (m && m.style.display === 'flex') m.style.display = 'none';
+    }
+  });
 
   async function queryZoning(idx) {
     const data = _landData[idx];
@@ -1747,12 +1869,8 @@
         const ring = dG.features[0].geometry.rings[0];
         const cx = ring.reduce((s,p)=>s+p[0],0)/ring.length;
         const cy = ring.reduce((s,p)=>s+p[1],0)/ring.length;
-        // 最小外接矩形 → 臨路面寬（短邊）/ 深度（長邊），m
-        const mbr = minBoundingRect(ring);
-        if (mbr) {
-          _landData[idx].mbrFront = mbr.short;
-          _landData[idx].mbrDepth = mbr.long;
-        }
+        // 保存 polygon 給地籍圖 SVG 渲染用（EPSG:3826 TWD97 TM2 單位公尺）
+        _landData[idx].polygon = ring;
         const spatialQ = new URLSearchParams({
           f:'json',
           geometry: JSON.stringify({x:cx,y:cy,spatialReference:{wkid:3826}}),
@@ -2281,24 +2399,10 @@
       ? `每部 ${elevUnit || '－'} 戶 × ${elevCount || '－'} 部`
       : '－');
 
-    // 建物面寬 / 土地臨路×深度（後兩者若空或 auto 標記，自動填入第一筆土地的 MBR 估算值）
-    const bldWidthEl  = document.getElementById('s-bld-width');
-    const landFrontEl = document.getElementById('s-land-front');
-    const landDepthEl = document.getElementById('s-land-depth');
-    const firstLandMbr = landEntries.find(e => e.mbrFront && e.mbrDepth);
-    if (firstLandMbr) {
-      if (!landFrontEl.value || landFrontEl.dataset.auto === '1') {
-        landFrontEl.value = firstLandMbr.mbrFront;
-        landFrontEl.dataset.auto = '1';
-      }
-      if (!landDepthEl.value || landDepthEl.dataset.auto === '1') {
-        landDepthEl.value = firstLandMbr.mbrDepth;
-        landDepthEl.dataset.auto = '1';
-      }
-    }
-    const bldWidth  = parseFloat(bldWidthEl.value);
-    const landFront = parseFloat(landFrontEl.value);
-    const landDepth = parseFloat(landDepthEl.value);
+    // 建物面寬 / 土地臨路面寬 / 土地深度：全部手動填寫（foundi 式，尺寸看右側地籍圖自行判讀）
+    const bldWidth  = parseFloat(document.getElementById('s-bld-width').value);
+    const landFront = parseFloat(document.getElementById('s-land-front').value);
+    const landDepth = parseFloat(document.getElementById('s-land-depth').value);
     setText('td-bld-width', bldWidth > 0 ? `${bldWidth} M` : '－');
     let landDimStr = '－';
     if (landFront > 0 && landDepth > 0) {
@@ -2327,6 +2431,9 @@
         allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"
         style="width:100%;height:208px;border:none;display:block;"></iframe>`;
     }
+
+    // 地籍圖（含邊長）
+    updateCadastralMap();
 
     // Selling points — 偵測結構化輸出（含 ✅ 或主標題 emoji）→ 保留多行版面；否則照舊 ★ bullet
     const pDiv = document.getElementById('out-points');
