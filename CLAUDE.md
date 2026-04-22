@@ -37,11 +37,18 @@
 - regex 標籤字、數值、單位之間一律用 `\s*`（PDF.js 空白不穩：可能半形、全形 U+3000、無空白、字被拆開）
 - 全形轉半形：`s.replace(/[\uFF01-\uFF5E]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0))`
 - 有區段概念的欄位（所有權部 vs 標示部 vs 他項權利部）要先 `t.search()` 切片再 match，不要對全文 regex
+- **表格欄位逐字拆**（2026-04-22）：他項權利部「共同擔保地號／建號」表格會把每個中文字、每個數字位都拆成獨立 text item（「瑞 崗 段 四 小 段   0 0 6 3 - 0 0 0 0」），單靠 `\s*` 也救不了。必須 **section-level compact**：切出 section → `.replace(/\s+/g,'')` 整段壓光 → 再 regex。全文 compact 會破壞其他 regex（依賴空白邊界的如「建物門牌 地址」），只能局部壓。詳見 `feedback_pdf_parsing.md`
 
-### regex 字符類撞字陷阱
-- **不要用 `[區鄉鎮市]` `[村里鄰]` 這種把尾字湊在一起的字符類** — `.+?` non-greedy 會在**任何一個字符類成員**先停。遇到「前鎮區」regex `(.+?[區鄉鎮市])` 會捕到「前鎮」（「鎮」在字符類裡先命中），剩下的「區」漏進下一組 capture
-- 正解：中文地區後綴一律寫完整字 `區`，或用 group `(?:區|鄉|鎮|市)` 替代字符類（non-greedy 會把 group 視為一個整體去嘗試），並要求前面至少 2 字 `(.{2,}?(?:區|鄉|鎮|市))` 避開「前鎮」「大市」這類二字撞點
-- 2026-04-21 NLSC TextQueryMap 踩過一次，讓「前鎮區瑞祥里20鄰...」被解成 district=「前鎮」、village=「區瑞祥里」。詳見 `reference_nlsc_api.md`
+### regex 中文 capture 陷阱（三種 case，一律會讓 capture 吃過頭或吃錯）
+1. **字符類撞字**（2026-04-21 NLSC）：`[區鄉鎮市]` 把尾字湊一起，`.+?` non-greedy 在**任何一個字符類成員**先停。「前鎮區」regex `(.+?[區鄉鎮市])` 會捕到「前鎮」（「鎮」先命中），剩的「區」漏進下一組 capture。→ 寫完整字 `區` 或 group `(?:區|鄉|鎮|市)` + `.{2,}?` 最小字數。詳見 `reference_nlsc_api.md`
+2. **表頭字被 backtrack 吃進 capture**（2026-04-22 共同擔保）：compact 後「段小段地號瑞崗段四小段0063-0000」配 `([一-龥]+?段(?:[一-龥]+?小段)?)(\d{4}-\d{4})`，non-greedy 雖「最短優先」但為了讓整個 regex match 成功，backtrack 會把 main group 擴張吞掉「段小段地號瑞崗段四小段」整串。→ 先把表頭 literal 替換成分隔符：`compact.replace(/共同擔保地號[:：]共\d+筆|段小段地號/g, '|')`，regex 碰到 `|` 會斷（不是 `[一-龥]`）。
+3. **`\S+?` 吃進括號/標點**（2026-04-22）：「（權狀註記事項）籬子內段籬子內小段5551建號基地之應有部分」配 `(\S+?段...)` 會從「（」開始吃到「籬子內段」，capture 變「（權狀註記事項）籬子內段...」。→ 抓中文段名/區名一律用 `[一-龥]{1,8}` 而不是 `\S+?`：只吃漢字 + 限字數擋無限 backtrack。
+
+**通則**：寫中文 regex capture 時，先問自己三件事：
+- 字符類有沒有把尾字湊一起？（case 1）
+- non-greedy 會不會為了 match 成功而 backtrack 擴張？（case 2 — 尤其接 optional group + 後續 anchor 時）
+- `\S` / `.` 會不會吃進不該吃的括號/數字/標點？（case 3）
+出事時檢查 capture 1 的實際內容（Playwright `evaluate` debug），一眼就能看出是哪種。
 
 ### Cloudflare Worker proxy 打政府 API
 - 一律 retry 3 次，退避 600ms → 1400ms（上游 522 超時很常見）
