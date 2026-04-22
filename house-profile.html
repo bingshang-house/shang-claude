@@ -602,6 +602,26 @@
         </div>
       </div>
 
+      <div class="fg-row" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="fg">
+          <label>建物面寬（M）</label>
+          <input type="number" id="s-bld-width" step="0.1" placeholder="例：7.5" oninput="updateCard()">
+        </div>
+        <div class="fg">
+          <label>土地臨路面寬（M）
+            <span style="font-size:10px;color:#888;font-weight:normal;">自動</span>
+          </label>
+          <input type="number" id="s-land-front" step="0.1" placeholder="查地籍後自動帶入" oninput="this.dataset.auto=''; updateCard()">
+        </div>
+        <div class="fg">
+          <label>土地深度（M）
+            <span style="font-size:10px;color:#888;font-weight:normal;">自動</span>
+          </label>
+          <input type="number" id="s-land-depth" step="0.1" placeholder="查地籍後自動帶入" oninput="this.dataset.auto=''; updateCard()">
+        </div>
+      </div>
+      <div style="font-size:10.5px;color:#888;margin:-4px 0 6px;line-height:1.5;">臨路面寬／深度會依地籍 polygon 最小外接矩形自動估算（短邊=面寬、長邊=深度），可手動修改</div>
+
       <div class="form-sep">Excel 文件欄位</div>
       <div style="font-size:10.5px;color:#888;margin-bottom:6px;line-height:1.5;">僅用於下載 Excel 銷售資料表頁首</div>
 
@@ -756,6 +776,10 @@
               <tr>
                 <td class="key">面前道路</td><td class="val" id="td-road">－</td>
                 <td class="key">警　衛</td><td class="val" id="td-security">－</td>
+              </tr>
+              <tr>
+                <td class="key">建物面寬</td><td class="val" id="td-bld-width">－</td>
+                <td class="key">臨路×深度</td><td class="val" id="td-land-dim">－</td>
               </tr>
               <tr class="full-row">
                 <td class="key">電　梯</td><td class="val" colspan="3" id="td-elevator">－</td>
@@ -1623,6 +1647,58 @@
     return `<a href="${url}" target="_blank" rel="noopener" title="點擊開啟 NLSC 地籍圖" style="color:#7A5500;text-decoration:underline;font-weight:600;">${txt}</a>`;
   }
 
+  // ===== 最小外接矩形（土地臨路面寬/深度估算） =====
+  // 輸入：ESRI polygon rings[0] 格式 [[x,y],[x,y],...]（EPSG:3826，單位公尺）
+  // 輸出：{short, long}（m，四捨五入到 0.1）；polygon 退化回傳 null
+  function minBoundingRect(pts) {
+    if (!pts || pts.length < 3) return null;
+    const hull = convexHull(pts);
+    if (hull.length < 3) return null;
+    let best = null;
+    for (let i = 0; i < hull.length; i++) {
+      const p1 = hull[i], p2 = hull[(i+1) % hull.length];
+      const dx = p2[0]-p1[0], dy = p2[1]-p1[1];
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-6) continue;
+      const ux = dx/len, uy = dy/len;   // 沿邊方向
+      const nx = -uy, ny = ux;           // 垂直方向
+      let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+      for (const p of hull) {
+        const u = (p[0]-p1[0])*ux + (p[1]-p1[1])*uy;
+        const v = (p[0]-p1[0])*nx + (p[1]-p1[1])*ny;
+        if (u < minU) minU = u; if (u > maxU) maxU = u;
+        if (v < minV) minV = v; if (v > maxV) maxV = v;
+      }
+      const w = maxU - minU, h = maxV - minV;
+      const area = w * h;
+      if (!best || area < best.area) best = { area, w, h };
+    }
+    if (!best) return null;
+    const short = Math.round(Math.min(best.w, best.h) * 10) / 10;
+    const long  = Math.round(Math.max(best.w, best.h) * 10) / 10;
+    return { short, long };
+  }
+
+  // Andrew's monotone chain convex hull
+  function convexHull(pts) {
+    const pp = pts.map(p => [p[0], p[1]]).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+    if (pp.length < 3) return pp;
+    const cross = (O,A,B) => (A[0]-O[0])*(B[1]-O[1]) - (A[1]-O[1])*(B[0]-O[0]);
+    const lower = [];
+    for (const p of pp) {
+      while (lower.length >= 2 && cross(lower[lower.length-2], lower[lower.length-1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper = [];
+    for (let i = pp.length-1; i >= 0; i--) {
+      const p = pp[i];
+      while (upper.length >= 2 && cross(upper[upper.length-2], upper[upper.length-1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    lower.pop(); upper.pop();
+    return lower.concat(upper);
+  }
+
   async function queryZoning(idx) {
     const data = _landData[idx];
     if (!data?.loNo) return;
@@ -1671,6 +1747,12 @@
         const ring = dG.features[0].geometry.rings[0];
         const cx = ring.reduce((s,p)=>s+p[0],0)/ring.length;
         const cy = ring.reduce((s,p)=>s+p[1],0)/ring.length;
+        // 最小外接矩形 → 臨路面寬（短邊）/ 深度（長邊），m
+        const mbr = minBoundingRect(ring);
+        if (mbr) {
+          _landData[idx].mbrFront = mbr.short;
+          _landData[idx].mbrDepth = mbr.long;
+        }
         const spatialQ = new URLSearchParams({
           f:'json',
           geometry: JSON.stringify({x:cx,y:cy,spatialReference:{wkid:3826}}),
@@ -2198,6 +2280,35 @@
     setText('td-elevator', (elevUnit || elevCount)
       ? `每部 ${elevUnit || '－'} 戶 × ${elevCount || '－'} 部`
       : '－');
+
+    // 建物面寬 / 土地臨路×深度（後兩者若空或 auto 標記，自動填入第一筆土地的 MBR 估算值）
+    const bldWidthEl  = document.getElementById('s-bld-width');
+    const landFrontEl = document.getElementById('s-land-front');
+    const landDepthEl = document.getElementById('s-land-depth');
+    const firstLandMbr = landEntries.find(e => e.mbrFront && e.mbrDepth);
+    if (firstLandMbr) {
+      if (!landFrontEl.value || landFrontEl.dataset.auto === '1') {
+        landFrontEl.value = firstLandMbr.mbrFront;
+        landFrontEl.dataset.auto = '1';
+      }
+      if (!landDepthEl.value || landDepthEl.dataset.auto === '1') {
+        landDepthEl.value = firstLandMbr.mbrDepth;
+        landDepthEl.dataset.auto = '1';
+      }
+    }
+    const bldWidth  = parseFloat(bldWidthEl.value);
+    const landFront = parseFloat(landFrontEl.value);
+    const landDepth = parseFloat(landDepthEl.value);
+    setText('td-bld-width', bldWidth > 0 ? `${bldWidth} M` : '－');
+    let landDimStr = '－';
+    if (landFront > 0 && landDepth > 0) {
+      landDimStr = `臨路 ${landFront} M × 深 ${landDepth} M`;
+    } else if (landFront > 0) {
+      landDimStr = `臨路 ${landFront} M`;
+    } else if (landDepth > 0) {
+      landDimStr = `深 ${landDepth} M`;
+    }
+    setText('td-land-dim', landDimStr);
 
     renderSchoolCells();
     // 使用執照：字號 + 查詢按鈕；「執照細項」列非同步載入
