@@ -308,6 +308,16 @@
     .map-box iframe { width: 100%; height: 220px; border: none; display: block; }
     .map-placeholder { height: 220px; background: #FFF8E0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #7A5500; font-size: 11px; gap: 4px; }
 
+    /* 產權檢核 banner 不完整時閃爍提醒 */
+    @keyframes val-blink {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
+      50%      { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.0); }
+    }
+    #validation-banner.warn-blink > div {
+      animation: val-blink 1.4s ease-in-out infinite;
+      border-color: #dc2626 !important;
+    }
+
     /* 位置圖 + 地籍圖 並排 */
     .map-cadastral-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .cadastral-box { cursor: zoom-in; }
@@ -439,9 +449,6 @@
     <!-- Parse Status -->
     <div class="parse-status" id="parseStatus"></div>
 
-    <!-- Validation Banner -->
-    <div id="validation-banner" style="margin:0 14px 10px;display:none;"></div>
-
     <!-- Parsed Summary -->
     <div class="parsed-summary" id="parsedSummary">
       <div class="ps-title">解析結果</div>
@@ -455,10 +462,29 @@
       <div id="building-entries"></div>
       <button class="btn-sm" onclick="addBuildingEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #CC8F00;color:#CC8F00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增建物筆</button>
 
+      <!-- Validation Banner：建物跟土地中間，不完整時閃爍 -->
+      <div id="validation-banner" style="margin:4px 0 8px;display:none;"></div>
+
       <div class="form-sep">土地資訊</div>
       <div id="land-entries"></div>
       <button class="btn-sm" onclick="addLandEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #CC8F00;color:#CC8F00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增土地筆</button>
       <div id="land-total-label" style="font-size:12px;color:#7A5500;font-weight:600;"></div>
+
+      <!-- 學區：接在建物+土地+檢核後面 -->
+      <div class="form-sep">學區</div>
+      <div class="fg">
+        <label>🏫 學區查詢</label>
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <select id="s-district" style="flex:1;min-width:90px;" onchange="onVillageInput()">
+            <option value="">區</option>
+          </select>
+          <input type="text" id="s-village" placeholder="里（例：瑞隆里）" style="flex:2;" oninput="onVillageInput()">
+          <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;" oninput="updateCard()">
+          <button onclick="doLookupSchool()" style="white-space:nowrap;padding:4px 8px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">查詢</button>
+        </div>
+        <div id="school-result" style="font-size:12px;color:#444;margin-bottom:6px;min-height:0;"></div>
+        <textarea id="s-school" rows="2" oninput="updateCard()" placeholder="查詢後自動填入，或手動輸入"></textarea>
+      </div>
 
       <div class="form-sep">補充資料</div>
 
@@ -577,19 +603,6 @@
       <div class="fg">
         <label>🏗️ 重要發展</label>
         <textarea id="s-develop" rows="3" oninput="updateCard()"></textarea>
-      </div>
-      <div class="fg">
-        <label>🏫 學區查詢</label>
-        <div style="display:flex;gap:6px;margin-bottom:6px;">
-          <select id="s-district" style="flex:1;min-width:90px;" onchange="onVillageInput()">
-            <option value="">區</option>
-          </select>
-          <input type="text" id="s-village" placeholder="里（例：瑞隆里）" style="flex:2;" oninput="onVillageInput()">
-          <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;" oninput="updateCard()">
-          <button onclick="doLookupSchool()" style="white-space:nowrap;padding:4px 8px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">查詢</button>
-        </div>
-        <div id="school-result" style="font-size:12px;color:#444;margin-bottom:6px;min-height:0;"></div>
-        <textarea id="s-school" rows="2" oninput="updateCard()" placeholder="查詢後自動填入，或手動輸入"></textarea>
       </div>
 
       <div class="form-sep">建築屬性補充</div>
@@ -3322,7 +3335,7 @@
   function updateValidationBanner() {
     const el = document.getElementById('validation-banner');
     if (!el) return;
-    if (_ignoreValidation) { el.style.display = 'none'; return; }
+    if (_ignoreValidation) { el.style.display = 'none'; el.classList.remove('warn-blink'); return; }
 
     // 聯集所有期望
     const expLand = new Set(), expBuild = new Set();
@@ -3353,6 +3366,7 @@
     // 沒期望資料就不顯示
     if (expLand.size === 0 && expBuild.size === 0) {
       el.style.display = 'none';
+      el.classList.remove('warn-blink');
       return;
     }
 
@@ -3377,12 +3391,14 @@
 
     if (allOk) {
       el.style.display = 'block';
+      el.classList.remove('warn-blink');
       el.innerHTML = `
         <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:10px 12px;">
           <div style="font-size:13px;color:#166534;font-weight:700;">✅ 產權完整 — 所有相關建號/地號皆已上傳</div>
         </div>`;
     } else {
       el.style.display = 'block';
+      el.classList.add('warn-blink');
       el.innerHTML = `
         <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;">
           <div style="font-size:13px;color:#92400e;font-weight:700;">⚠ 偵測到產權可能未齊全</div>
