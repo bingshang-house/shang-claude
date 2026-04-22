@@ -328,14 +328,32 @@
     .map-box iframe { width: 100%; height: 220px; border: none; display: block; }
     .map-placeholder { height: 220px; background: #FFF8E0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #7A5500; font-size: 11px; gap: 4px; }
 
-    /* 產權檢核 banner 不完整時閃爍提醒 */
+    /* 產權檢核 banner 不完整時強烈閃爍提醒 */
     @keyframes val-blink {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
-      50%      { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.0); }
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.85), 0 4px 12px rgba(220, 38, 38, 0.35);
+        transform: scale(1);
+      }
+      50%      {
+        box-shadow: 0 0 0 10px rgba(220, 38, 38, 0.0), 0 4px 18px rgba(220, 38, 38, 0.6);
+        transform: scale(1.01);
+      }
+    }
+    @keyframes val-shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-2px); }
+      40% { transform: translateX(2px); }
+      60% { transform: translateX(-1px); }
+      80% { transform: translateX(1px); }
     }
     #validation-banner.warn-blink > div {
-      animation: val-blink 1.4s ease-in-out infinite;
-      border-color: #dc2626 !important;
+      animation: val-blink 1.1s ease-in-out infinite;
+      border-color: #991b1b !important;
+    }
+    #validation-banner.warn-blink .val-icon {
+      display: inline-block;
+      animation: val-shake 0.6s ease-in-out infinite;
+      transform-origin: center;
     }
 
     /* 位置圖 + 地籍圖 並排 */
@@ -3708,12 +3726,17 @@
       el.style.display = 'block';
       el.classList.add('warn-blink');
       el.innerHTML = `
-        <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;">
-          <div style="font-size:13px;color:#92400e;font-weight:700;">⚠ 偵測到產權可能未齊全</div>
-          ${rowHtml('建物', allBuild, actualBuild)}
-          ${rowHtml('土地', allLand, actualLand)}
+        <div style="background:linear-gradient(135deg,#dc2626 0%,#b91c1c 100%);border:3px solid #7f1d1d;border-radius:10px;padding:12px 14px;color:#fff;">
+          <div style="font-size:17px;font-weight:900;letter-spacing:1px;display:flex;align-items:center;gap:8px;">
+            <span class="val-icon" style="font-size:24px;">⚠</span>
+            <span style="text-shadow:0 1px 2px rgba(0,0,0,0.3);">產權未齊全，請補上傳缺漏謄本</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.95);border-radius:6px;padding:8px 10px;margin-top:8px;">
+            ${rowHtml('建物', allBuild, actualBuild)}
+            ${rowHtml('土地', allLand, actualLand)}
+          </div>
           <div style="margin-top:8px;text-align:right;">
-            <button onclick="_ignoreValidation=true;updateValidationBanner()" style="background:none;border:none;color:#92400e;text-decoration:underline;cursor:pointer;font-size:11px;">忽略此提醒</button>
+            <button onclick="_ignoreValidation=true;updateValidationBanner()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);color:#fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;">忽略此提醒</button>
           </div>
         </div>`;
     }
