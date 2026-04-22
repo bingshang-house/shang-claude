@@ -493,20 +493,47 @@
       <button class="btn-sm" onclick="addLandEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #CC8F00;color:#CC8F00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增土地筆</button>
       <div id="land-total-label" style="font-size:12px;color:#7A5500;font-weight:600;"></div>
 
-      <!-- 學區：接在建物+土地+檢核後面 -->
-      <div class="form-sep">學區</div>
+      <!-- 主要欄位（原 Excel 文件欄位，移到土地資訊之後） -->
+      <div class="form-sep">主要欄位</div>
+      <div style="font-size:10.5px;color:#888;margin-bottom:6px;line-height:1.5;">銷售資料表首要欄位（同時帶入 Excel 下載）</div>
+
       <div class="fg">
-        <label>🏫 學區查詢</label>
-        <div style="display:flex;gap:6px;margin-bottom:6px;">
-          <select id="s-district" style="flex:1;min-width:90px;" onchange="onVillageInput()">
-            <option value="">區</option>
-          </select>
-          <input type="text" id="s-village" placeholder="里（例：瑞隆里）" style="flex:2;" oninput="onVillageInput()">
-          <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;" oninput="updateCard()">
-          <button onclick="doLookupSchool()" style="white-space:nowrap;padding:4px 8px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">查詢</button>
+        <label>夥伴資訊（可記住）</label>
+        <div style="display:flex;gap:6px;margin-bottom:4px;">
+          <input type="text" id="cs-s-partner-name" placeholder="承辦人姓名" style="flex:1;" oninput="updateCard()">
+          <input type="text" id="cs-s-partner-phone" placeholder="聯絡電話" style="flex:1;" oninput="updateCard()">
         </div>
-        <div id="school-result" style="font-size:12px;color:#444;margin-bottom:6px;min-height:0;"></div>
-        <textarea id="s-school" rows="2" oninput="updateCard()" placeholder="查詢後自動填入，或手動輸入"></textarea>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#666;cursor:pointer;">
+          <input type="checkbox" id="cs-s-partner-remember" onchange="savePartnerInfo()" style="width:auto;margin:0;">
+          記住我（下次自動帶入）
+        </label>
+      </div>
+
+      <div class="fg-row">
+        <div class="fg">
+          <label>合約編號</label>
+          <input type="text" id="cs-s-contract" placeholder="例：110A0001" oninput="updateCard()">
+        </div>
+        <div class="fg">
+          <label>鑰匙存置</label>
+          <select id="cs-s-keyhold" onchange="updateCard()">
+            <option value="">－</option>
+            <option value="store">店取</option>
+            <option value="owner">屋主</option>
+            <option value="agent">洽承辦</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="fg-row">
+        <div class="fg">
+          <label>案件名稱</label>
+          <input type="text" id="cs-s-case-name" placeholder="例：亞灣朗闊豪宅" oninput="updateCard()">
+        </div>
+        <div class="fg">
+          <label>社區名稱</label>
+          <input type="text" id="cs-s-community" placeholder="例：亞灣朗闊" oninput="updateCard()">
+        </div>
       </div>
 
       <div class="form-sep">補充資料</div>
@@ -555,13 +582,6 @@
         <div class="plan-name" id="planName"></div>
       </div>
 
-      <div class="fg">
-        <label>訴求重點（每行一點，最多 6 點）</label>
-        <button type="button" onclick="autoPoints()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">✨ AI 改寫文案（Gemini）</button>
-        <textarea id="s-points" rows="12" oninput="_pointsTouched=true; updateCard()" style="line-height:1.55;"></textarea>
-        <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">預設依物件資料自動帶出結構化版面；想要有溫度的生活場景文案再按上方 AI 改寫</div>
-      </div>
-
       <div class="form-sep">重要備註補充</div>
 
       <div class="fg-row">
@@ -606,28 +626,6 @@
         <textarea id="s-facilities" rows="3" placeholder="例：健身房、閱覽室、交誼廳、兒童遊戲室" oninput="updateCard()"></textarea>
       </div>
 
-      <div class="form-sep">周遭機能（可由 AI 協助填入）</div>
-
-      <button id="btnNearby" onclick="doNearbySearch()" style="width:100%;margin-bottom:10px;padding:10px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:22px;cursor:pointer;font-size:14px;font-weight:700;letter-spacing:1px;box-shadow:0 2px 6px rgba(204,143,0,0.3);">🗺️ 自動查詢周邊機能</button>
-      <div id="nearby-status" style="font-size:11px;color:#666;margin-bottom:8px;min-height:0;"></div>
-
-      <div class="fg">
-        <label>🚌 交通機能</label>
-        <textarea id="s-traffic" rows="3" oninput="updateCard()"></textarea>
-      </div>
-      <div class="fg">
-        <label>🛒 生活機能</label>
-        <textarea id="s-life" rows="3" oninput="updateCard()"></textarea>
-      </div>
-      <div class="fg">
-        <label>🏪 商圈特色</label>
-        <textarea id="s-location" rows="3" oninput="updateCard()"></textarea>
-      </div>
-      <div class="fg">
-        <label>🏗️ 重要發展</label>
-        <textarea id="s-develop" rows="3" oninput="updateCard()"></textarea>
-      </div>
-
       <div class="form-sep">建築屬性補充</div>
 
       <div class="fg-row">
@@ -657,62 +655,72 @@
         </div>
       </div>
 
-      <div class="fg-row" style="grid-template-columns:1fr 1fr 1fr;">
+      <div class="form-sep">土地尺寸</div>
+      <div style="font-size:10.5px;color:#888;margin-bottom:6px;line-height:1.5;">請參考 A4 右側地籍圖（點擊可放大）自行判讀填入</div>
+
+      <div class="fg-row">
         <div class="fg">
           <label>建物面寬（M）</label>
           <input type="number" id="s-bld-width" step="0.1" placeholder="例：7.5" oninput="updateCard()">
         </div>
         <div class="fg">
           <label>土地臨路面寬（M）</label>
-          <input type="number" id="s-land-front" step="0.1" placeholder="看右側地籍圖填" oninput="updateCard()">
-        </div>
-        <div class="fg">
-          <label>土地深度（M）</label>
-          <input type="number" id="s-land-depth" step="0.1" placeholder="看右側地籍圖填" oninput="updateCard()">
+          <input type="number" id="s-land-front" step="0.1" placeholder="看地籍圖填" oninput="updateCard()">
         </div>
       </div>
-      <div style="font-size:10.5px;color:#888;margin:-4px 0 6px;line-height:1.5;">尺寸請參考 A4 右側地籍圖（點擊可放大）自行判讀填入</div>
+      <div class="fg">
+        <label>土地深度（M）</label>
+        <input type="number" id="s-land-depth" step="0.1" placeholder="看地籍圖填" oninput="updateCard()">
+      </div>
 
-      <div class="form-sep">Excel 文件欄位</div>
-      <div style="font-size:10.5px;color:#888;margin-bottom:6px;line-height:1.5;">僅用於下載 Excel 銷售資料表頁首</div>
+      <div class="form-sep">周遭機能（可由 AI 協助填入）</div>
+
+      <button id="btnNearby" onclick="doNearbySearch()" style="width:100%;margin-bottom:10px;padding:10px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:22px;cursor:pointer;font-size:14px;font-weight:700;letter-spacing:1px;box-shadow:0 2px 6px rgba(204,143,0,0.3);">🗺️ 自動查詢周邊機能</button>
+      <div id="nearby-status" style="font-size:11px;color:#666;margin-bottom:8px;min-height:0;"></div>
 
       <div class="fg">
-        <label>夥伴資訊（可記住）</label>
-        <div style="display:flex;gap:6px;margin-bottom:4px;">
-          <input type="text" id="cs-s-partner-name" placeholder="承辦人姓名" style="flex:1;" oninput="updateCard()">
-          <input type="text" id="cs-s-partner-phone" placeholder="聯絡電話" style="flex:1;" oninput="updateCard()">
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#666;cursor:pointer;">
-          <input type="checkbox" id="cs-s-partner-remember" onchange="savePartnerInfo()" style="width:auto;margin:0;">
-          記住我（下次自動帶入）
-        </label>
+        <label>🚌 交通機能</label>
+        <textarea id="s-traffic" rows="3" oninput="updateCard()"></textarea>
+      </div>
+      <div class="fg">
+        <label>🏪 商圈特色</label>
+        <textarea id="s-location" rows="3" oninput="updateCard()"></textarea>
+      </div>
+      <div class="fg">
+        <label>🏗️ 重要發展</label>
+        <textarea id="s-develop" rows="3" oninput="updateCard()"></textarea>
       </div>
 
-      <div class="fg-row">
-        <div class="fg">
-          <label>合約編號</label>
-          <input type="text" id="cs-s-contract" placeholder="例：110A0001" oninput="updateCard()">
-        </div>
-        <div class="fg">
-          <label>鑰匙存置</label>
-          <select id="cs-s-keyhold" onchange="updateCard()">
-            <option value="">－</option>
-            <option value="store">店取</option>
-            <option value="owner">屋主</option>
-            <option value="agent">洽承辦</option>
+      <!-- 學區（下移） -->
+      <div class="form-sep">學區</div>
+      <div class="fg">
+        <label>🏫 學區查詢</label>
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <select id="s-district" style="flex:1;min-width:90px;" onchange="onVillageInput()">
+            <option value="">區</option>
           </select>
+          <input type="text" id="s-village" placeholder="里（例：瑞隆里）" style="flex:2;" oninput="onVillageInput()">
+          <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;" oninput="updateCard()">
+          <button onclick="doLookupSchool()" style="white-space:nowrap;padding:4px 8px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">查詢</button>
         </div>
+        <div id="school-result" style="font-size:12px;color:#444;margin-bottom:6px;min-height:0;"></div>
+        <textarea id="s-school" rows="2" oninput="updateCard()" placeholder="查詢後自動填入，或手動輸入"></textarea>
       </div>
 
-      <div class="fg-row">
-        <div class="fg">
-          <label>案件名稱</label>
-          <input type="text" id="cs-s-case-name" placeholder="例：亞灣朗闊豪宅" oninput="updateCard()">
-        </div>
-        <div class="fg">
-          <label>社區名稱</label>
-          <input type="text" id="cs-s-community" placeholder="例：亞灣朗闊" oninput="updateCard()">
-        </div>
+      <!-- AI 文案生成（訴求重點 + Gemini 改寫，下移） -->
+      <div class="form-sep">AI 文案生成</div>
+      <div class="fg">
+        <label>訴求重點（每行一點，最多 6 點）</label>
+        <button type="button" onclick="autoPoints()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">✨ AI 改寫文案（Gemini）</button>
+        <textarea id="s-points" rows="12" oninput="_pointsTouched=true; updateCard()" style="line-height:1.55;"></textarea>
+        <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">預設依物件資料自動帶出結構化版面；想要有溫度的生活場景文案再按上方 AI 改寫</div>
+      </div>
+
+      <!-- 生活機能（最底） -->
+      <div class="form-sep">生活機能</div>
+      <div class="fg">
+        <label>🛒 生活機能</label>
+        <textarea id="s-life" rows="3" oninput="updateCard()"></textarea>
       </div>
 
     </div>
