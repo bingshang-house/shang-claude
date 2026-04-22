@@ -446,21 +446,21 @@
       </div>
     </div>
 
-    <!-- Parse Status -->
-    <div class="parse-status" id="parseStatus"></div>
-
-    <!-- Parsed Summary -->
-    <div class="parsed-summary" id="parsedSummary">
-      <div class="ps-title">解析結果</div>
-      <div id="psRows"></div>
-    </div>
-
     <!-- Supplement Form -->
     <div class="supplement">
 
       <div class="form-sep">建物資訊</div>
       <div id="building-entries"></div>
       <button class="btn-sm" onclick="addBuildingEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #CC8F00;color:#CC8F00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增建物筆</button>
+
+      <!-- Parse Status（學區查詢完成提示）-->
+      <div class="parse-status" id="parseStatus" style="margin:0;"></div>
+
+      <!-- Parsed Summary（解析結果卡片）-->
+      <div class="parsed-summary" id="parsedSummary" style="margin:0;">
+        <div class="ps-title">解析結果</div>
+        <div id="psRows"></div>
+      </div>
 
       <!-- Validation Banner：建物跟土地中間，不完整時閃爍 -->
       <div id="validation-banner" style="margin:4px 0 8px;display:none;"></div>
