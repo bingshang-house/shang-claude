@@ -1,0 +1,44 @@
+# 依賴
+node_modules/
+package.json
+package-lock.json
+
+# Claude Code / MCP / 臨時工作區
+.claude/
+.playwright-mcp/
+.tmp/
+
+# 環境變數（API 金鑰等）
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 測試素材（謄本 PDF / 學區表 PDF）
+*.pdf
+*.PDF
+
+# 開發過程截圖（所有圖片都不進版控）
+*.png
+*.PNG
+*.jpg
+*.JPG
+*.jpeg
+*.JPEG
+
+# Excel 測試輸出與原始範本
+test-filled.*
+cs-template-raw.xlsx
+範本.xls
+
+# 單一案件樣本輸出
+house-瑞隆路591.html
+licdtil-sample.html
+licinfo-sample.json
+
+# 螢幕擷取畫面
+螢幕擷取畫面_*

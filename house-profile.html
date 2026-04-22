@@ -417,16 +417,11 @@
       </div>
     </div>
 
-    <!-- PDF Upload -->
-    <div class="upload-zone" id="uploadZone">
-      <input type="file" accept="application/pdf" onchange="handlePdfUpload(event)" id="pdfInput">
-      <div class="upload-icon">📄</div>
-      <div class="upload-text">上傳電子謄本 PDF</div>
-      <div class="upload-hint">點擊或拖放檔案至此</div>
-    </div>
-
     <!-- Parse Status -->
     <div class="parse-status" id="parseStatus"></div>
+
+    <!-- Validation Banner -->
+    <div id="validation-banner" style="margin:0 14px 10px;display:none;"></div>
 
     <!-- Parsed Summary -->
     <div class="parsed-summary" id="parsedSummary">
@@ -436,6 +431,10 @@
 
     <!-- Supplement Form -->
     <div class="supplement">
+
+      <div class="form-sep">建物資訊</div>
+      <div id="building-entries"></div>
+      <button class="btn-sm" onclick="addBuildingEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #CC8F00;color:#CC8F00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增建物筆</button>
 
       <div class="form-sep">土地資訊</div>
       <div id="land-entries"></div>
@@ -872,7 +871,11 @@
     'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
   // ===== State =====
+  // deed 是「第 1 筆建物的別名」，下游讀點相容舊邏輯
   let deed = {};
+  let _buildingData = {};   // { idx: { _raw, _fileName, address, district, village, ...parseDeed, expectedLandNos:Set, expectedBuildingNos:Set } }
+  let _buildingIdx  = 0;
+  let _ignoreValidation = false;
 
   // ===== Init date =====
   (function() {
@@ -881,25 +884,60 @@
       `製表日期：${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
   })();
 
-  // ===== Drag & Drop =====
-  const zone = document.getElementById('uploadZone');
-  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('drag-over');
-    const f = e.dataTransfer.files[0];
-    if (f && f.type === 'application/pdf') processPdf(f);
-  });
-
-  // ===== PDF Upload =====
-  function handlePdfUpload(e) {
-    const f = e.target.files[0];
-    if (f) processPdf(f);
+  // ===== Building Entries (多筆建物) =====
+  function syncDeedAlias() {
+    // 把 deed 指向「第 1 筆已解析成功的建物」，讓下游讀點相容
+    const first = Object.values(_buildingData).find(e => e && e.address);
+    deed = first || {};
   }
 
-  async function processPdf(file) {
-    setStatus('loading', '解析中…');
+  function addBuildingEntry(preset) {
+    const idx = _buildingIdx++;
+    _buildingData[idx] = preset || {};
+    const div = document.createElement('div');
+    div.id = `building-entry-${idx}`;
+    div.style.cssText = 'border:1px solid #E8E0CC;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 2px 6px rgba(122,85,0,0.08);';
+    div.innerHTML = `
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <div style="flex:1;min-width:0;">
+          <div class="upload-zone" style="padding:10px;text-align:center;cursor:pointer;font-size:12px;margin:0;"
+               id="building-zone-${idx}"
+               onclick="document.getElementById('building-file-${idx}').click()"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="event.preventDefault();this.classList.remove('drag-over');parseBuildingPDF(event.dataTransfer.files[0],${idx})">
+            <span id="building-zone-label-${idx}" style="color:#7A5500;font-weight:600;">📄 點擊或拖曳建物謄本 PDF</span>
+            <input type="file" id="building-file-${idx}" accept="application/pdf" style="display:none"
+                   onchange="parseBuildingPDF(this.files[0],${idx})">
+          </div>
+        </div>
+        <button onclick="removeBuildingEntry(${idx})" title="移除"
+          style="background:#7A5500;color:#fff;border:none;border-radius:50%;width:28px;height:28px;padding:0;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>
+      </div>
+      <div id="building-info-${idx}" style="font-size:11px;color:#16a34a;margin-top:5px;"></div>`;
+    document.getElementById('building-entries').appendChild(div);
+    return idx;
+  }
+
+  function removeBuildingEntry(idx) {
+    delete _buildingData[idx];
+    const el = document.getElementById(`building-entry-${idx}`);
+    if (el) el.remove();
+    syncDeedAlias();
+    updateValidationBanner();
+    updateCard();
+  }
+
+  async function parseBuildingPDF(file, idx) {
+    if (!file) return;
+    const label = document.getElementById(`building-zone-label-${idx}`);
+    const info  = document.getElementById(`building-info-${idx}`);
+    if (label) label.textContent = '解析中…';
+    // 是不是「第一個成功解析」（決定是否觸發外部查詢 + parsedSummary）
+    const priorParsed = Object.entries(_buildingData)
+      .filter(([k, v]) => +k !== idx && v && v.address).length;
+    const isFirst = priorParsed === 0;
+    if (isFirst) setStatus('loading', '解析中…');
     try {
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
@@ -909,49 +947,62 @@
         const tc   = await page.getTextContent();
         fullText += tc.items.map(it => it.str).join(' ') + '\n';
       }
-      deed = parseDeed(fullText);
-      deed._raw = fullText;
-      showParsedSummary(deed);
-      _pointsTouched = false; // 新物件 → 讓模板以新資料重新填
-      updateCard();
-      setStatus('ok', `✓ 解析完成：${file.name}`);
+      const parsed = parseDeed(fullText);
+      parsed._raw = fullText;
+      parsed._fileName = file.name;
+      Object.assign(parsed, extractExpectedParcels(fullText, 'building'));
+      _buildingData[idx] = parsed;
+      syncDeedAlias();
 
-      // Auto school lookup via NLSC TextQueryMap, fallback to deed village
-      const vEl = document.getElementById('s-village');
-      const dEl = document.getElementById('s-district');
-      if (dEl && !dEl.value) dEl.value = normDist(deed.district || '');
-      if (!vEl.value.trim()) {
-        const fullAddr = (deed.district || '') + (deed.address || '');
-        if (fullAddr) {
-          setStatus('loading', '🔍 正在查詢里鄰資訊…');
-          try {
-            const geo = await nlscGeocode(fullAddr);
-            if (geo && geo.village) {
-              if (geo.district && dEl) dEl.value = normDist(geo.district);
-              vEl.value = geo.village;
-              document.getElementById('s-neighbor').value = geo.neighbor || '';
-              doLookupSchool();
-              setStatus('ok', `✓ 解析完成，學區已自動查詢（${geo.village}${geo.neighbor ? ' ' + geo.neighbor + '鄰' : ''}）`);
-            } else if (deed.village) {
-              vEl.value = deed.village;
-              doLookupSchool();
-              setStatus('ok', `✓ 解析完成（學區以謄本里名查詢）`);
-            }
-          } catch (e) {
-            if (deed.village) { vEl.value = deed.village; doLookupSchool(); }
-            setStatus('ok', `✓ 解析完成（里鄰查詢失敗，已用謄本里名）`);
-          }
-        } else if (deed.village) {
-          vEl.value = deed.village;
-          doLookupSchool();
-        }
+      // 這一筆的簡要資訊（建號 + 門牌）
+      const brief = [parsed.buildingNo, parsed.address || ''].filter(Boolean).join('　');
+      if (label) label.textContent = `✓ ${file.name}`;
+      if (info)  info.textContent  = brief || '已解析';
+
+      if (isFirst) {
+        showParsedSummary(deed);
+        _pointsTouched = false;
+        setStatus('ok', `✓ 解析完成：${file.name}`);
       }
+      updateCard();
+      updateValidationBanner();
 
-      // 自動查詢周邊機能（背景執行，不阻塞主流程）
-      doNearbySearch(true);
-
+      // 只有第 1 筆觸發外部查詢（里鄰、學區、周邊機能）
+      if (isFirst) {
+        const vEl = document.getElementById('s-village');
+        const dEl = document.getElementById('s-district');
+        if (dEl && !dEl.value) dEl.value = normDist(deed.district || '');
+        if (!vEl.value.trim()) {
+          const fullAddr = (deed.district || '') + (deed.address || '');
+          if (fullAddr) {
+            setStatus('loading', '🔍 正在查詢里鄰資訊…');
+            try {
+              const geo = await nlscGeocode(fullAddr);
+              if (geo && geo.village) {
+                if (geo.district && dEl) dEl.value = normDist(geo.district);
+                vEl.value = geo.village;
+                document.getElementById('s-neighbor').value = geo.neighbor || '';
+                doLookupSchool();
+                setStatus('ok', `✓ 解析完成，學區已自動查詢（${geo.village}${geo.neighbor ? ' ' + geo.neighbor + '鄰' : ''}）`);
+              } else if (deed.village) {
+                vEl.value = deed.village;
+                doLookupSchool();
+                setStatus('ok', `✓ 解析完成（學區以謄本里名查詢）`);
+              }
+            } catch (e) {
+              if (deed.village) { vEl.value = deed.village; doLookupSchool(); }
+              setStatus('ok', `✓ 解析完成（里鄰查詢失敗，已用謄本里名）`);
+            }
+          } else if (deed.village) {
+            vEl.value = deed.village;
+            doLookupSchool();
+          }
+        }
+        doNearbySearch(true);
+      }
     } catch (err) {
-      setStatus('error', '解析失敗，請確認為文字型 PDF');
+      if (label) label.textContent = '解析失敗';
+      if (isFirst) setStatus('error', '解析失敗，請確認為文字型 PDF');
       console.error(err);
     }
   }
@@ -1011,7 +1062,7 @@
           <label style="font-size:12px;color:#555;font-weight:600;">地號</label>
           <input type="text" id="land-lono-${idx}" placeholder="例：愛群段2945" value="${preset?.loNo||''}"
             style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #E8E0CC;border-radius:6px;font-size:13px;"
-            oninput="_landData[${idx}].loNo=this.value;updateCard()">
+            oninput="_landData[${idx}].loNo=this.value;updateCard();updateValidationBanner()">
         </div>
         <div style="flex:1;">
           <label style="font-size:12px;color:#555;font-weight:600;">持分坪數</label>
@@ -1047,6 +1098,7 @@
     delete _landData[idx];
     const el = document.getElementById(`land-entry-${idx}`);
     if (el) el.remove();
+    updateValidationBanner();
     updateCard();
   }
 
@@ -1076,12 +1128,21 @@
         const loNo  = loNoM ? loNoM[1].replace(/\s/g,'') : '';
         const distM2 = t.match(/高雄市([^\s]{1,4}區)/);
         const distName = distM2 ? distM2[1] : (deed.district || '').replace('高雄市','');
-        _landData[idx] = { loNo, ping, fullArea: total, detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪`, distName };
+        const expected = extractExpectedParcels(raw, 'land');
+        _landData[idx] = {
+          loNo, ping, fullArea: total,
+          detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪`,
+          distName,
+          _raw: raw,
+          expectedLandNos: expected.expectedLandNos,
+          expectedBuildingNos: expected.expectedBuildingNos,
+        };
         document.getElementById(`land-ping-${idx}`).value = ping;
         document.getElementById(`land-lono-${idx}`).value = loNo;
         document.getElementById(`land-info-${idx}`).textContent = `✓ ${total} m²，持分 ${denom}分之${numer} ≈ ${ping} 坪`;
         document.getElementById(`land-zone-label-${idx}`).textContent = `✓ ${file.name}`;
         updateCard();
+        updateValidationBanner();
         queryZoning(idx);
       } else {
         document.getElementById(`land-info-${idx}`).textContent = '⚠ 無法辨識，請手動填寫';
@@ -1673,11 +1734,122 @@
   }
 
   // 初始化第一筆
+  addBuildingEntry();
   addLandEntry();
+
+  // ===== 期望清單抓取（缺件驗證用） =====
+  // 輸出：{ expectedLandNos: Set<'段小段 XXXX-XXXX'>, expectedBuildingNos: Set<'段小段 XXXXX-XXX'> }
+  // 地號一律 normalize 成 4-4 格式（'0064-0000'）、建號 5-3 格式（'02077-000'）
+  function normLandNo(s) {
+    // 接受 '63' '0063' '0063-0000' '63-0' 等變體 → '0063-0000'
+    const m = String(s).replace(/\s/g, '').match(/^0*(\d{1,4})(?:-0*(\d{0,4}))?$/);
+    if (!m) return null;
+    const main = m[1].padStart(4, '0');
+    const sub  = (m[2] || '0').padStart(4, '0');
+    return `${main}-${sub}`;
+  }
+  function normBuildingNo(s) {
+    const m = String(s).replace(/\s/g, '').match(/^0*(\d{1,5})(?:-0*(\d{0,3}))?$/);
+    if (!m) return null;
+    const main = m[1].padStart(5, '0');
+    const sub  = (m[2] || '0').padStart(3, '0');
+    return `${main}-${sub}`;
+  }
+  function extractExpectedParcels(raw, type) {
+    const t = fw(raw);
+    const lands = new Set();
+    const builds = new Set();
+    // 預設段小段（從標頭抓）
+    const headSect = (() => {
+      const m = t.match(/高雄市\s*\S+?區\s*(\S+?段(?:\S+?小段)?)\s*\d{4,5}-\d{3}\s*(?:建號|地號)/);
+      return m ? m[1] : '';
+    })();
+    const addLand = (sect, no) => {
+      const nn = normLandNo(no);
+      if (nn) lands.add(`${sect || headSect} ${nn}`);
+    };
+    const addBuild = (sect, no) => {
+      const nn = normBuildingNo(no);
+      if (nn) builds.add(`${sect || headSect} ${nn}`);
+    };
+
+    if (type === 'building') {
+      // A. 建物坐落地號（標示部）
+      const sitM = t.match(/建\s*物\s*坐\s*落\s*地\s*號\s*(\S+?段(?:\S+?小段)?)?\s*(\d{4,}-\d{3,})/);
+      if (sitM) addLand(sitM[1] || headSect, sitM[2]);
+
+      // C. 標示部其他登記事項「權狀註記事項」建築基地地號
+      //    例：(權狀註記事項)建築基地地號：瑞崗段四小段63、64地號
+      //    例：建築基地權利(種類)範圍瑞崗段四小段63、64地號(所有權)100000分之534
+      const bsM = t.match(/(?:建築基地地號|建築基地權利(?:\s*\([^)]+\))?\s*範圍)\s*[：:]?\s*(\S+?段(?:\S+?小段)?)\s*([\d、，,\-\s]+?)\s*地號/);
+      if (bsM) {
+        const sect = bsM[1];
+        bsM[2].split(/[、，,]/).forEach(n => addLand(sect, n));
+      }
+
+      // D/E. 他項權利部共同擔保地號 / 建號
+      extractCommonCollateral(t, addLand, addBuild);
+    } else if (type === 'land') {
+      // F. 土地所有權部「XX 建號基地之應有部分」
+      //    例：(權狀註記事項)籬子內段籬子內小段5551建號基地之應有部分
+      //    ⚠️ 不能用 \S+?段（會吃到前面的「（權狀註記事項）」括號內容），只吃漢字
+      const bsaM = t.match(/([一-龥]{1,8}段(?:[一-龥]{1,8}小段)?)\s*(\d{4,5})\s*建號\s*基地\s*之\s*應有部分/);
+      if (bsaM) addBuild(bsaM[1], bsaM[2]);
+
+      // G. 土地標示部權狀註記事項「XX 建號等之建築基地地號」
+      //    例：(權狀註記事項)瑞崗段四小段1931至2103建號等之建築基地地號：瑞崗段四小段63、64地號
+      const gM = t.match(/建築基地地號\s*[：:]\s*(\S+?段(?:\S+?小段)?)\s*([\d、，,\s]+?)\s*地號/);
+      if (gM) {
+        const sect = gM[1];
+        gM[2].split(/[、，,]/).forEach(n => addLand(sect, n));
+      }
+
+      // H/I. 土地他項權利部共同擔保地號 / 建號
+      extractCommonCollateral(t, addLand, addBuild);
+    }
+    return { expectedLandNos: lands, expectedBuildingNos: builds };
+  }
+
+  // 從他項權利部抓共同擔保地號/建號（建物、土地謄本共用）
+  // ⚠️ PDF.js 在這個表格會把每個字都拆成獨立 item（「瑞 崗 段 四 小 段   0 0 6 3 - 0 0 0 0」），
+  //    所以先把 section 內所有空白壓掉再 match。
+  // ⚠️ 表頭字「段小段地號」「段小段建號」會讓 [一-龥]+?段 greedy backtrack 吃過頭
+  //    （變成「筆段小段地號瑞崗段四小段」），所以先把表頭 literal 取代成分隔符
+  function extractCommonCollateral(t, addLand, addBuild) {
+    const sectLandIdx  = t.search(/共\s*同\s*擔\s*保\s*地\s*號/);
+    const sectBuildIdx = t.search(/共\s*同\s*擔\s*保\s*建\s*號/);
+
+    if (sectLandIdx >= 0) {
+      const end = sectBuildIdx > sectLandIdx ? sectBuildIdx : t.length;
+      let compact = t.slice(sectLandIdx, end).replace(/\s+/g, '');
+      compact = compact.replace(/共同擔保地號[:：]共\d+筆|段小段地號/g, '|');
+      // 地號嚴格 4 位-4 位（避免吃到建號 5-3）；段名最多 8 個漢字，避免 backtrack 吃過頭
+      [...compact.matchAll(/([一-龥]{1,8}段(?:[一-龥]{1,8}小段)?)(\d{4}-\d{4})/g)]
+        .forEach(m => addLand(m[1], m[2]));
+    }
+    if (sectBuildIdx >= 0) {
+      const slice = t.slice(sectBuildIdx);
+      const endM = slice.search(/其\s*他\s*登\s*記\s*事\s*項|查\s*詢\s*時\s*間/);
+      const seg = endM > 0 ? slice.slice(0, endM) : slice;
+      let compact = seg.replace(/\s+/g, '');
+      compact = compact.replace(/共同擔保建號[:：]共\d+筆|段小段建號/g, '|');
+      // 建號嚴格 5 位-3 位
+      [...compact.matchAll(/([一-龥]{1,8}段(?:[一-龥]{1,8}小段)?)(\d{5}-\d{3})/g)]
+        .forEach(m => addBuild(m[1], m[2]));
+    }
+  }
 
   function parseDeed(raw) {
     const t = fw(raw);
     const d = {};
+
+    // 建號（標頭：高雄市 前鎮區 瑞崗段四小段 02077-000 建號）
+    const bnoM = t.match(/高雄市\s*\S+?區\s*(\S+?段(?:\S+?小段)?)\s*(\d{4,5}-\d{3})\s*建號/);
+    if (bnoM) {
+      d.buildingSect = bnoM[1];
+      d.buildingNo   = `${bnoM[1]} ${bnoM[2]}`;
+      d.buildingNoRaw = bnoM[2];
+    }
 
     // 建物門牌
     const addrM = t.match(/建物門牌\s+(.+?)(?=\s{2,}|建物坐落|$)/m);
@@ -2786,16 +2958,102 @@
     el.textContent = msg;
   }
 
+  // ===== Validation Banner：缺件提示 =====
+  // 比對「期望建號/地號」聯集 vs 已上傳的實際清單，列出缺件
+  function updateValidationBanner() {
+    const el = document.getElementById('validation-banner');
+    if (!el) return;
+    if (_ignoreValidation) { el.style.display = 'none'; return; }
+
+    // 聯集所有期望
+    const expLand = new Set(), expBuild = new Set();
+    const collect = src => {
+      if (src?.expectedLandNos) src.expectedLandNos.forEach(x => expLand.add(x));
+      if (src?.expectedBuildingNos) src.expectedBuildingNos.forEach(x => expBuild.add(x));
+    };
+    Object.values(_buildingData).forEach(collect);
+    Object.values(_landData).forEach(collect);
+
+    // 實際已上傳 / 已填寫
+    const actualLand = new Set(), actualBuild = new Set();
+    Object.values(_landData).forEach(e => {
+      if (!e || !e.loNo) return;
+      // e.loNo 例：'瑞崗段四小段0064-0000' or '籬子內段籬子內小段 1245-0000'
+      const m = String(e.loNo).replace(/\s/g,'').match(/^(\S+?段(?:\S+?小段)?)(\d{1,4})(?:-0*(\d{0,4}))?$/);
+      if (m) {
+        const n = normLandNo(`${m[2]}${m[3]?('-'+m[3]):''}`);
+        if (n) actualLand.add(`${m[1]} ${n}`);
+      }
+    });
+    Object.values(_buildingData).forEach(e => {
+      if (!e || !e.buildingSect || !e.buildingNoRaw) return;
+      const n = normBuildingNo(e.buildingNoRaw);
+      if (n) actualBuild.add(`${e.buildingSect} ${n}`);
+    });
+
+    // 沒期望資料就不顯示
+    if (expLand.size === 0 && expBuild.size === 0) {
+      el.style.display = 'none';
+      return;
+    }
+
+    const missingLand  = [...expLand].filter(x => !actualLand.has(x));
+    const missingBuild = [...expBuild].filter(x => !actualBuild.has(x));
+    const allOk = missingLand.length === 0 && missingBuild.length === 0;
+
+    const rowHtml = (label, items, actualSet) =>
+      items.length === 0 ? '' : `
+        <div style="margin-top:6px;">
+          <div style="font-size:11px;color:#7A5500;font-weight:700;margin-bottom:3px;">${label}</div>
+          ${items.map(x => {
+            const ok = actualSet.has(x);
+            return `<div style="font-size:12px;color:${ok?'#16a34a':'#b91c1c'};padding:2px 0;">
+              ${ok?'✅':'❌'} ${x}${ok?'':'<span style="color:#999;font-size:10px;margin-left:6px;">尚未上傳</span>'}
+            </div>`;
+          }).join('')}
+        </div>`;
+
+    const allLand = [...expLand].sort();
+    const allBuild = [...expBuild].sort();
+
+    if (allOk) {
+      el.style.display = 'block';
+      el.innerHTML = `
+        <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:10px 12px;">
+          <div style="font-size:13px;color:#166534;font-weight:700;">✅ 產權完整 — 所有相關建號/地號皆已上傳</div>
+        </div>`;
+    } else {
+      el.style.display = 'block';
+      el.innerHTML = `
+        <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;">
+          <div style="font-size:13px;color:#92400e;font-weight:700;">⚠ 偵測到產權可能未齊全</div>
+          ${rowHtml('建物', allBuild, actualBuild)}
+          ${rowHtml('土地', allLand, actualLand)}
+          <div style="margin-top:8px;text-align:right;">
+            <button onclick="_ignoreValidation=true;updateValidationBanner()" style="background:none;border:none;color:#92400e;text-decoration:underline;cursor:pointer;font-size:11px;">忽略此提醒</button>
+          </div>
+        </div>`;
+    }
+  }
+
   // ===== Reset =====
   function resetAll() {
     if (!confirm('確定重置全部資料？')) return;
     deed = {};
+    _buildingData = {}; _buildingIdx = 0;
+    _landData = {};     _landIdx = 0;
+    _ignoreValidation = false;
+    document.getElementById('building-entries').innerHTML = '';
+    document.getElementById('land-entries').innerHTML = '';
+    addBuildingEntry();
+    addLandEntry();
     document.querySelectorAll('.left-panel input[type=text], .left-panel input[type=number], .left-panel textarea').forEach(el => el.value = '');
     document.getElementById('parsedSummary').classList.remove('show');
     document.getElementById('parseStatus').className = 'parse-status';
     document.getElementById('planPreview').innerHTML =
       '<div class="no-img"><span class="pi">📐</span>請從左側上傳格局圖</div>';
     document.getElementById('planName').textContent = '';
+    updateValidationBanner();
     updateCard();
   }
 
