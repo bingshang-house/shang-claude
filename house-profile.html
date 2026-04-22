@@ -3468,17 +3468,18 @@
 
       const pName = val('cs-s-partner-name');
       const pPhone = val('cs-s-partner-phone');
+      // 對齊網頁 updateCard 的聯絡資訊：有專員 → 專員+電話 ｜ 店長名（不含電話）；無 → 店長+電話
       const contactText = pName
-        ? `專員 ${pName}　電話 ${pPhone}\n店長 江炳賞　0971-115207`
+        ? `專員 ${pName}　電話 ${pPhone}　｜　店長 江炳賞`
         : '店長 江炳賞　0971-115207';
       const contactCell = ws.getCell(row, 13);
       contactCell.value = contactText;
-      // 網頁 .header-contact 18px ≈ 13pt；pName 有填 → 兩行 38pt，沒填 → 單行 24pt
+      // 單行不 wrap，字體 11pt 才塞得進 8 欄（約 69mm）
       setStyle(contactCell, {
-        font: { name: FONT, size: 13, bold: true, color: { argb: COLOR.deepBrown } },
-        alignment: { horizontal: 'right', vertical: 'middle', indent: 1, wrapText: true },
+        font: { name: FONT, size: 11, bold: true, color: { argb: COLOR.deepBrown } },
+        alignment: { horizontal: 'right', vertical: 'middle', indent: 1, wrapText: false },
       });
-      ws.getRow(row).height = pName ? 42 : 26;
+      ws.getRow(row).height = 28;
       row++;
 
       // R3: 公司資訊
