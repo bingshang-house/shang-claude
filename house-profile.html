@@ -779,12 +779,11 @@
               </colgroup>
               <tr class="group-title"><td colspan="4">案件資訊</td></tr>
               <tr>
-                <td class="key">案件名稱</td><td class="val" id="td-case-name"><span class="pending">待補充</span></td>
                 <td class="key">社區名稱</td><td class="val" id="td-community"><span class="pending">待補充</span></td>
-              </tr>
-              <tr>
-                <td class="key">合約編號</td><td class="val" id="td-contract">－</td>
                 <td class="key">鑰匙存置</td><td class="val" id="td-keyhold">－</td>
+              </tr>
+              <tr class="full-row">
+                <td class="key">合約編號</td><td class="val" colspan="3" id="td-contract">－</td>
               </tr>
               <tr class="full-row">
                 <td class="key">地　址</td><td class="val" colspan="3" id="td-addr">－</td>
@@ -2673,15 +2672,19 @@
     const effParkNo  = d.hasParking ? (d.parkNo || '') : (_parkManualChk ? _parkNoManual : '');
     const effParkPing = d.hasParking ? (d.parkPing || 0) : 0;
 
-    // 標題：有填案件名稱就用案件名稱，否則顯示案件資訊（待補）
+    // 標題 = 案件名稱；滿 16 字正常顯示、1~15 字紅色加字數提示、空則「我忘了填我忘了填我忘了填」
     const _caseName = (document.getElementById('cs-s-case-name')?.value || '').trim();
     const _commName = (document.getElementById('cs-s-community')?.value || '').trim();
     const _titleEl = document.getElementById('out-title');
     if (_titleEl) {
-      if (_caseName) _titleEl.textContent = _caseName;
-      else if (_commName) _titleEl.textContent = _commName;
-      else if (d.address) _titleEl.textContent = `${d.district || '高雄市前鎮區'}${d.address}`;
-      else _titleEl.textContent = '請上傳謄本 PDF';
+      if (_caseName.length === 16) {
+        _titleEl.innerHTML = escH(_caseName);
+        _titleEl.style.color = '';
+      } else if (_caseName.length > 0) {
+        _titleEl.innerHTML = `<span style="color:#FFE066;">${escH(_caseName)}</span><span style="font-size:13px;font-weight:500;letter-spacing:0.5px;color:#FFCA28;margin-left:8px;">（${_caseName.length}/16 請補足）</span>`;
+      } else {
+        _titleEl.innerHTML = `<span style="color:#FFE066;">我忘了填我忘了填我忘了填</span>`;
+      }
     }
 
     // 案件名稱 16 字計數器
@@ -2692,18 +2695,10 @@
       _cnt.style.color = len === 16 ? '#16a34a' : '#dc2626';
     }
 
-    // 案件資訊 A4 顯示
+    // 案件資訊（表格內，不再有 td-case-name）
     const _keyholdLabel = { store: '店取', owner: '屋主', agent: '洽承辦' };
     const _keyhold = document.getElementById('cs-s-keyhold')?.value || '';
     const _contract = (document.getElementById('cs-s-contract')?.value || '').trim();
-    // 案件名稱：滿 16 字 → 正常；未滿 → 紅字+字數標記；空 → 待補充
-    if (_caseName.length === 16) {
-      setText('td-case-name', _caseName);
-    } else if (_caseName.length > 0) {
-      setHtml('td-case-name', `<span style="color:#dc2626;font-weight:600;">${escH(_caseName)}　<span style="font-size:10px;">（${_caseName.length}/16，請補足）</span></span>`);
-    } else {
-      setHtml('td-case-name', `<span class="pending">待補充</span>`);
-    }
     setHtml('td-community', _commName ? escH(_commName) : `<span class="pending">待補充</span>`);
     setText('td-contract', _contract || '－');
     setText('td-keyhold', _keyholdLabel[_keyhold] || '－');
