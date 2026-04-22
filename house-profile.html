@@ -475,6 +475,12 @@
       font-weight: 700;
     }
     .btn-cs-xlsx:hover { background: #155a2a; }
+    .btn-a4-xlsx {
+      background: linear-gradient(135deg, #CC8F00 0%, #7A5500 100%);
+      color: #fff;
+      font-weight: 700;
+    }
+    .btn-a4-xlsx:hover { background: linear-gradient(135deg, #7A5500 0%, #5a3e00 100%); }
 
     /* 嫌惡設施查核（左欄 + A4） */
     .hazard-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #fff; margin-left: 8px; cursor: pointer; user-select: none; }
@@ -504,7 +510,8 @@
 <!-- Top Bar -->
 <div class="top-bar">
   <span class="top-title">🏠 房屋銷售介紹產生器</span>
-  <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載 Excel 銷售資料表">📊 下載 Excel</button>
+  <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載永慶制式 CASE STUDY Excel">📊 下載 Excel</button>
+  <button class="btn btn-a4-xlsx" onclick="downloadA4Xlsx()" id="btnA4Xlsx" title="下載 A4 銷售資料表 Excel（即右側預覽版面）">📄 下載 A4 銷售表 Excel</button>
   <label class="hazard-toggle" title="勾選時列印會包含 300m 內嫌惡設施清單（自動分頁）"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含嫌惡設施</label>
   <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
   <button class="btn btn-reset" onclick="resetAll()">重置</button>
@@ -3186,6 +3193,376 @@
       img.onerror = () => reject(new Error('static map fetch failed'));
       img.src = url;
     });
+  }
+
+  // ============================================================================
+  // A4 銷售表 Excel 下載（2026-04-22 開工，C1：骨架 + 資料 + 樣式）
+  // 目標：右側 A4 預覽版面 → 可下載、可編輯、可列印的 Excel
+  // 決策：1a 允許溢出 2 頁 / 2a 紅字警告塞 cell / 3a 新按鈕「📄 下載 A4 銷售表 Excel」
+  //       4a 全 Windows Office / 5b 多筆土地地號前綴黑字
+  // ============================================================================
+  async function downloadA4Xlsx() {
+    const btn = document.getElementById('btnA4Xlsx');
+    const origText = btn.textContent;
+    btn.textContent = '⏳ 產生中...';
+    btn.disabled = true;
+    try {
+      if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS 尚未載入');
+      const wb = new ExcelJS.Workbook();
+      wb.creator = '賞好賞不動產';
+      wb.created = new Date();
+      const ws = wb.addWorksheet('A4 銷售表', {
+        pageSetup: {
+          paperSize: 9,          // A4
+          orientation: 'portrait',
+          fitToPage: false,
+          horizontalCentered: true,
+          margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4, header: 0, footer: 0 },
+        },
+        views: [{ showGridLines: false, showRowColHeaders: true }],
+      });
+
+      // ── 欄寬：20 欄（A-T），總寬 ≈ 190mm 對應 A4 可印刷寬度 ──
+      for (let i = 1; i <= 20; i++) ws.getColumn(i).width = 4.6;
+
+      // ── 樣式常數（金黃系實色對照 CSS 漸層）──
+      const FONT = '微軟正黑體';
+      const COLOR = {
+        darkGold: 'FFA87500',     // 標題 / group 底色（對應 #7A5500→#CC8F00 漸層中點）
+        deepBrown: 'FF7A5500',    // 深字
+        pale: 'FFFFF8E0',         // 淺米
+        pale2: 'FFFFFBF0',        // 極淺米
+        border: 'FFE8E0CC',       // 邊框
+        red: 'FFDC2626',          // 警示
+        text: 'FF333333',         // 正文
+        gray: 'FF666666',         // 輔助字
+        white: 'FFFFFFFF',
+      };
+      const thin = { style: 'thin', color: { argb: COLOR.border } };
+      const borderAll = { top: thin, left: thin, bottom: thin, right: thin };
+
+      function setStyle(cell, s) {
+        if (s.font) cell.font = s.font;
+        if (s.alignment) cell.alignment = s.alignment;
+        if (s.fill) cell.fill = s.fill;
+        if (s.border) cell.border = s.border;
+      }
+
+      // 取 A4 上顯示用的文字（若 HTML 還沒 render 值就拿 innerText）
+      function td(id, fallback = '－') {
+        const el = document.getElementById(id);
+        if (!el) return fallback;
+        const t = (el.textContent || '').trim();
+        return t || fallback;
+      }
+      function val(id) {
+        return (document.getElementById(id)?.value || '').trim();
+      }
+
+      let row = 1;
+
+      // ============ Header ============
+      // R1: 左「不動產銷售資料表」+ 右「製表日期」
+      ws.mergeCells(row, 1, row, 14);
+      ws.mergeCells(row, 15, row, 20);
+      setStyle(ws.getCell(row, 1), {
+        font: { name: FONT, size: 10, color: { argb: COLOR.gray } },
+        alignment: { horizontal: 'left', vertical: 'middle', indent: 1 },
+      });
+      ws.getCell(row, 1).value = '不動產銷售資料表';
+      const d = new Date();
+      const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+      setStyle(ws.getCell(row, 15), {
+        font: { name: FONT, size: 10, color: { argb: COLOR.gray } },
+        alignment: { horizontal: 'right', vertical: 'middle', indent: 1 },
+      });
+      ws.getCell(row, 15).value = `製表日期：${dateStr}`;
+      ws.getRow(row).height = 16;
+      row++;
+
+      // R2: 案件名稱大標 + 聯絡資訊
+      ws.mergeCells(row, 1, row, 13);
+      ws.mergeCells(row, 14, row, 20);
+      const caseName = val('cs-s-case-name');
+      const titleCell = ws.getCell(row, 1);
+      if (!caseName) {
+        titleCell.value = '我忘了填我忘了填我忘了填';
+        setStyle(titleCell, {
+          font: { name: FONT, size: 13, bold: true, color: { argb: 'FFCC8F00' } },
+          alignment: { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: true },
+        });
+      } else if (caseName.length < 16) {
+        titleCell.value = `${caseName}（${caseName.length}/16 請補足）`;
+        setStyle(titleCell, {
+          font: { name: FONT, size: 16, bold: true, color: { argb: COLOR.red } },
+          alignment: { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: true },
+        });
+      } else {
+        titleCell.value = caseName;
+        // 字體依長度微縮
+        let size = 18;
+        if (caseName.length > 20) size = 14;
+        else if (caseName.length > 16) size = 16;
+        setStyle(titleCell, {
+          font: { name: FONT, size, bold: true, color: { argb: COLOR.deepBrown } },
+          alignment: { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: true },
+        });
+      }
+
+      const pName = val('cs-s-partner-name');
+      const pPhone = val('cs-s-partner-phone');
+      const contactText = pName
+        ? `專員 ${pName}　電話 ${pPhone}   ｜   店長 江炳賞`
+        : '店長 江炳賞　0971-115207';
+      const contactCell = ws.getCell(row, 14);
+      contactCell.value = contactText;
+      setStyle(contactCell, {
+        font: { name: FONT, size: 10, color: { argb: COLOR.text } },
+        alignment: { horizontal: 'right', vertical: 'middle', indent: 1 },
+      });
+      ws.getRow(row).height = 32;
+      row++;
+
+      // R3: 公司資訊
+      ws.mergeCells(row, 1, row, 20);
+      const compCell = ws.getCell(row, 1);
+      compCell.value = '賞好賞不動產有限公司　｜　高雄市苓雅區中華四路122號　｜　經紀人：江炳賞　114年高市字第01680號';
+      setStyle(compCell, {
+        font: { name: FONT, size: 9, color: { argb: COLOR.deepBrown } },
+        alignment: { horizontal: 'center', vertical: 'middle' },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale } },
+      });
+      ws.getRow(row).height = 16;
+      row++;
+
+      row++; // 空白分隔
+
+      // ============ Price Bar ============
+      const priceLabels = ['售價（含車位）', '不含車位坪數', '單價（不含車位）', '含車位總坪'];
+      const priceUnits  = ['萬元', '坪', '萬／坪', '坪'];
+      const priceVals   = [td('out-price'), td('out-ping'), td('out-unit'), td('out-ping-total')];
+
+      // labels (4×5 columns each)
+      for (let i = 0; i < 4; i++) {
+        const s = i * 5 + 1;
+        ws.mergeCells(row, s, row, s + 4);
+        const c = ws.getCell(row, s);
+        c.value = priceLabels[i];
+        setStyle(c, {
+          font: { name: FONT, size: 9, color: { argb: COLOR.white } },
+          alignment: { horizontal: 'center', vertical: 'middle' },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.darkGold } },
+        });
+      }
+      ws.getRow(row).height = 18;
+      row++;
+
+      // values
+      for (let i = 0; i < 4; i++) {
+        const s = i * 5 + 1;
+        ws.mergeCells(row, s, row, s + 4);
+        const c = ws.getCell(row, s);
+        c.value = `${priceVals[i]} ${priceUnits[i]}`;
+        setStyle(c, {
+          font: { name: FONT, size: 18, bold: true, color: { argb: COLOR.white } },
+          alignment: { horizontal: 'center', vertical: 'middle' },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.darkGold } },
+        });
+      }
+      ws.getRow(row).height = 30;
+      row++;
+
+      row++; // 分隔
+
+      // ============ Info Table Helpers ============
+      // 20 欄切四組：key A-D(1-4), val E-J(5-10), key K-N(11-14), val O-T(15-20)
+      function groupTitle(text) {
+        ws.mergeCells(row, 1, row, 20);
+        const c = ws.getCell(row, 1);
+        c.value = `▌ ${text}`;
+        setStyle(c, {
+          font: { name: FONT, size: 10, bold: true, color: { argb: COLOR.white } },
+          alignment: { horizontal: 'left', vertical: 'middle', indent: 1 },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.darkGold } },
+          border: borderAll,
+        });
+        ws.getRow(row).height = 17;
+        row++;
+      }
+      function kvCell(col, text, isKey, opts = {}) {
+        const c = ws.getCell(row, col);
+        c.value = text;
+        setStyle(c, {
+          font: {
+            name: FONT, size: 10,
+            bold: isKey || !!opts.bold,
+            color: { argb: opts.red ? COLOR.red : (isKey ? COLOR.deepBrown : COLOR.text) },
+          },
+          alignment: {
+            horizontal: isKey ? 'center' : 'left',
+            vertical: 'middle',
+            indent: isKey ? 0 : 1,
+            wrapText: true,
+          },
+          fill: isKey ? { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale } } : undefined,
+          border: borderAll,
+        });
+      }
+      function dualRow(k1, v1, k2, v2) {
+        ws.mergeCells(row, 1, row, 4);
+        ws.mergeCells(row, 5, row, 10);
+        ws.mergeCells(row, 11, row, 14);
+        ws.mergeCells(row, 15, row, 20);
+        kvCell(1, k1, true);
+        kvCell(5, v1, false);
+        kvCell(11, k2, true);
+        kvCell(15, v2, false);
+        ws.getRow(row).height = 18;
+        row++;
+      }
+      function fullRow(k, v, opts = {}) {
+        ws.mergeCells(row, 1, row, 4);
+        ws.mergeCells(row, 5, row, 20);
+        kvCell(1, k, true, { red: opts.keyRed });
+        kvCell(5, v, false, { red: opts.valRed, bold: opts.valRed });
+        // 多行估計高度
+        const lines = String(v || '').split('\n').length;
+        ws.getRow(row).height = Math.max(opts.height || 18, lines * 16);
+        row++;
+      }
+
+      // ============ Info Table Data ============
+      groupTitle('案件資訊');
+      dualRow('社區名稱', td('td-community'), '鑰匙存置', td('td-keyhold'));
+      fullRow('合約編號', td('td-contract'));
+      fullRow('地址', td('td-addr'));
+
+      groupTitle('基本資料');
+      dualRow('樓層', td('td-floor'), '建築完成', td('td-completion'));
+      dualRow('所有權登記', td('td-own-date'), '房屋座向', td('td-orientation'));
+      dualRow('使用狀況', td('td-occupancy'), '主要用途', td('td-use'));
+      dualRow('建材', td('td-mat'), '格局', td('td-layout'));
+
+      // 帶看注意（只有有值才加）
+      const vn = td('td-viewing-notes', '');
+      if (vn) fullRow('⚠ 帶看注意', vn, { keyRed: true, valRed: true, height: 26 });
+
+      groupTitle('土地與都計');
+      dualRow('土地持分', td('td-land'), '使用分區', td('td-zone'));
+      dualRow('公告現值', td('td-pub-val'), '建蔽容積', td('td-bcr-far'));
+      dualRow('都市計畫', td('td-urban-plan'), '細部計畫', td('td-detail-plan'));
+      fullRow('臨路面寬×深度', td('td-land-dim'));
+
+      groupTitle('建物坪數');
+      dualRow('主建物面積', td('td-main-area'), '附屬建物', td('td-attached'));
+      dualRow('共用部分', td('td-pub-area'), '總坪數', td('td-total-area'));
+
+      groupTitle('車位與費用');
+      dualRow('車位', td('td-park'), '停車狀況', td('td-park-status'));
+      dualRow('機車位', td('td-moto'), '車位售價', td('td-park-price'));
+      dualRow('管理費', td('td-mgmt'), '抵押設定', td('td-mortgage'));
+
+      groupTitle('建築屬性');
+      dualRow('面前道路', td('td-road'), '警衛', td('td-security'));
+      fullRow('建物面寬', td('td-bld-width'));
+      fullRow('電梯', td('td-elevator'));
+
+      groupTitle('使用執照與細項');
+      dualRow('使用執照', td('td-lic'), '總戶數', td('td-lic-units'));
+      dualRow('總樓層', td('td-lic-floors'), '建商', td('td-lic-builder'));
+      dualRow('本樓樓板高度', td('td-lic-floorheight'), '使用類組', td('td-lic-usage'));
+      dualRow('中繼水箱', td('td-lic-watertank'), '綠建築', td('td-lic-green'));
+      dualRow('太陽能', td('td-lic-solar'), '', '');
+      dualRow('國小學區', td('td-school-e'), '國中學區', td('td-school-j'));
+      fullRow('社區公設', td('td-facilities'));
+
+      row++; // 分隔
+
+      // ============ 周遭機能（2×2）============
+      groupTitle('周遭機能分析');
+      const surrLabels = [
+        ['🚌 交通機能', td('out-traffic', '－')],
+        ['🛒 生活機能', td('out-life', '－')],
+        ['🏪 商圈特色', td('out-location', '－')],
+        ['🏗️ 重要發展', td('out-develop', '－')],
+      ];
+      for (let i = 0; i < 4; i += 2) {
+        // label row
+        ws.mergeCells(row, 1, row, 10);
+        ws.mergeCells(row, 11, row, 20);
+        kvCell(1,  surrLabels[i][0],   true);
+        kvCell(11, surrLabels[i+1][0], true);
+        ws.getRow(row).height = 15;
+        row++;
+        // content row（wrapText 多行）
+        ws.mergeCells(row, 1, row, 10);
+        ws.mergeCells(row, 11, row, 20);
+        kvCell(1,  surrLabels[i][1],   false);
+        kvCell(11, surrLabels[i+1][1], false);
+        const maxLines = Math.max(
+          String(surrLabels[i][1]).split('\n').length,
+          String(surrLabels[i+1][1]).split('\n').length,
+        );
+        ws.getRow(row).height = Math.max(34, maxLines * 14);
+        row++;
+      }
+
+      row++; // 分隔
+
+      // ============ 訴求重點（全寬）============
+      groupTitle('訴求重點');
+      const pointsEl = document.getElementById('out-points');
+      const pointsText = pointsEl
+        ? Array.from(pointsEl.children).map(n => n.textContent.trim()).filter(Boolean).join('\n')
+        : '';
+      ws.mergeCells(row, 1, row, 20);
+      const pc = ws.getCell(row, 1);
+      pc.value = pointsText || '（請在左側填入訴求重點）';
+      setStyle(pc, {
+        font: { name: FONT, size: 10, color: { argb: COLOR.text } },
+        alignment: { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true },
+        border: borderAll,
+      });
+      const ptLines = (pointsText || '').split('\n').length || 1;
+      ws.getRow(row).height = Math.max(100, ptLines * 15);
+      row++;
+
+      // ============ 位置圖 / 地籍圖 / 格局圖 框（C2 再嵌圖，先留空位）============
+      groupTitle('附圖（位置圖 / 地籍圖 / 格局圖，下載後可手動貼入或等下版自動嵌入）');
+      ws.mergeCells(row, 1, row, 20);
+      const placeholder = ws.getCell(row, 1);
+      placeholder.value = '　（此區下版本將自動嵌入位置圖、地籍圖、格局圖。目前先留空格供手動貼圖。）';
+      setStyle(placeholder, {
+        font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
+        alignment: { horizontal: 'center', vertical: 'middle' },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } },
+        border: borderAll,
+      });
+      ws.getRow(row).height = 180;
+      row++;
+
+      // ============ 印刷範圍 ============
+      ws.pageSetup.printArea = `A1:T${row - 1}`;
+
+      // ============ Download ============
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      let fn = (caseName || '銷售資料表').replace(/[\/\\:*?"<>|]/g, '').slice(0, 60);
+      a.download = `${fn}_${dateStr.replace(/\//g, '-')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('downloadA4Xlsx failed', e);
+      alert('產生失敗：' + (e.message || e));
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
   }
 
   async function downloadCaseStudyXlsx() {
