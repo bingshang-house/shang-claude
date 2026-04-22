@@ -3488,10 +3488,13 @@
       ws.getRow(row).height = 26;
       row++;
 
-      // R3: 公司資訊（最後面加店長聯絡，取代原獨立一行）
+      // R3: 公司資訊（最後面加店長）
+      // 有專員：店長 江炳賞（不帶電話，避免買方打錯給賞哥）
+      // 無專員：店長 江炳賞 0971-115207（至少要有電話可聯絡）
       ws.mergeCells(row, 1, row, 20);
       const compCell = ws.getCell(row, 1);
-      compCell.value = '賞好賞不動產有限公司　｜　高雄市苓雅區中華四路122號　｜　經紀人：江炳賞 114年高市字第01680號　｜　店長 江炳賞 0971-115207';
+      const shangTail = pName ? '店長 江炳賞' : '店長 江炳賞 0971-115207';
+      compCell.value = `賞好賞不動產有限公司　｜　高雄市苓雅區中華四路122號　｜　經紀人：江炳賞 114年高市字第01680號　｜　${shangTail}`;
       setStyle(compCell, {
         font: { name: FONT, size: 8, color: { argb: COLOR.deepBrown } },
         alignment: { horizontal: 'center', vertical: 'middle', wrapText: false },
