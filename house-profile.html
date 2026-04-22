@@ -3286,13 +3286,14 @@
       ws.mergeCells(row, 13, row, 20);
       const caseName = val('cs-s-case-name');
       const titleCell = ws.getCell(row, 1);
-      // 案名字體依長度動態縮（Excel 不支援 flex，要用 size 階梯）
+      // 案名字體依長度動態縮：對齊網頁 CSS (19px→14px→13px→12px 階梯)
       function caseNameSize(len) {
-        if (len <= 14) return 18;
-        if (len <= 18) return 15;
-        if (len <= 22) return 13;
-        if (len <= 28) return 11;
-        return 10;
+        if (len <= 11) return 14;
+        if (len <= 14) return 13;
+        if (len <= 18) return 12;
+        if (len <= 22) return 11;
+        if (len <= 28) return 10;
+        return 9;
       }
       if (!caseName) {
         titleCell.value = '我忘了填我忘了填我忘了填';
@@ -3319,14 +3320,15 @@
       const pPhone = val('cs-s-partner-phone');
       const contactText = pName
         ? `專員 ${pName}　電話 ${pPhone}\n店長 江炳賞　0971-115207`
-        : '店長 江炳賞\n0971-115207';
+        : '店長 江炳賞　0971-115207';
       const contactCell = ws.getCell(row, 13);
       contactCell.value = contactText;
+      // 網頁 .header-contact 18px ≈ 13pt；pName 有填 → 兩行 38pt，沒填 → 單行 24pt
       setStyle(contactCell, {
-        font: { name: FONT, size: 10, color: { argb: COLOR.text } },
+        font: { name: FONT, size: 13, bold: true, color: { argb: COLOR.deepBrown } },
         alignment: { horizontal: 'right', vertical: 'middle', indent: 1, wrapText: true },
       });
-      ws.getRow(row).height = 38;
+      ws.getRow(row).height = pName ? 42 : 26;
       row++;
 
       // R3: 公司資訊
@@ -3363,44 +3365,46 @@
       ws.getRow(row).height = 18;
       row++;
 
-      // values
+      // values — 網頁 .p-value 22px ≈ 16pt
       for (let i = 0; i < 4; i++) {
         const s = i * 5 + 1;
         ws.mergeCells(row, s, row, s + 4);
         const c = ws.getCell(row, s);
         c.value = `${priceVals[i]} ${priceUnits[i]}`;
         setStyle(c, {
-          font: { name: FONT, size: 18, bold: true, color: { argb: COLOR.white } },
+          font: { name: FONT, size: 16, bold: true, color: { argb: COLOR.white } },
           alignment: { horizontal: 'center', vertical: 'middle' },
           fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.darkGold } },
         });
       }
-      ws.getRow(row).height = 30;
+      ws.getRow(row).height = 26;
       row++;
 
       row++; // 分隔
 
       // ============ Info Table Helpers ============
       // 20 欄切四組：key A-D(1-4), val E-J(5-10), key K-N(11-14), val O-T(15-20)
+      // group-title 網頁 12px ≈ 9pt
       function groupTitle(text) {
         ws.mergeCells(row, 1, row, 20);
         const c = ws.getCell(row, 1);
         c.value = `▌ ${text}`;
         setStyle(c, {
-          font: { name: FONT, size: 10, bold: true, color: { argb: COLOR.white } },
+          font: { name: FONT, size: 9, bold: true, color: { argb: COLOR.white } },
           alignment: { horizontal: 'left', vertical: 'middle', indent: 1 },
           fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.darkGold } },
           border: borderAll,
         });
-        ws.getRow(row).height = 17;
+        ws.getRow(row).height = 16;
         row++;
       }
+      // info-table 網頁 11px ≈ 8pt，但 Excel 8pt 太小，取折衷 9pt
       function kvCell(col, text, isKey, opts = {}) {
         const c = ws.getCell(row, col);
         c.value = text;
         setStyle(c, {
           font: {
-            name: FONT, size: 10,
+            name: FONT, size: 9,
             bold: isKey || !!opts.bold,
             color: { argb: opts.red ? COLOR.red : (isKey ? COLOR.deepBrown : COLOR.text) },
           },
@@ -3427,6 +3431,8 @@
         }
         return Math.min(lines, 6); // 上限 6 行，避免單列爆高；超出由 Excel 自動 wrap 隱藏
       }
+      // 單列高 9pt 字型行高約 14pt；保守一行 15pt
+      const ROW_H = 15;
       function dualRow(k1, v1, k2, v2) {
         ws.mergeCells(row, 1, row, 4);
         ws.mergeCells(row, 5, row, 10);
@@ -3437,7 +3443,7 @@
         kvCell(11, k2, true);
         kvCell(15, v2, false);
         const lines = Math.max(estimateLines(v1, 6), estimateLines(v2, 6));
-        ws.getRow(row).height = Math.max(18, lines * 16);
+        ws.getRow(row).height = Math.max(16, lines * ROW_H);
         row++;
       }
       function fullRow(k, v, opts = {}) {
@@ -3446,7 +3452,7 @@
         kvCell(1, k, true, { red: opts.keyRed });
         kvCell(5, v, false, { red: opts.valRed, bold: opts.valRed });
         const lines = estimateLines(v, 16);
-        ws.getRow(row).height = Math.max(opts.height || 18, lines * 16);
+        ws.getRow(row).height = Math.max(opts.height || 16, lines * ROW_H);
         row++;
       }
 
@@ -3538,27 +3544,85 @@
       const pc = ws.getCell(row, 1);
       pc.value = pointsText || '（請在左側填入訴求重點）';
       setStyle(pc, {
-        font: { name: FONT, size: 10, color: { argb: COLOR.text } },
+        font: { name: FONT, size: 9, color: { argb: COLOR.text } },
         alignment: { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true },
         border: borderAll,
       });
       const ptLines = (pointsText || '').split('\n').length || 1;
-      ws.getRow(row).height = Math.max(100, ptLines * 15);
+      ws.getRow(row).height = Math.max(48, ptLines * 14);  // 網頁 11px 訴求重點，對應 8-9pt + 緊行距
       row++;
 
+      row++; // 分隔
+
       // ============ 位置圖 / 地籍圖 / 格局圖 框（C2 再嵌圖，先留空位）============
-      groupTitle('附圖（位置圖 / 地籍圖 / 格局圖，下載後可手動貼入或等下版自動嵌入）');
+      groupTitle('附圖（位置圖 / 地籍圖 / 格局圖，下版自動嵌入，目前先留空）');
       ws.mergeCells(row, 1, row, 20);
       const placeholder = ws.getCell(row, 1);
-      placeholder.value = '　（此區下版本將自動嵌入位置圖、地籍圖、格局圖。目前先留空格供手動貼圖。）';
+      placeholder.value = '（此區下一版將自動嵌入位置圖、地籍圖、格局圖。）';
       setStyle(placeholder, {
         font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
         alignment: { horizontal: 'center', vertical: 'middle' },
         fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } },
         border: borderAll,
       });
-      ws.getRow(row).height = 180;
+      ws.getRow(row).height = 140;
       row++;
+
+      // ============ 嫌惡設施頁（決策 1a 自然 2 頁）============
+      // 在此插入分頁符（row break），讓嫌惡頁獨立到第 2 頁列印
+      const hazardInclude = document.getElementById('s-print-hazard')?.checked !== false;
+      const hasHazard = typeof _hazardResults !== 'undefined' && _hazardResults && _hazardResults.length > 0;
+      if (hazardInclude && hasHazard) {
+        // 強制分頁：在當前 row 之前加分頁符
+        ws.getRow(row).addPageBreak();
+        groupTitle('300m 內嫌惡設施查核');
+        for (const cat of _hazardResults) {
+          // 類別 sub-title
+          ws.mergeCells(row, 1, row, 20);
+          const tc = ws.getCell(row, 1);
+          tc.value = cat.label;
+          setStyle(tc, {
+            font: { name: FONT, size: 9, bold: true, color: { argb: COLOR.deepBrown } },
+            alignment: { horizontal: 'left', vertical: 'middle', indent: 1 },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale } },
+            border: borderAll,
+          });
+          ws.getRow(row).height = 15;
+          row++;
+          // 項目
+          for (const it of cat.items) {
+            ws.mergeCells(row, 1, row, 16);
+            ws.mergeCells(row, 17, row, 20);
+            const nc = ws.getCell(row, 1);
+            nc.value = `　${it.name}`;
+            setStyle(nc, {
+              font: { name: FONT, size: 9, color: { argb: COLOR.text } },
+              alignment: { horizontal: 'left', vertical: 'middle', indent: 1 },
+              border: borderAll,
+            });
+            const dc = ws.getCell(row, 17);
+            dc.value = `約 ${it.d} m`;
+            setStyle(dc, {
+              font: { name: FONT, size: 9, color: { argb: COLOR.gray } },
+              alignment: { horizontal: 'right', vertical: 'middle', indent: 1 },
+              border: borderAll,
+            });
+            ws.getRow(row).height = 14;
+            row++;
+          }
+        }
+        // 註腳
+        ws.mergeCells(row, 1, row, 20);
+        const noteCell = ws.getCell(row, 1);
+        noteCell.value = '本清單依 Google Maps 300 公尺內查詢結果；距離為直線距離；實地請現場查核。';
+        setStyle(noteCell, {
+          font: { name: FONT, size: 8, italic: true, color: { argb: COLOR.gray } },
+          alignment: { horizontal: 'center', vertical: 'middle' },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } },
+        });
+        ws.getRow(row).height = 16;
+        row++;
+      }
 
       // ============ 印刷範圍 ============
       ws.pageSetup.printArea = `A1:T${row - 1}`;
