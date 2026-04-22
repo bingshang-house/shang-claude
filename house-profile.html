@@ -3739,11 +3739,10 @@
         getPlanImgBytes().catch(() => null),
       ]);
 
-      groupTitle('位置圖　／　地籍圖（含邊長）');
-      const mapRowStart = row;
-      const MAP_ROWS = 11;
+      // 位置圖（全寬）— 整排讓地圖放大看清楚
+      groupTitle('位置圖');
+      const MAP_ROWS = 12;
       for (let i = 0; i < MAP_ROWS; i++) ws.getRow(row + i).height = 16;
-      // 底色佔位 + 邊框
       for (let rr = row; rr < row + MAP_ROWS; rr++) {
         for (let col = 1; col <= 20; col++) {
           const cc = ws.getCell(rr, col);
@@ -3753,10 +3752,9 @@
       }
       if (mapBytes) {
         const id = wb.addImage({ buffer: mapBytes, extension: 'jpeg' });
-        // ExcelJS addImage col/row 0-indexed
-        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 9.8, row: row - 1 + MAP_ROWS - 0.2 } });
+        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + MAP_ROWS - 0.2 } });
       } else {
-        ws.mergeCells(row, 1, row + MAP_ROWS - 1, 10);
+        ws.mergeCells(row, 1, row + MAP_ROWS - 1, 20);
         const c = ws.getCell(row, 1);
         c.value = '（未取得位置圖 — 需解析地址成功）';
         setStyle(c, {
@@ -3764,19 +3762,35 @@
           alignment: { horizontal: 'center', vertical: 'middle' },
         });
       }
+      row += MAP_ROWS;
+
+      row++; // 分隔
+
+      // 地籍圖（全寬 + 居中放大）— 地籍邊長小字需要全寬才看得清
+      groupTitle('地籍圖（含邊長）');
+      const CADA_ROWS = 16;   // 比位置圖更大，給邊長數字呼吸空間
+      for (let i = 0; i < CADA_ROWS; i++) ws.getRow(row + i).height = 16;
+      for (let rr = row; rr < row + CADA_ROWS; rr++) {
+        for (let col = 1; col <= 20; col++) {
+          const cc = ws.getCell(rr, col);
+          cc.border = borderAll;
+          if (!cc.fill) cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } };
+        }
+      }
       if (cadaBytes) {
         const id = wb.addImage({ buffer: cadaBytes, extension: 'png' });
-        ws.addImage(id, { tl: { col: 10.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + MAP_ROWS - 0.2 } });
+        // SVG 原 viewBox 4:3（1200x900），全寬 20 欄 ≈ 170mm，合適高度 127mm ≈ 16 列
+        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + CADA_ROWS - 0.2 } });
       } else {
-        ws.mergeCells(row, 11, row + MAP_ROWS - 1, 20);
-        const c = ws.getCell(row, 11);
+        ws.mergeCells(row, 1, row + CADA_ROWS - 1, 20);
+        const c = ws.getCell(row, 1);
         c.value = '（未取得地籍圖 — 需上傳土地謄本）';
         setStyle(c, {
           font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
           alignment: { horizontal: 'center', vertical: 'middle' },
         });
       }
-      row += MAP_ROWS;
+      row += CADA_ROWS;
 
       row++; // 分隔
 
