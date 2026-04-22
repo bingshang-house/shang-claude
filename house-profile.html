@@ -297,6 +297,8 @@
     .price-item { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 3px; }
     .p-label { font-size: 10px; color: #7A5500; font-weight: 600; }
     .p-value { font-size: 22px; font-weight: 800; color: #CC8F00; line-height: 1; display: inline-flex; align-items: baseline; gap: 3px; }
+    .p-value.price-hi { color: #dc2626; font-size: 26px; font-weight: 900; text-shadow: 0 1px 1px rgba(220,38,38,0.15); }
+    .p-value.price-hi .p-unit { color: #dc2626; font-weight: 700; }
     .p-value .p-unit { font-size: 11px; font-weight: 600; color: #888; }
     .p-sub { font-size: 10px; color: #A88200; font-weight: 500; }
     .price-divider { width: 1px; height: 38px; background: #E8E0CC; flex-shrink: 0; }
@@ -842,7 +844,7 @@
       <div class="price-bar">
         <div class="price-item">
           <div class="p-label" id="out-price-label">售價（含車位）</div>
-          <div class="p-value"><span id="out-price">－</span><span class="p-unit">萬元</span></div>
+          <div class="p-value price-hi"><span id="out-price">－</span><span class="p-unit">萬元</span></div>
         </div>
         <div class="price-divider"></div>
         <div class="price-item">
@@ -852,7 +854,7 @@
         <div class="price-divider"></div>
         <div class="price-item">
           <div class="p-label">單價（不含車位）</div>
-          <div class="p-value"><span id="out-unit">－</span><span class="p-unit">萬／坪</span></div>
+          <div class="p-value price-hi"><span id="out-unit">－</span><span class="p-unit">萬／坪</span></div>
         </div>
         <div class="price-divider"></div>
         <div class="price-item">
@@ -3403,18 +3405,25 @@
       row++;
 
       // values — 網頁 .p-value 22px ≈ 16pt
+      // 決策：售價（i=0）/ 單價（i=2）紅字 18pt 明顯突出；坪數維持金底白字
       for (let i = 0; i < 4; i++) {
         const s = i * 5 + 1;
         ws.mergeCells(row, s, row, s + 4);
         const c = ws.getCell(row, s);
         c.value = `${priceVals[i]} ${priceUnits[i]}`;
+        const isMoney = (i === 0 || i === 2);
         setStyle(c, {
-          font: { name: FONT, size: 16, bold: true, color: { argb: COLOR.white } },
+          font: {
+            name: FONT,
+            size: isMoney ? 18 : 16,
+            bold: true,
+            color: { argb: isMoney ? COLOR.red : COLOR.white },
+          },
           alignment: { horizontal: 'center', vertical: 'middle' },
-          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.darkGold } },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: isMoney ? COLOR.white : COLOR.darkGold } },
         });
       }
-      ws.getRow(row).height = 26;
+      ws.getRow(row).height = 30;
       row++;
 
       row++; // 分隔
