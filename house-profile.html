@@ -901,6 +901,10 @@
                 <td class="key">建　材</td><td class="val" id="td-mat">－</td>
                 <td class="key">格　局</td><td class="val" id="td-layout"><span class="pending">待補充</span></td>
               </tr>
+              <tr class="full-row" id="tr-restriction" style="display:none;">
+                <td class="key" style="color:#dc2626;">⚠ 限制登記</td>
+                <td class="val" colspan="3" id="td-restriction"></td>
+              </tr>
               <tr class="full-row" id="tr-viewing-notes" style="display:none;">
                 <td class="key" style="color:#dc2626;">⚠ 帶看注意</td>
                 <td class="val" colspan="3" id="td-viewing-notes" style="color:#dc2626;font-weight:700;white-space:pre-wrap;word-break:break-word;line-height:1.55;"></td>
@@ -2627,16 +2631,30 @@
       if (ageM[3]) d.completionDay = parseInt(ageM[3]);
     }
 
-    // 所有權登記日期（建物所有權部 裡的登記日期，不是標示部的第一次登記日）
+    // 所有權登記日期 + 限制登記（建物所有權部區段）
     {
-      // 放寬：允許「建物所有權部」中間夾空白；無則以「所有權人」位置向前回推
       let ownIdx = t.search(/建\s*物\s*所\s*有\s*權\s*部/);
       if (ownIdx < 0) ownIdx = t.search(/所\s*有\s*權\s*人/);
       if (ownIdx >= 0) {
         const ownEnd = t.search(/建\s*物\s*他\s*項\s*權\s*利\s*部/);
         const ownSec = t.slice(ownIdx, ownEnd > ownIdx ? ownEnd : undefined);
         const ownDateM = ownSec.match(/登\s*記\s*日\s*期\s*民\s*國\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/);
-        if (ownDateM) d.ownerRegDate = `民國 ${ownDateM[1]} 年 ${ownDateM[2]} 月 ${ownDateM[3]} 日`;
+        if (ownDateM) {
+          d.ownerRegDate = `民國 ${ownDateM[1]} 年 ${ownDateM[2]} 月 ${ownDateM[3]} 日`;
+          // raw epoch 給 updateCard 比較是否 <365 天
+          d.ownerRegDateEpoch = new Date(parseInt(ownDateM[1]) + 1911, parseInt(ownDateM[2]) - 1, parseInt(ownDateM[3])).getTime();
+        }
+        // 限制登記事項（預告登記、查封、假處分等）
+        // 典型格式：「（限制登記事項）依 XX 年 XX 月 XX 日新專字第 XXXX 號，預告登記請求權人：...」
+        // 範圍到下一個 section 結尾（+建物坐落 / 建物他項 / 查詢時間 / 土地他項 / 土地標示部）
+        const restRe = /[（(]\s*限\s*制\s*登\s*記[^）)]*[）)]([\s\S]+?)(?=\+建\s*物\s*坐|建\s*物\s*他\s*項|土\s*地\s*他\s*項|土\s*地\s*標\s*示|查\s*詢\s*時\s*間|$)/;
+        const restM = ownSec.match(restRe);
+        if (restM) {
+          // 清理：全形數字 → 半形、壓縮多空白、截 180 字
+          const full2half = s => s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+          const txt = full2half(restM[0]).replace(/\s+/g, '').slice(0, 180);
+          d.restriction = txt;
+        }
       }
     }
 
@@ -2725,15 +2743,36 @@
       }
     }
 
-    // 抵押
-    if (t.includes('最高限額抵押權')) {
-      d.hasMortgage = true;
-      const amtM = t.match(/擔保債權總金額\s+新台幣([\d,]+)元/);
-      if (amtM) d.mortgageAmt = parseInt(amtM[1].replace(/,/g, ''));
-      const bankM = t.match(/權利人\s+(.+?)(?:\s{2,}|\s*統一編號|\n|$)/);
-      if (bankM) d.mortgageBank = bankM[1].trim();
-    } else {
-      d.hasMortgage = false;
+    // 抵押（多筆：他項權利部可能有銀行 + 個人多筆抵押，全部加總）
+    // 五權街 20 號案例：聯邦銀行 1,920 萬 + 唐某 450 萬，原本 .match() 只抓第一筆漏掉第二筆
+    {
+      const mortList = [];
+      const tpIdx = t.search(/(建\s*物|土\s*地)\s*他\s*項\s*權\s*利\s*部/);
+      if (tpIdx >= 0) {
+        const tpSection = t.slice(tpIdx);
+        // 切塊：每個抵押權次序以「登記次序 XXXX-XXX」開頭
+        const blocks = tpSection.split(/登\s*記\s*次\s*序\s+\d+-\d+/);
+        // blocks[0] 是切塊前的 header，從 [1] 開始是每筆
+        for (let i = 1; i < blocks.length; i++) {
+          const blk = blocks[i];
+          if (!/抵\s*押\s*權/.test(blk)) continue;
+          const amtM = blk.match(/擔保債權總金額\s*新台幣\s*([\d,]+)\s*元/);
+          if (!amtM) continue;
+          const holderM = blk.match(/權利人\s+([^\s\n]+?)(?:\s*權利人統編|\s*統一編號|\s{2,}|\n)/);
+          mortList.push({
+            amt: parseInt(amtM[1].replace(/,/g, '')),
+            holder: holderM ? holderM[1].trim() : '',
+          });
+        }
+      }
+      if (mortList.length) {
+        d.hasMortgage = true;
+        d.mortgageList = mortList;
+        d.mortgageAmt = mortList.reduce((s, m) => s + m.amt, 0);  // 加總
+        d.mortgageBank = mortList[0].holder;  // 向後相容：首筆權利人
+      } else {
+        d.hasMortgage = false;
+      }
     }
 
     // 使用執照（只取字號，不含後續說明文字）
@@ -2895,7 +2934,25 @@
     setText('td-completion', d.completionRoc
       ? `民國 ${d.completionRoc} 年（屋齡 ${d.age}）`
       : d.age || '－');
-    setText('td-own-date', d.ownerRegDate || '－');
+    // 所有權登記日期 + 短期一年內紅字警示
+    if (d.ownerRegDate) {
+      if (d.ownerRegDateEpoch && (Date.now() - d.ownerRegDateEpoch) / 86400000 < 365) {
+        setHtml('td-own-date', `<span style="color:#dc2626;font-weight:700">${escH(d.ownerRegDate)}　⚠ 短期一年內物件</span>`);
+      } else {
+        setText('td-own-date', d.ownerRegDate);
+      }
+    } else {
+      setText('td-own-date', '－');
+    }
+    // 限制登記警示
+    const restrTr = document.getElementById('tr-restriction');
+    if (d.restriction) {
+      if (restrTr) restrTr.style.display = '';
+      setHtml('td-restriction', `<span style="color:#dc2626;font-weight:700;white-space:pre-wrap;word-break:break-word;line-height:1.5">${escH(d.restriction)}</span>`);
+    } else {
+      if (restrTr) restrTr.style.display = 'none';
+      setText('td-restriction', '');
+    }
     const landTotal = p2(getLandTotal());
     const landEntries = Object.values(_landData).filter(e => e.ping > 0);
     let landHtml = '－';
@@ -2976,9 +3033,25 @@
     setText('td-park',        parkDisplay);
     setText('td-park-status', parkStatus || (effHasPark ? '請補充停車位類型' : '－'));
     setText('td-moto',        moto || '－');
-    setText('td-mortgage', d.hasMortgage
-      ? `有（${[d.mortgageAmt ? Math.round(d.mortgageAmt/10000)+'萬' : '', shortBank(d.mortgageBank)].filter(Boolean).join('，')}）`
-      : '無');
+    // 抵押（多筆加總：銀行 + 個人借貸都納入）
+    if (d.hasMortgage && d.mortgageList && d.mortgageList.length) {
+      const total = Math.round(d.mortgageAmt / 10000);
+      const n = d.mortgageList.length;
+      if (n === 1) {
+        const m0 = d.mortgageList[0];
+        setText('td-mortgage', `有（${total} 萬，${shortBank(m0.holder) || m0.holder || '—'}）`);
+      } else {
+        // 多筆：列出每一筆簡要 + 加總
+        const detail = d.mortgageList.map(m => {
+          const mw = Math.round(m.amt / 10000);
+          const h = shortBank(m.holder) || m.holder || '—';
+          return `${h} ${mw} 萬`;
+        }).join('＋');
+        setHtml('td-mortgage', `<span style="color:#dc2626;font-weight:700">有 ${n} 筆　合計 ${total} 萬</span><br><span style="font-size:10px;color:#666">${escH(detail)}</span>`);
+      }
+    } else {
+      setText('td-mortgage', '無');
+    }
 
     // 重要備註補充
     const orientation = document.getElementById('s-orientation').value;
@@ -3513,6 +3586,10 @@
       dualRow('所有權登記', td('td-own-date'), '房屋座向', td('td-orientation'));
       dualRow('使用狀況', td('td-occupancy'), '主要用途', td('td-use'));
       dualRow('建材', td('td-mat'), '格局', td('td-layout'));
+
+      // 限制登記（有值才加，紅字）
+      const restr = td('td-restriction', '');
+      if (restr) fullRow('⚠ 限制登記', restr, { keyRed: true, valRed: true, height: 28 });
 
       // 帶看注意（只有有值才加）
       const vn = td('td-viewing-notes', '');
