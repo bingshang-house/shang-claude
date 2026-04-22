@@ -1840,8 +1840,24 @@
   function renderCadastralSvg(selfPolys, selfEntries, neighbors) {
     const polygons = selfPolys;
     if (!polygons || !polygons.length) return null;
-    const rings = polygons.filter(p => p && p.length >= 3);
-    if (!rings.length) return null;
+    const rawRings = polygons.filter(p => p && p.length >= 3);
+    if (!rawRings.length) return null;
+
+    // Douglas-Peucker 簡化（tolerance 1.5m）：去地籍測量的微折線鋸齒
+    // 大面積地（例如楠梓和平段五小段 0102 有 50+ 頂點）不簡化會每條微小邊都標長度，擠成紅字雲
+    const rings = rawRings.map(r => {
+      if (!window.turf || r.length < 8) return r;
+      try {
+        const ring = [...r];
+        const first = ring[0], last = ring[ring.length-1];
+        if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
+        const simplified = window.turf.simplify(
+          window.turf.polygon([ring]),
+          { tolerance: 1.5, highQuality: true, mutate: false }
+        );
+        return simplified.geometry.coordinates[0];
+      } catch { return r; }
+    });
 
     // bounding box — 只以自己的土地為準 + 固定擴張（決定周邊顯示範圍）
     // 超出這個 bbox 的 neighbor path 會被 SVG viewBox 自動裁切
@@ -1894,7 +1910,7 @@
         const a = r[i], b = r[(i+1) % r.length];
         if (a[0] === b[0] && a[1] === b[1]) continue;
         const dist = Math.hypot(b[0]-a[0], b[1]-a[1]);
-        if (dist < 1) continue;
+        if (dist < 3) continue;   // 短於 3m 的邊不標（避免鋸齒微小邊擠爆畫面）
         const mx = (a[0]+b[0])/2, my = (a[1]+b[1])/2;
         edges += `<text x="${tx(mx)}" y="${ty(my)}" text-anchor="middle" dominant-baseline="middle" fill="#B91C1C" stroke="#FFF8E0" style="${styleEdge}">${dist.toFixed(1)}m</text>`;
       }
