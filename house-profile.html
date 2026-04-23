@@ -3279,14 +3279,15 @@
       return m[2] && m[2] !== '0' ? `${parseInt(m[1])}-${parseInt(m[2])}` : `${parseInt(m[1])}`;
     };
     // 對 entries 套用 formatValue，若值全相同回單一字串、全空回 '－'、若有差異回 HTML 多行
-    const perLand = (entries, formatValue, emptyFallback = '－') => {
+    const perLand = (entries, formatValue, emptyFallback = '－', opts = {}) => {
       const rows = entries.map(e => ({ sn: shortNo(e.loNo), val: formatValue(e) }));
       const nonEmpty = rows.filter(r => r.val);
       if (!nonEmpty.length) return emptyFallback;
+      const escVal = v => opts.allowHtml ? v : escH(v);
       const uniqueVals = [...new Set(nonEmpty.map(r => r.val))];
-      if (uniqueVals.length === 1) return escH(uniqueVals[0]);
+      if (uniqueVals.length === 1) return escVal(uniqueVals[0]);
       return nonEmpty.map(r =>
-        `<div style="line-height:1.5;"><span style="color:#7A5500;font-weight:600;">${escH(r.sn)}</span>　${escH(r.val)}</div>`
+        `<div style="line-height:1.5;"><span style="color:#7A5500;font-weight:600;">${escH(r.sn)}</span>　${escVal(r.val)}</div>`
       ).join('');
     };
 
@@ -3323,16 +3324,16 @@
       if (rate >= 0.999) return '<span style="color:#b45309;">✓ 全部位於山坡地</span>';
       if (rate > 0)      return `<span style="color:#b45309;">⚠ 部分位於山坡地（${(rate*100).toFixed(0)}%）</span>`;
       return '否';
-    }));
+    }, '－', { allowHtml: true }));
     setHtml('td-swc-area', perLand(landEntries, e => {
       if (!e.swc) return '';
       return e.swc.inSwc ? '<span style="color:#dc2626;font-weight:700;">⚠ 是</span>' : '否';
-    }));
+    }, '－', { allowHtml: true }));
     setHtml('td-swc-violation', perLand(landEntries, e => {
       if (!e.swc || !e.swc.violationChecked) return '';
       if (e.swc.isViolation) return '<span style="color:#dc2626;font-weight:700;">⚠ 是</span>';
       return '否';
-    }));
+    }, '－', { allowHtml: true }));
     // 更新左側總坪數標示
     const totalLbl = document.getElementById('land-total-label');
     if (totalLbl) totalLbl.textContent = landTotal ? `土地持分合計：${landTotal} 坪` : '';
