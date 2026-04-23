@@ -17,6 +17,13 @@
 - 可向賞哥提問，取得需要的資訊
 - 以白話文、比喻方式引導，減少技術術語
 
+## Git commit + push 節奏（house-profile.html 專用）
+- **改完就 commit + push，不留本地等驗收**。賞哥實際工作流是**在 GitHub Pages 線上版驗收**（右側 A4 預覽、下載 Excel 都跑線上），留本地 = 他刷不到新版 = 白工
+- 單一功能/bug 修/UI 調 → 直接一個 commit + push
+- 多項改動同 session → 可分多 commit 也可合一（看連貫度），但**每輪結束前一定要 push**
+- commit 訊息：繁中項目式 + 結尾 `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`
+- 例外仍先問：force push main、砍 commit、改 history、刪檔案目錄
+
 ## 時間
 - 永遠使用台北時間（Asia/Taipei, UTC+8）
 - 涉及日期計算、時間戳記、檔案命名前，先執行 `date` 確認系統時間
