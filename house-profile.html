@@ -957,9 +957,12 @@
                 <td class="key">國土功能分區</td><td class="val" id="td-fud">－</td>
                 <td class="key">臨路面寬×深度</td><td class="val" id="td-land-dim">－</td>
               </tr>
-              <tr id="tr-swc-core">
+              <tr>
                 <td class="key">山坡地判定</td><td class="val" id="td-swc-hill">－</td>
-                <td class="key">近 3 年違規</td><td class="val" id="td-swc-violation">－</td>
+                <td class="key">特定水保區</td><td class="val" id="td-swc-area">－</td>
+              </tr>
+              <tr>
+                <td class="key">近 3 年違規</td><td class="val" colspan="3" id="td-swc-violation">－</td>
               </tr>
 
               <tr class="group-title"><td colspan="4">建物坪數</td></tr>
@@ -2532,12 +2535,11 @@
     page.classList.add('has-hits');
     const results = await queryEnvRisks(cx, cy);
     _landData[idx].envRisks = results;
-    // SWC 的 3 項（已由 queryZoning 存入 _landData[idx].swc）轉成 hit 格式合併
+    // SWC 的進階項目（特定水保區已在主資料區顯示，這裡只列進階）
     const swc = _landData[idx].swc || {};
     const swcHits = [];
-    if (swc.inSwc)   swcHits.push({ name: '特定水土保持區',    level: 'red',    info: '開發受限' });
-    if (swc.inKh)    swcHits.push({ name: '高雄大規模崩塌區',  level: 'red',    info: '水利局列管' });
-    if (swc.inSlide) swcHits.push({ name: '大規模崩塌影響範圍', level: 'red',    info: '水利局列管' });
+    if (swc.inKh)    swcHits.push({ name: '高雄大規模崩塌區',  level: 'red', info: '水利局列管' });
+    if (swc.inSlide) swcHits.push({ name: '大規模崩塌影響範圍', level: 'red', info: '水利局列管' });
     const kcgHits = results.filter(r => r.hit);
     const hits = [...kcgHits, ...swcHits];
     if (!hits.length) {
@@ -3314,13 +3316,17 @@
     // 國土功能分區（gisdawh 提供，都市/非都市通吃）
     const fudFirst = landEntries.find(e => e.fud);
     setText('td-fud', fudFirst?.fud || '－');
-    // 山坡地判定 + 違規案件（SWC 水利局）
+    // SWC 水利局：山坡地 / 特定水保區 / 近 3 年違規（3 件事一組，有查到就全顯示）
     setHtml('td-swc-hill', perLand(landEntries, e => {
       if (!e.swc || e.swc.hillRate === null) return '';
       const rate = e.swc.hillRate;
       if (rate >= 0.999) return '<span style="color:#b45309;">✓ 全部位於山坡地</span>';
       if (rate > 0)      return `<span style="color:#b45309;">⚠ 部分位於山坡地（${(rate*100).toFixed(0)}%）</span>`;
       return '否';
+    }));
+    setHtml('td-swc-area', perLand(landEntries, e => {
+      if (!e.swc) return '';
+      return e.swc.inSwc ? '<span style="color:#dc2626;font-weight:700;">⚠ 是</span>' : '否';
     }));
     setHtml('td-swc-violation', perLand(landEntries, e => {
       if (!e.swc || !e.swc.violationChecked) return '';
@@ -3977,7 +3983,8 @@
       const landUseText = td('td-land-use', '');
       if (landUseText) fullRow('使用地類別', landUseText);
       dualRow('國土功能分區', td('td-fud'), '臨路面寬×深度', td('td-land-dim'));
-      dualRow('山坡地判定', td('td-swc-hill'), '近 3 年違規', td('td-swc-violation'));
+      dualRow('山坡地判定', td('td-swc-hill'), '特定水保區', td('td-swc-area'));
+      fullRow('近 3 年違規', td('td-swc-violation'));
 
       groupTitle('建物坪數');
       dualRow('主建物面積', td('td-main-area'), '附屬建物', td('td-attached'));
@@ -5125,6 +5132,7 @@
         細部計畫: (Object.values(_landData).map(e => e.detailPlan).filter(Boolean).join('、')) || '',
         國土功能分區: (Object.values(_landData).map(e => e.fud).filter(Boolean).join('、')) || '',
         山坡地判定: td('td-swc-hill'),
+        特定水保區: td('td-swc-area'),
         近三年違規: td('td-swc-violation'),
         建蔽容積: td('td-bcr-far'),
         主要用途: d.usage || '',
