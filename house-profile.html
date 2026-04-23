@@ -936,6 +936,9 @@
                 <td class="key">都市計畫</td><td class="val" id="td-urban-plan">－</td>
                 <td class="key">細部計畫</td><td class="val" id="td-detail-plan">－</td>
               </tr>
+              <tr id="tr-land-use" style="display:none;">
+                <td class="key">使用地類別</td><td class="val" colspan="3" id="td-land-use">－</td>
+              </tr>
               <tr id="tr-fud" style="display:none;">
                 <td class="key">國土功能分區</td><td class="val" colspan="3" id="td-fud">－</td>
               </tr>
@@ -3129,7 +3132,17 @@
       ).join('');
     };
 
-    setHtml('td-zone', perLand(landEntries, e => e.zone || ''));
+    // 使用分區：非都市案優先顯示 gisdawh AA11（鄉村區/森林區/一般農業區…），比 KcgTB 的「都市計畫外」具體
+    setHtml('td-zone', perLand(landEntries, e => e.nonUrbanZone || e.zone || ''));
+    // 使用地類別（AA12，非都市才有：乙種建築用地/林業用地/農牧用地…）
+    const useFirst = landEntries.find(e => e.nonUrbanUse);
+    const trLandUse = document.getElementById('tr-land-use');
+    if (useFirst?.nonUrbanUse) {
+      setHtml('td-land-use', perLand(landEntries, e => e.nonUrbanUse || ''));
+      if (trLandUse) trLandUse.style.display = '';
+    } else {
+      if (trLandUse) trLandUse.style.display = 'none';
+    }
     setHtml('td-pub-val', perLand(landEntries, e => {
       if (!e.pubVal && !e.pubPrice) return '';
       return `現值 ${(e.pubVal||0).toLocaleString()} 元/m²　地價 ${(e.pubPrice||0).toLocaleString()} 元/m²`;
@@ -3798,6 +3811,8 @@
       }
       dualRow('公告現值', td('td-pub-val'), '建蔽容積', td('td-bcr-far'));
       dualRow('都市計畫', td('td-urban-plan'), '細部計畫', td('td-detail-plan'));
+      const landUseText = td('td-land-use', '');
+      if (landUseText) fullRow('使用地類別', landUseText);
       const fudText = td('td-fud', '');
       if (fudText) fullRow('國土功能分區', fudText);
       fullRow('臨路面寬×深度', td('td-land-dim'));
@@ -4942,7 +4957,8 @@
         屋齡: d.age || '',
         建築完成: td('td-completion'),
         座向: val('s-orientation'),
-        使用分區: (Object.values(_landData).map(e => e.zone).filter(Boolean).join('、')) || '',
+        使用分區: (Object.values(_landData).map(e => e.nonUrbanZone || e.zone).filter(Boolean).join('、')) || '',
+        使用地類別: (Object.values(_landData).map(e => e.nonUrbanUse).filter(Boolean).join('、')) || '',
         都市計畫: td('td-urban-plan'),
         細部計畫: (Object.values(_landData).map(e => e.detailPlan).filter(Boolean).join('、')) || '',
         國土功能分區: (Object.values(_landData).map(e => e.fud).filter(Boolean).join('、')) || '',
