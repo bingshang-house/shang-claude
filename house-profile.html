@@ -2520,13 +2520,51 @@
   }
 
   // ===== 環境風險圖層查詢（KCG NonUrban MapServer） =====
-  // 3a 試水溫：只打 3 個紅燈 layer（土壤液化、百年淹水、活動斷層）
+  // 紅燈 11 + 黃燈 13 + 綠燈 2 = 26 個 layer 並行查詢（memory reference_kcg_nonurban.md）
   const NONURBAN_MS = `${PROXY_BASE}/Urban/NonUrban/MapServer`;
   const ENV_RISK_LAYERS = [
-    { id: 44, name: '土壤液化潛勢',       level: 'red', outFields: 'LEVEL',      fmt: a => a.LEVEL ? `潛勢：${a.LEVEL}` : '' },
-    { id: 78, name: '100 年重現期淹水潛勢', level: 'red', outFields: 'DEPTH',      fmt: a => a.DEPTH ? `水深：${a.DEPTH}` : '' },
-    { id: 6,  name: '活動斷層',           level: 'red', outFields: 'NAME,REMARK', fmt: a => `${a.NAME || ''} ${a.REMARK || ''}`.trim() },
+    // 🔴 紅燈（賣方揭露義務 / 安全風險）
+    { id: 6,  name: '活動斷層',             level: 'red',    outFields: 'NAME,REMARK' },
+    { id: 24, name: '斷層地質敏感區',       level: 'red',    outFields: 'NAME' },
+    { id: 25, name: '山崩與地滑地質敏感區', level: 'red',    outFields: 'LEVEL' },
+    { id: 28, name: '土石流潛勢溪流',       level: 'red',    outFields: 'NAME,LEVEL' },
+    { id: 44, name: '土壤液化潛勢',         level: 'red',    outFields: 'LEVEL' },
+    { id: 46, name: '土石流影響範圍',       level: 'red',    outFields: 'NAME' },
+    { id: 48, name: '崩塌地',               level: 'red',    outFields: 'YEAR' },
+    { id: 74, name: '潛在大規模崩塌',       level: 'red',    outFields: 'NAME' },
+    { id: 75, name: '歷史坡地災害位置',     level: 'red',    outFields: 'DATE,TYPE' },
+    { id: 78, name: '100 年重現期淹水潛勢', level: 'red',    outFields: 'DEPTH' },
+    { id: 86, name: '歷史淹水災害位置',     level: 'red',    outFields: 'DATE' },
+    // 🟡 黃燈（影響使用 / 貸款 / 建築）
+    { id: 3,  name: '特定水土保持區',       level: 'yellow', outFields: '*' },
+    { id: 7,  name: '國家公園管制區',       level: 'yellow', outFields: '*' },
+    { id: 14, name: '文化資產',             level: 'yellow', outFields: '*' },
+    { id: 15, name: '飲用水水源保護區',     level: 'yellow', outFields: '*' },
+    { id: 16, name: '重要水庫集水區',       level: 'yellow', outFields: '*' },
+    { id: 19, name: '保安林地',             level: 'yellow', outFields: '*' },
+    { id: 27, name: '山坡地範圍',           level: 'yellow', outFields: '*' },
+    { id: 36, name: '航空法禁限建/高度管制', level: 'yellow', outFields: '*' },
+    { id: 39, name: '公路兩側禁限建範圍',   level: 'yellow', outFields: '*' },
+    { id: 40, name: '捷運兩側禁限建範圍',   level: 'yellow', outFields: '*' },
+    { id: 41, name: '輕軌禁限建範圍',       level: 'yellow', outFields: '*' },
+    { id: 42, name: '高鐵兩側禁限建範圍',   level: 'yellow', outFields: '*' },
+    { id: 43, name: '軍事用地',             level: 'yellow', outFields: '*' },
+    // 🟢 綠燈（中性資訊）
+    { id: 32, name: '優良農地',             level: 'green',  outFields: '*' },
+    { id: 56, name: '海岸管理範圍',         level: 'green',  outFields: '*' },
   ];
+  function fmtRiskAttr(attrs) {
+    if (!attrs) return '';
+    const lv = attrs.LEVEL || attrs.Level;
+    if (lv) return `潛勢：${lv}`;
+    const nm = attrs.NAME || attrs.Name || attrs.DESC || attrs.DESC_SHORT;
+    const rk = attrs.REMARK || attrs.Remark;
+    if (nm) return rk ? `${nm}（${rk}）` : String(nm);
+    if (attrs.DEPTH) return `水深：${attrs.DEPTH}`;
+    if (attrs.DATE)  return `日期：${attrs.DATE}`;
+    if (attrs.YEAR)  return `年份：${attrs.YEAR}`;
+    return '';
+  }
   async function queryLayerPoint(layerId, cx, cy, outFields, timeoutMs = 2500) {
     const q = new URLSearchParams({
       f: 'json',
@@ -2549,17 +2587,24 @@
   }
   async function queryEnvRisks(cx, cy) {
     if (!cx || !cy) return [];
-    const results = await Promise.all(ENV_RISK_LAYERS.map(async layer => {
-      const d = await queryLayerPoint(layer.id, cx, cy, layer.outFields);
-      const hit = d?.features?.length > 0;
-      return {
-        layerId: layer.id,
-        name: layer.name,
-        level: layer.level,
-        hit,
-        info: hit ? layer.fmt(d.features[0].attributes) : '',
-      };
-    }));
+    // batch 8 個一組打 Worker，避免 Cloudflare 同時太多 subrequest
+    const BATCH = 8;
+    const results = [];
+    for (let i = 0; i < ENV_RISK_LAYERS.length; i += BATCH) {
+      const group = ENV_RISK_LAYERS.slice(i, i + BATCH);
+      const batchResults = await Promise.all(group.map(async layer => {
+        const d = await queryLayerPoint(layer.id, cx, cy, layer.outFields);
+        const hit = d?.features?.length > 0;
+        return {
+          layerId: layer.id,
+          name: layer.name,
+          level: layer.level,
+          hit,
+          info: hit ? fmtRiskAttr(d.features[0].attributes) : '',
+        };
+      }));
+      results.push(...batchResults);
+    }
     return results;
   }
   function toggleEnvRiskPrint() {
@@ -2583,7 +2628,11 @@
     if (swc.inKh)    swcHits.push({ name: '高雄大規模崩塌區',  level: 'red', info: '水利局列管' });
     if (swc.inSlide) swcHits.push({ name: '大規模崩塌影響範圍', level: 'red', info: '水利局列管' });
     const kcgHits = results.filter(r => r.hit);
-    const hits = [...kcgHits, ...swcHits];
+    // 排序：紅 → 黃 → 綠，重要的放最上面
+    const levelOrder = { red: 0, yellow: 1, green: 2 };
+    const hits = [...kcgHits, ...swcHits].sort((a, b) =>
+      (levelOrder[a.level] ?? 99) - (levelOrder[b.level] ?? 99)
+    );
     if (!hits.length) {
       body.innerHTML = '';
       page.classList.remove('has-hits');
