@@ -2447,9 +2447,10 @@
   // API：api.nlsc.gov.tw/other/GetLandSecInfoNlsc/{county}/{sect4}
   // 回 XML：svType=5 地籍圖重測 / 9 農地重劃 / B 區段徵收 / F 農村社區重劃 ...
   const NLSC_SURVEY_TYPE = {
-    '5': '地籍圖重測', '6': '工業區整理', '7': '河川浮覆地', '8': '海岸土地測量',
-    '9': '農地重劃',   'A': '國有原野地', 'B': '區段徵收',   'C': '國有林班地',
-    'D': '解除林班地', 'E': '海埔新生地', 'F': '農村社區重劃', 'Z': '其他'
+    '1': '日據時代地籍圖', '2': '市地重劃',      '3': '原住民保留地', '4': '修正測量',
+    '5': '地籍圖重測',     '6': '工業區整理',    '7': '河川浮覆地',   '8': '海岸土地測量',
+    '9': '農地重劃',       'A': '國有原野地',    'B': '區段徵收',     'C': '國有林班地',
+    'D': '解除林班地',     'E': '海埔新生地',    'F': '農村社區重劃', 'Z': '其他'
   };
   async function queryLandSurveyInfo(distName, sectName) {
     const map = await getSectCodeMap();
@@ -2469,12 +2470,14 @@
         };
         const svType = get('svType');
         const mYear = get('mYear'), mMonth = get('mMonth');
+        // mYear=1900 是 NLSC 的占位值（表示無真實成圖年月，常見於日據時期地籍）
+        const hasRealDate = mYear && mMonth && mYear !== '1900';
         return {
           svTypeCode: svType,
           svTypeText: NLSC_SURVEY_TYPE[svType] || '',
           mapYear: mYear,
           mapMonth: mMonth,
-          mapDate: (mYear && mMonth) ? `${mYear}-${String(mMonth).padStart(2,'0')}` : '',
+          mapDate: hasRealDate ? `${mYear}-${String(mMonth).padStart(2,'0')}` : '',
         };
       } catch (e) { /* retry */ }
     }
@@ -3388,8 +3391,8 @@
     // 測量類別 / 成圖年月（NLSC，地籍屬性屬該段共同）
     setHtml('td-survey-type', perLand(landEntries, e => {
       if (!e.survey || !e.survey.svTypeText) return '';
-      // 地籍圖重測藍色、農地重劃/區段徵收等橘字標註
-      const notable = ['9','B','E','F'].includes(e.survey.svTypeCode);
+      // 值得揭露的類別橘字警示：市地重劃/農地重劃/區段徵收/海埔新生地/農村社區重劃
+      const notable = ['2','9','B','E','F'].includes(e.survey.svTypeCode);
       if (notable) return `<span style="color:#b45309;font-weight:700;">⚠ ${e.survey.svTypeText}</span>`;
       return e.survey.svTypeText;
     }, '－', { allowHtml: true }));
@@ -3423,8 +3426,8 @@
       if (!e.swc || e.swc.hillRate === null) return '';
       const rate = e.swc.hillRate;
       if (rate >= 0.999) return '<span style="color:#b45309;">✓ 全部位於山坡地</span>';
-      if (rate > 0)      return `<span style="color:#b45309;">⚠ 部分位於山坡地（${(rate*100).toFixed(0)}%）</span>`;
-      return '否';
+      if (rate >= 0.01)  return `<span style="color:#b45309;">⚠ 部分位於山坡地（${(rate*100).toFixed(0)}%）</span>`;
+      return '否'; // < 1% 視為測量誤差
     }, '－', { allowHtml: true }));
     setHtml('td-swc-area', perLand(landEntries, e => {
       if (!e.swc) return '';
