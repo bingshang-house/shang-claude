@@ -936,6 +936,9 @@
                 <td class="key">都市計畫</td><td class="val" id="td-urban-plan">－</td>
                 <td class="key">細部計畫</td><td class="val" id="td-detail-plan">－</td>
               </tr>
+              <tr id="tr-fud" style="display:none;">
+                <td class="key">國土功能分區</td><td class="val" colspan="3" id="td-fud">－</td>
+              </tr>
               <tr class="full-row">
                 <td class="key">臨路面寬×深度</td><td class="val" colspan="3" id="td-land-dim">－</td>
               </tr>
@@ -2353,6 +2356,60 @@
     }
   });
 
+  // ===== gisdawh enricher：補 國土功能分區 FUD + 非都市案公告現值/地價 =====
+  // 一個 call 回 4 件事（AA16 現值 / AA17 地價 / FUD / CX+CY 幾何中心）
+  const GISDAWH_TOKEN = '97A61AC4432B41AA7445CBCCFD8F9DD3268EB473949E0B11D39E1BAC1DFDEF7E87B3F27DD88753F166A01F9A574B93CA';
+  let _sectCodeMap = null; // lazy
+  async function getSectCodeMap() {
+    if (_sectCodeMap) return _sectCodeMap;
+    try {
+      const r = await fetch('./sect-code-gisdawh.json', { cache: 'force-cache' });
+      const j = await r.json();
+      _sectCodeMap = j.nameToCode || {};
+    } catch (e) {
+      console.warn('sect-code-gisdawh.json 載入失敗', e);
+      _sectCodeMap = {};
+    }
+    return _sectCodeMap;
+  }
+  async function queryGisdawhByLand(distName, sectName, landNo) {
+    const map = await getSectCodeMap();
+    const code = map[`${distName}-${sectName}`];
+    if (!code) return null; // 外縣市 / 查無對照
+    const parts = String(landNo).split('-');
+    const main = parts[0].padStart(4, '0');
+    const sub  = (parts[1] || '0').padStart(4, '0');
+    const aa49 = main + sub;
+    const apiUrl = `https://gisdawh.kcg.gov.tw/landeasy/cfm/api.cfm?ACTION=getfud_land&TOKEN=${GISDAWH_TOKEN}&AA48=${code}&AA49=${aa49}`;
+    const target = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
+    const delays = [0, 600, 1400];
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
+      try {
+        const r = await fetch(target);
+        if (!r.ok) continue; // 522 / 5xx retry
+        const text = await r.text();
+        const m = text.match(/\{[\s\S]*\}/);
+        if (!m) continue;
+        const json = JSON.parse(m[0]);
+        if (json.Status === 'OK' && json.Data && json.Data[0]) {
+          const d = json.Data[0];
+          return {
+            fud: (d.FUD || '').trim(),
+            pubVal: parseInt(d.AA16, 10) || 0,
+            pubPrice: parseInt(d.AA17, 10) || 0,
+            aa11: d.AA11 === 'NA' ? '' : (d.AA11 || ''),
+            aa12: d.AA12 === 'NA' ? '' : (d.AA12 || ''),
+            cx: Number(d.CX) || null,
+            cy: Number(d.CY) || null,
+          };
+        }
+        if (json.Status === 'OK') return null; // 查無地號，不 retry
+      } catch (e) { /* retry */ }
+    }
+    return null;
+  }
+
   async function queryZoning(idx) {
     const data = _landData[idx];
     if (!data?.loNo) return;
@@ -2456,6 +2513,18 @@
 
       // NLSC 地籍圖 sectcode（讓地號可點擊開地籍圖）
       _landData[idx].nlscSect = await fetchNlscSect(data.distName, sectName);
+
+      // gisdawh enricher：補 FUD；非都市案 LFB002_LAND 沒值時也補現值/地價
+      try {
+        const enrich = await queryGisdawhByLand(data.distName, sectName, landNo);
+        if (enrich) {
+          _landData[idx].fud = enrich.fud;
+          if (!_landData[idx].pubVal   && enrich.pubVal)   _landData[idx].pubVal   = enrich.pubVal;
+          if (!_landData[idx].pubPrice && enrich.pubPrice) _landData[idx].pubPrice = enrich.pubPrice;
+          if (enrich.aa11) _landData[idx].nonUrbanZone = enrich.aa11;
+          if (enrich.aa12) _landData[idx].nonUrbanUse  = enrich.aa12;
+        }
+      } catch (e) { console.warn('gisdawh enricher failed', e); }
 
       let msg = `✓ ${zoneName}`;
       if (pubVal)   msg += `　現值 ${pubVal.toLocaleString()} 元/m²`;
@@ -3073,6 +3142,15 @@
     const firstPlan = landEntries.find(e => e.urbanPlan || e.detailPlan);
     setText('td-urban-plan', firstPlan?.urbanPlan || '－');
     setText('td-detail-plan', firstPlan?.detailPlan || '－');
+    // 國土功能分區（gisdawh 提供，都市/非都市通吃；沒值整排隱藏）
+    const fudFirst = landEntries.find(e => e.fud);
+    const trFud = document.getElementById('tr-fud');
+    if (fudFirst?.fud) {
+      setText('td-fud', fudFirst.fud);
+      if (trFud) trFud.style.display = '';
+    } else {
+      if (trFud) trFud.style.display = 'none';
+    }
     // 更新左側總坪數標示
     const totalLbl = document.getElementById('land-total-label');
     if (totalLbl) totalLbl.textContent = landTotal ? `土地持分合計：${landTotal} 坪` : '';
@@ -3720,6 +3798,8 @@
       }
       dualRow('公告現值', td('td-pub-val'), '建蔽容積', td('td-bcr-far'));
       dualRow('都市計畫', td('td-urban-plan'), '細部計畫', td('td-detail-plan'));
+      const fudText = td('td-fud', '');
+      if (fudText) fullRow('國土功能分區', fudText);
       fullRow('臨路面寬×深度', td('td-land-dim'));
 
       groupTitle('建物坪數');
@@ -4865,6 +4945,7 @@
         使用分區: (Object.values(_landData).map(e => e.zone).filter(Boolean).join('、')) || '',
         都市計畫: td('td-urban-plan'),
         細部計畫: (Object.values(_landData).map(e => e.detailPlan).filter(Boolean).join('、')) || '',
+        國土功能分區: (Object.values(_landData).map(e => e.fud).filter(Boolean).join('、')) || '',
         建蔽容積: td('td-bcr-far'),
         主要用途: d.usage || '',
         建材: td('td-mat'),
