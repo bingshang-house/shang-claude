@@ -505,6 +505,19 @@
     @media print {
       .hazard-page.show { page-break-before: always; display: block !important; }
     }
+
+    /* 環境注意（A4 最底部，螢幕命中即顯示，列印預設隱藏，勾 checkbox 才列印） */
+    .env-risk-page { display: none; margin: 10px 0 0; border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; background: #fff; }
+    .env-risk-page.has-hits { display: block; }
+    .env-risk-header { background: #A87500; color: #fff; padding: 7px 14px; font-size: 13px; font-weight: 700; letter-spacing: 1px; }
+    .env-risk-body { padding: 8px 14px; }
+    .env-risk-item { padding: 3px 4px; font-size: 11.5px; color: #333; line-height: 1.6; }
+    .env-risk-item .d { color: #666; font-size: 11px; }
+    .env-risk-note { font-size: 10px; color: #888; padding: 6px 14px 8px; border-top: 1px dashed #E8E0CC; background: #FFFBF0; }
+    @media print {
+      .env-risk-page.has-hits { display: none; }
+      .env-risk-page.has-hits.print-include { display: block !important; }
+    }
   </style>
 </head>
 <body>
@@ -515,6 +528,7 @@
   <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載永慶制式 CASE STUDY Excel">📊 下載 Excel</button>
   <button class="btn btn-a4-xlsx" onclick="downloadA4Xlsx()" id="btnA4Xlsx" title="下載 A4 銷售資料表 Excel（即右側預覽版面）">📄 下載 A4 銷售表 Excel</button>
   <label class="hazard-toggle" title="勾選時列印會包含 300m 內嫌惡設施清單（自動分頁）"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含嫌惡設施</label>
+  <label class="hazard-toggle" title="勾選時列印會包含 A4 底部「環境注意」清單（土壤液化、淹水、斷層等風險圖層）"><input type="checkbox" id="s-print-env-risks" oninput="toggleEnvRiskPrint()">列印含環境注意</label>
   <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
   <button class="btn btn-reset" onclick="resetAll()">重置</button>
 </div>
@@ -1085,6 +1099,13 @@
             </div>
           </div>
         </div>
+
+        <!-- 環境注意（NonUrban MapServer 查風險圖層；螢幕命中即顯示，列印預設不勾需手動開） -->
+        <section class="env-risk-page" id="out-env-risk-page">
+          <div class="env-risk-header">📍 環境注意</div>
+          <div class="env-risk-body" id="env-risk-body"></div>
+          <div class="env-risk-note">查詢自高雄市政府 ArcGIS 公開圖層；僅供揭露參考，實際應以主管機關認定為準。</div>
+        </section>
 
         <!-- 嫌惡設施查核（列印自動分第 2 頁；未勾選「列印含嫌惡設施」時整塊隱藏） -->
         <section class="hazard-page" id="out-hazard-page">
@@ -2413,6 +2434,79 @@
     return null;
   }
 
+  // ===== 環境風險圖層查詢（KCG NonUrban MapServer） =====
+  // 3a 試水溫：只打 3 個紅燈 layer（土壤液化、百年淹水、活動斷層）
+  const NONURBAN_MS = `${PROXY_BASE}/Urban/NonUrban/MapServer`;
+  const ENV_RISK_LAYERS = [
+    { id: 44, name: '土壤液化潛勢',       level: 'red', outFields: 'LEVEL',      fmt: a => a.LEVEL ? `潛勢：${a.LEVEL}` : '' },
+    { id: 78, name: '100 年重現期淹水潛勢', level: 'red', outFields: 'DEPTH',      fmt: a => a.DEPTH ? `水深：${a.DEPTH}` : '' },
+    { id: 6,  name: '活動斷層',           level: 'red', outFields: 'NAME,REMARK', fmt: a => `${a.NAME || ''} ${a.REMARK || ''}`.trim() },
+  ];
+  async function queryLayerPoint(layerId, cx, cy, outFields, timeoutMs = 2500) {
+    const q = new URLSearchParams({
+      f: 'json',
+      geometry: JSON.stringify({ x: cx, y: cy, spatialReference: { wkid: 3826 } }),
+      geometryType: 'esriGeometryPoint',
+      inSR: '3826',
+      spatialRel: 'esriSpatialRelIntersects',
+      outFields: outFields || '*',
+      returnGeometry: 'false',
+    });
+    const target = `${NONURBAN_MS}/${layerId}/query?${q}`;
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch(`${URBAN_PROXY}/?url=${encodeURIComponent(target)}`, { signal: controller.signal });
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (e) { return null; }
+    finally { clearTimeout(t); }
+  }
+  async function queryEnvRisks(cx, cy) {
+    if (!cx || !cy) return [];
+    const results = await Promise.all(ENV_RISK_LAYERS.map(async layer => {
+      const d = await queryLayerPoint(layer.id, cx, cy, layer.outFields);
+      const hit = d?.features?.length > 0;
+      return {
+        layerId: layer.id,
+        name: layer.name,
+        level: layer.level,
+        hit,
+        info: hit ? layer.fmt(d.features[0].attributes) : '',
+      };
+    }));
+    return results;
+  }
+  function toggleEnvRiskPrint() {
+    const chk = document.getElementById('s-print-env-risks');
+    const page = document.getElementById('out-env-risk-page');
+    if (!page || !chk) return;
+    if (chk.checked) page.classList.add('print-include');
+    else page.classList.remove('print-include');
+  }
+  async function renderEnvRisksA4(idx, cx, cy) {
+    const page = document.getElementById('out-env-risk-page');
+    const body = document.getElementById('env-risk-body');
+    if (!page || !body) return;
+    body.innerHTML = '<div style="color:#888;font-size:11px;">⏳ 環境風險查詢中…</div>';
+    page.classList.add('has-hits'); // 暫先顯示 loading
+    const results = await queryEnvRisks(cx, cy);
+    _landData[idx].envRisks = results;
+    const hits = results.filter(r => r.hit);
+    if (!hits.length) {
+      body.innerHTML = '';
+      page.classList.remove('has-hits');
+      page.classList.remove('print-include');
+      return;
+    }
+    const icon = lvl => lvl === 'red' ? '🔴' : lvl === 'yellow' ? '🟡' : '🟢';
+    body.innerHTML = hits.map(r =>
+      `<div class="env-risk-item">${icon(r.level)} <b>${r.name}</b>${r.info ? `　<span class="d">${r.info}</span>` : ''}</div>`
+    ).join('');
+    page.classList.add('has-hits');
+    toggleEnvRiskPrint(); // 套 print-include 狀態
+  }
+
   async function queryZoning(idx) {
     const data = _landData[idx];
     if (!data?.loNo) return;
@@ -2526,6 +2620,11 @@
           if (!_landData[idx].pubPrice && enrich.pubPrice) _landData[idx].pubPrice = enrich.pubPrice;
           if (enrich.aa11) _landData[idx].nonUrbanZone = enrich.aa11;
           if (enrich.aa12) _landData[idx].nonUrbanUse  = enrich.aa12;
+          // CX/CY 存起來給環境風險查詢用（TWD97 TM2, EPSG:3826）
+          if (enrich.cx && enrich.cy) {
+            _landData[idx].cx = enrich.cx;
+            _landData[idx].cy = enrich.cy;
+          }
         }
       } catch (e) { console.warn('gisdawh enricher failed', e); }
 
@@ -2535,6 +2634,12 @@
       el.textContent = msg;
       el.style.color = '#1d4ed8';
       updateCard();
+      // 環境風險查詢（非阻塞；只對第 1 筆有 cx/cy 的地做，避免多筆重複打）
+      const rData = _landData[idx];
+      const firstIdx = Object.keys(_landData).find(k => _landData[k].cx && _landData[k].cy);
+      if (rData.cx && rData.cy && String(idx) === String(firstIdx)) {
+        renderEnvRisksA4(idx, rData.cx, rData.cy);
+      }
     } catch(e) {
       el.textContent = '⚠ 查詢失敗';
       el.style.color = '#dc2626';
