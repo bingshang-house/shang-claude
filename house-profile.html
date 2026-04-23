@@ -359,10 +359,10 @@
       transform-origin: center;
     }
 
-    /* 位置圖 + 地籍圖 並排 */
+    /* 位置圖 + 地籍圖並排 50/50（省版面，A4 才不會跑到第三頁） */
     .map-cadastral-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .cadastral-box { cursor: zoom-in; }
-    .cadastral-box #out-cadastral { height: 220px; background: #FFF8E0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .cadastral-box #out-cadastral { height: 260px; background: #FFF8E0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .cadastral-box #out-cadastral svg { width: 100%; height: 100%; display: block; }
 
     /* 地籍圖放大 modal */
@@ -795,6 +795,7 @@
           <input type="number" id="s-neighbor" placeholder="鄰" min="1" style="flex:1;width:60px;" oninput="updateCard()">
           <button onclick="doLookupSchool()" style="white-space:nowrap;padding:4px 8px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">查詢</button>
         </div>
+        <button onclick="doNlscLookup()" style="width:100%;margin-bottom:6px;padding:6px;background:#7A5500;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">🔍 從地址重查鄰、里（NLSC）</button>
         <div id="school-result" style="font-size:12px;color:#444;margin-bottom:6px;min-height:0;"></div>
         <textarea id="s-school" rows="2" oninput="updateCard()" placeholder="查詢後自動填入，或手動輸入"></textarea>
       </div>
@@ -922,7 +923,10 @@
               </tr>
               <tr id="tr-base-area" style="display:none;">
                 <td class="key">基地總面積</td><td class="val" id="td-base-area">－</td>
-                <td class="key">建物型態</td><td class="val" id="td-bld-type">區分所有建物</td>
+                <td class="key">建物型態</td><td class="val" id="td-bld-type">－</td>
+              </tr>
+              <tr id="tr-bld-type-solo" style="display:none;">
+                <td class="key">建物型態</td><td class="val" colspan="3" id="td-bld-type-solo">－</td>
               </tr>
               <tr>
                 <td class="key">公告現值</td><td class="val" id="td-pub-val">－</td>
@@ -1888,24 +1892,24 @@
       if (x<minX) minX=x; if (y<minY) minY=y;
       if (x>maxX) maxX=x; if (y>maxY) maxY=y;
     }
-    // 擴張距離：自己 bbox 的 1.5 倍或至少 40m（看哪個大）
+    // 擴張距離：自己 bbox 的 0.35 倍或至少 20m（讓 polygon 占畫面大一點，邊長字相對更清楚）
     const selfSize = Math.max(maxX-minX, maxY-minY);
-    const EXPAND = Math.max(selfSize * 0.7, 40);
+    const EXPAND = Math.max(selfSize * 0.35, 20);
     minX -= EXPAND; minY -= EXPAND; maxX += EXPAND; maxY += EXPAND;
     const w = maxX - minX, h = maxY - minY;
     if (w <= 0 || h <= 0) return null;
 
-    const VB_W = 1200, VB_H = 900, MARGIN = 40;
+    const VB_W = 1200, VB_H = 900, MARGIN = 30;
     const scale = Math.min((VB_W - 2*MARGIN) / w, (VB_H - 2*MARGIN) / h);
     const offsetX = VB_W/2 - (minX + w/2) * scale;
     const offsetY = VB_H/2 + (minY + h/2) * scale;  // y 翻轉
     const tx = x => x * scale + offsetX;
     const ty = y => -y * scale + offsetY;
 
-    // 樣式（CSS style 單位在 viewBox 系下仍是相對值 — 但配 pre-scaled 座標就穩定）
-    const styleEdge     = `font:700 16px 'PingFang TC',sans-serif;stroke-width:3.5;paint-order:stroke;`;
-    const styleLabel    = `font:800 22px 'PingFang TC',sans-serif;stroke-width:3.5;paint-order:stroke;`;
-    const styleNbLabel  = `font:500 11px 'PingFang TC',sans-serif;fill:#666;pointer-events:none;`;
+    // 樣式（邊長字 16→20、地號字 22→26，適應拆排後更寬的畫面）
+    const styleEdge     = `font:700 20px 'PingFang TC',sans-serif;stroke-width:4;paint-order:stroke;`;
+    const styleLabel    = `font:800 26px 'PingFang TC',sans-serif;stroke-width:4;paint-order:stroke;`;
+    const styleNbLabel  = `font:500 13px 'PingFang TC',sans-serif;fill:#666;pointer-events:none;`;
 
     // 1. 周邊鄰地（背景層）
     let neighborPaths = '', neighborLabels = '';
@@ -2831,6 +2835,28 @@
   // _pointsTouched：AI 產生或使用者手動輸入後為 true（目前沒 auto-fill，但 fallback 模板還用得到）
   let _pointsTouched = false;
 
+  // ===== 建物型態分類（台灣不動產業界慣例）=====
+  // 規則：
+  //   1. d.isWholeBuilding=true（parseDeed 明確標記整棟）→ 透天
+  //   2. 有共有部分（pubArea/pubTotal > 0）→ 區分所有 → 依樓層分公寓/華廈/大樓
+  //   3. 都不是 → 推定透天（無共有部分的謄本絕大多數是透天）
+  function classifyBuildingType(d) {
+    if (!d) return '';
+    const f = parseInt(d.totalFloors) || 0;
+    if (d.isWholeBuilding) {
+      return f >= 6 ? '透天（含電梯）' : '透天';
+    }
+    if (d.pubArea > 0 || d.pubTotal > 0) {
+      if (f >= 11) return '大樓';
+      if (f >= 5)  return '華廈';
+      if (f >= 1)  return '公寓';
+      return '區分所有建物';
+    }
+    // 無共有部分 → 推定透天（含老公寓店面整棟、小透天等）
+    if (f > 0) return f >= 6 ? '透天（含電梯）' : '透天';
+    return '';
+  }
+
   // ===== Update Card =====
   function updateCard() {
     // 訴求重點不自動填模板，留給 AI 或使用者手動輸入
@@ -2993,14 +3019,26 @@
       }
     }
     const _baseTotalSqm = [...(_uniqueLandArea.values())].reduce((s, a) => s + a, 0);
-    const _isCondo = (d.pubArea > 0) || (d.pubTotal > 0);
+    // 區分所有判斷：整棟透天 (isWholeBuilding) 即使有微量共有部分也不算 condo
+    const _isCondo = !d.isWholeBuilding && ((d.pubArea > 0) || (d.pubTotal > 0));
+    const _bldType = classifyBuildingType(d);
     const _baseTr = document.getElementById('tr-base-area');
+    const _bldSoloTr = document.getElementById('tr-bld-type-solo');
+    // 區分所有：基地面積 + 建物型態同一列；透天/整棟：建物型態獨立整排
     if (_isCondo && _baseTotalSqm > 0) {
       if (_baseTr) _baseTr.style.display = '';
+      if (_bldSoloTr) _bldSoloTr.style.display = 'none';
       const _basePing = p2(sqm2ping(_baseTotalSqm));
       setText('td-base-area', `${p2(_baseTotalSqm)} m²（${_basePing} 坪）`);
+      setText('td-bld-type', _bldType || '－');
     } else {
       if (_baseTr) _baseTr.style.display = 'none';
+      if (_bldType) {
+        if (_bldSoloTr) _bldSoloTr.style.display = '';
+        setText('td-bld-type-solo', _bldType);
+      } else {
+        if (_bldSoloTr) _bldSoloTr.style.display = 'none';
+      }
     }
 
     // 多筆土地的欄位差異化顯示：同值 → 合併；異值 → 每筆一行、地號前綴
@@ -3308,7 +3346,8 @@
     });
   }
 
-  // SVG 地籍圖 → PNG bytes（給 A4 Excel 用，重用 saveCadastralImage 的 pipeline）
+  // SVG 地籍圖 → PNG bytes（給 A4 Excel 用）
+  // 輸出固定 4:3（1600×1200），SVG 按比例 letterbox 置中，避免 Excel anchor 拉伸變形
   async function getCadastralPngBytes() {
     const svg = document.querySelector('#cadastralModalContent svg') || document.querySelector('#out-cadastral svg');
     if (!svg) return null;
@@ -3325,12 +3364,19 @@
       const vb = (svg.getAttribute('viewBox') || '0 0 1200 900').split(/\s+/);
       const vbW = parseFloat(vb[2]) || 1200;
       const vbH = parseFloat(vb[3]) || 900;
-      const SCALE = 2;
+      // canvas 固定 4:3（對齊 Excel anchor 170×128mm ≈ 1.328:1）
+      const CANVAS_W = 1600, CANVAS_H = 1200;
       const canvas = document.createElement('canvas');
-      canvas.width = vbW * SCALE; canvas.height = vbH * SCALE;
+      canvas.width = CANVAS_W; canvas.height = CANVAS_H;
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#FFF8E0'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#FFF8E0'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      // SVG 等比縮放 + 置中（letterbox）
+      const scale = Math.min(CANVAS_W / vbW, CANVAS_H / vbH);
+      const drawW = vbW * scale;
+      const drawH = vbH * scale;
+      const dx = (CANVAS_W - drawW) / 2;
+      const dy = (CANVAS_H - drawH) / 2;
+      ctx.drawImage(img, dx, dy, drawW, drawH);
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
       return new Uint8Array(await blob.arrayBuffer());
     } finally {
@@ -3441,51 +3487,52 @@
       row++;
 
       // R2: 案件名稱大標 + 聯絡資訊
-      // 案名 1-12（12 欄 ≈ 103mm），聯絡 13-20（8 欄 ≈ 69mm）— 讓聯絡不被擠出
+      // R2：案名（左 12 欄）+ 聯絡（右 8 欄）兩塊分開，各自居中、字體自動算塞滿格子
+      // 不合併成 20 欄：保留兩塊讓後續各自調整更方便
       ws.mergeCells(row, 1, row, 12);
       ws.mergeCells(row, 13, row, 20);
+
+      // 依字串權重長度（中文 1.85 / 英數 1.0 units @ 11pt）算可塞滿格的字體
+      // 欄寬 5.1 units × 欄數 × 0.92 留邊 → 目標寬度
+      // 最終 size = 11 × (目標寬 / 字串權重) 並 clamp
+      function fitFontSize(text, cellColCount, minSize = 10, maxSize = 18) {
+        if (!text) return maxSize;
+        const colUnits = cellColCount * 5.1 * 0.92;
+        const weightedLen = [...text].reduce((s, ch) => s + (/[\x00-\x7F]/.test(ch) ? 1.0 : 1.85), 0);
+        if (weightedLen <= 0) return maxSize;
+        const raw = Math.floor(11 * (colUnits / weightedLen));
+        return Math.max(minSize, Math.min(maxSize, raw));
+      }
+
       const caseName = val('cs-s-case-name');
       const titleCell = ws.getCell(row, 1);
-      // 案名字體依長度動態縮：對齊網頁 CSS (19px→14px→13px→12px 階梯)
-      function caseNameSize(len) {
-        if (len <= 11) return 14;
-        if (len <= 14) return 13;
-        if (len <= 18) return 12;
-        if (len <= 22) return 11;
-        if (len <= 28) return 10;
-        return 9;
-      }
+      let titleText, titleColor;
       if (!caseName) {
-        titleCell.value = '我忘了填我忘了填我忘了填';
-        setStyle(titleCell, {
-          font: { name: FONT, size: 13, bold: true, color: { argb: 'FFCC8F00' } },
-          alignment: { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: true },
-        });
+        titleText = '我忘了填我忘了填我忘了填';
+        titleColor = 'FFCC8F00';
       } else if (caseName.length < 16) {
-        const warnText = `${caseName}（${caseName.length}/16 請補足）`;
-        titleCell.value = warnText;
-        setStyle(titleCell, {
-          font: { name: FONT, size: caseNameSize(warnText.length), bold: true, color: { argb: COLOR.red } },
-          alignment: { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: true },
-        });
+        titleText = `${caseName}（${caseName.length}/16 請補足）`;
+        titleColor = COLOR.red;
       } else {
-        titleCell.value = caseName;
-        setStyle(titleCell, {
-          font: { name: FONT, size: caseNameSize(caseName.length), bold: true, color: { argb: COLOR.deepBrown } },
-          alignment: { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: true },
-        });
+        titleText = caseName;
+        titleColor = COLOR.deepBrown;
       }
+      titleCell.value = titleText;
+      setStyle(titleCell, {
+        font: { name: FONT, size: fitFontSize(titleText, 12), bold: true, color: { argb: titleColor } },
+        alignment: { horizontal: 'center', vertical: 'middle', wrapText: false, shrinkToFit: true },
+      });
 
       const pName = val('cs-s-partner-name');
       const pPhone = val('cs-s-partner-phone');
-      // 專員資訊獨立大字（無則留空），店長移到下一行公司資訊
+      const contactText = pName ? `專員 ${pName}　電話 ${pPhone}` : '';
       const contactCell = ws.getCell(row, 13);
-      contactCell.value = pName ? `專員 ${pName}　電話 ${pPhone}` : '';
+      contactCell.value = contactText;
       setStyle(contactCell, {
-        font: { name: FONT, size: 13, bold: true, color: { argb: COLOR.deepBrown } },
-        alignment: { horizontal: 'right', vertical: 'middle', indent: 1, wrapText: false },
+        font: { name: FONT, size: fitFontSize(contactText, 8), bold: true, color: { argb: COLOR.deepBrown } },
+        alignment: { horizontal: 'center', vertical: 'middle', wrapText: false, shrinkToFit: true },
       });
-      ws.getRow(row).height = 26;
+      ws.getRow(row).height = 28;
       row++;
 
       // R3: 公司資訊（最後面加店長）
@@ -3526,22 +3573,22 @@
       ws.getRow(row).height = 18;
       row++;
 
-      // values — 售價（i=0）/ 單價（i=2）紅字突出；坪數維持金底白字
+      // values — 全 5 格底色統一米黃；前 3 格（售價/不含車位坪/單價）紅字粗體、後 2 格深字
       for (let i = 0; i < 5; i++) {
         const s = i * 4 + 1;
         ws.mergeCells(row, s, row, s + 3);
         const c = ws.getCell(row, s);
         c.value = `${priceVals[i]} ${priceUnits[i]}`;
-        const isMoney = (i === 0 || i === 2);
+        const isRed = (i < 3);
         setStyle(c, {
           font: {
             name: FONT,
-            size: isMoney ? 16 : 14,  // 5 格較擠，整體小一點避免擠爆
+            size: isRed ? 16 : 14,
             bold: true,
-            color: { argb: isMoney ? COLOR.red : COLOR.white },
+            color: { argb: isRed ? COLOR.red : COLOR.deepBrown },
           },
           alignment: { horizontal: 'center', vertical: 'middle' },
-          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: isMoney ? COLOR.white : COLOR.darkGold } },
+          fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale } },
         });
       }
       ws.getRow(row).height = 28;
@@ -3613,6 +3660,24 @@
         ws.getRow(row).height = Math.max(16, lines * ROW_H);
         row++;
       }
+      // 一排塞 3 組 K/V：20 欄 → 組1 key 1-2 + val 3-7 / 組2 key 8-9 + val 10-14 / 組3 key 15-16 + val 17-20
+      function trioRow(k1, v1, k2, v2, k3, v3) {
+        ws.mergeCells(row, 1, row, 2);
+        ws.mergeCells(row, 3, row, 7);
+        ws.mergeCells(row, 8, row, 9);
+        ws.mergeCells(row, 10, row, 14);
+        ws.mergeCells(row, 15, row, 16);
+        ws.mergeCells(row, 17, row, 20);
+        kvCell(1, k1, true);
+        kvCell(3, v1, false);
+        kvCell(8, k2, true);
+        kvCell(10, v2, false);
+        kvCell(15, k3, true);
+        kvCell(17, v3, false);
+        const lines = Math.max(estimateLines(v1, 5), estimateLines(v2, 5), estimateLines(v3, 4));
+        ws.getRow(row).height = Math.max(16, lines * ROW_H);
+        row++;
+      }
       function fullRow(k, v, opts = {}) {
         ws.mergeCells(row, 1, row, 4);
         ws.mergeCells(row, 5, row, 20);
@@ -3625,8 +3690,7 @@
 
       // ============ Info Table Data ============
       groupTitle('案件資訊');
-      dualRow('社區名稱', td('td-community'), '鑰匙存置', td('td-keyhold'));
-      fullRow('合約編號', td('td-contract'));
+      trioRow('社區名稱', td('td-community'), '合約編號', td('td-contract'), '鑰匙存置', td('td-keyhold'));
       fullRow('地址', td('td-addr'));
 
       groupTitle('基本資料');
@@ -3645,9 +3709,15 @@
 
       groupTitle('土地與都計');
       dualRow('土地持分', td('td-land'), '使用分區', td('td-zone'));
-      // 基地總面積（區分所有建物才有值，HTML 端 tr-base-area 控 display，Excel 端 td 空值就略）
+      // 建物型態（依 classifyBuildingType：透天/公寓/華廈/大樓）
+      // 區分所有 → 與基地總面積並排一列；透天/整棟 → 獨立整排
       const baseArea = td('td-base-area', '');
-      if (baseArea) dualRow('基地總面積', baseArea, '建物型態', '區分所有建物');
+      const bldType = classifyBuildingType(deed) || '';
+      if (baseArea) {
+        dualRow('基地總面積', baseArea, '建物型態', bldType || '－');
+      } else if (bldType) {
+        fullRow('建物型態', bldType);
+      }
       dualRow('公告現值', td('td-pub-val'), '建蔽容積', td('td-bcr-far'));
       dualRow('都市計畫', td('td-urban-plan'), '細部計畫', td('td-detail-plan'));
       fullRow('臨路面寬×深度', td('td-land-dim'));
@@ -3677,25 +3747,7 @@
 
       row++; // 分隔
 
-      // ============ 訴求重點（上移到周遭機能上方）============
-      groupTitle('訴求重點');
-      const pointsEl = document.getElementById('out-points');
-      const pointsText = pointsEl
-        ? Array.from(pointsEl.children).map(n => n.textContent.trim()).filter(Boolean).join('\n')
-        : '';
-      ws.mergeCells(row, 1, row, 20);
-      const pc = ws.getCell(row, 1);
-      pc.value = pointsText || '（請在左側填入訴求重點）';
-      setStyle(pc, {
-        font: { name: FONT, size: 9, color: { argb: COLOR.text } },
-        alignment: { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true },
-        border: borderAll,
-      });
-      const ptLines = (pointsText || '').split('\n').length || 1;
-      ws.getRow(row).height = Math.max(48, ptLines * 14);
-      row++;
-
-      row++; // 分隔
+      // 訴求重點改到和格局圖並排顯示（下方圖片區處理）
 
       // ============ 周遭機能（砍重要發展：剩 3 項 → 交通/生活 + 商圈全寬）============
       groupTitle('周遭機能分析');
@@ -3717,21 +3769,10 @@
         ws.getRow(row).height = Math.max(34, maxL * 14);
       }
       row++;
-      // 第二排：商圈全寬
-      const loc = td('out-location', '－');
-      ws.mergeCells(row, 1, row, 20);
-      kvCell(1, '🏪 商圈特色', true);
-      ws.getRow(row).height = 15;
-      row++;
-      ws.mergeCells(row, 1, row, 20);
-      kvCell(1, loc, false);
-      ws.getRow(row).height = Math.max(24, String(loc).split('\n').length * 14);
-      row++;
 
       row++; // 分隔
 
       // ============ 位置圖 + 地籍圖（左右並排）============
-      // 並行抓三張圖（失敗回 null，不阻斷下載）
       const addrForMap = (deed?.district || '') + (deed?.address || '');
       const [mapBytes, cadaBytes, planBytes] = await Promise.all([
         addrForMap ? fetchStaticMapJpegBytes(addrForMap).catch(() => null) : Promise.resolve(null),
@@ -3739,11 +3780,28 @@
         getPlanImgBytes().catch(() => null),
       ]);
 
-      // 位置圖（全寬）— 整排讓地圖放大看清楚
-      groupTitle('位置圖');
-      const MAP_ROWS = 12;
-      for (let i = 0; i < MAP_ROWS; i++) ws.getRow(row + i).height = 16;
-      for (let rr = row; rr < row + MAP_ROWS; rr++) {
+      // 並排標題：位置圖（col 1-10）+ 地籍圖（col 11-20）
+      function halfGroupTitle(leftText, rightText) {
+        ws.mergeCells(row, 1, row, 10);
+        ws.mergeCells(row, 11, row, 20);
+        for (const [col, text] of [[1, leftText], [11, rightText]]) {
+          const c = ws.getCell(row, col);
+          c.value = `▌ ${text}`;
+          setStyle(c, {
+            font: { name: FONT, size: 9, bold: true, color: { argb: COLOR.white } },
+            alignment: { horizontal: 'left', vertical: 'middle', indent: 1 },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.darkGold } },
+            border: borderAll,
+          });
+        }
+        ws.getRow(row).height = 16;
+        row++;
+      }
+      halfGroupTitle('位置圖', '地籍圖（含邊長）');
+
+      const IMG_ROWS = 13;  // 並排共同高度（地籍圖 letterbox 4:3 剛好塞進 10 欄 × 13 rows）
+      for (let i = 0; i < IMG_ROWS; i++) ws.getRow(row + i).height = 16;
+      for (let rr = row; rr < row + IMG_ROWS; rr++) {
         for (let col = 1; col <= 20; col++) {
           const cc = ws.getCell(rr, col);
           cc.border = borderAll;
@@ -3752,54 +3810,54 @@
       }
       if (mapBytes) {
         const id = wb.addImage({ buffer: mapBytes, extension: 'jpeg' });
-        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + MAP_ROWS - 0.2 } });
+        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 9.8, row: row - 1 + IMG_ROWS - 0.2 } });
       } else {
-        ws.mergeCells(row, 1, row + MAP_ROWS - 1, 20);
+        ws.mergeCells(row, 1, row + IMG_ROWS - 1, 10);
         const c = ws.getCell(row, 1);
-        c.value = '（未取得位置圖 — 需解析地址成功）';
+        c.value = '（未取得位置圖）';
         setStyle(c, {
           font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
           alignment: { horizontal: 'center', vertical: 'middle' },
         });
-      }
-      row += MAP_ROWS;
-
-      row++; // 分隔
-
-      // 地籍圖（全寬 + 居中放大）— 地籍邊長小字需要全寬才看得清
-      groupTitle('地籍圖（含邊長）');
-      const CADA_ROWS = 16;   // 比位置圖更大，給邊長數字呼吸空間
-      for (let i = 0; i < CADA_ROWS; i++) ws.getRow(row + i).height = 16;
-      for (let rr = row; rr < row + CADA_ROWS; rr++) {
-        for (let col = 1; col <= 20; col++) {
-          const cc = ws.getCell(rr, col);
-          cc.border = borderAll;
-          if (!cc.fill) cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } };
-        }
       }
       if (cadaBytes) {
         const id = wb.addImage({ buffer: cadaBytes, extension: 'png' });
-        // SVG 原 viewBox 4:3（1200x900），全寬 20 欄 ≈ 170mm，合適高度 127mm ≈ 16 列
-        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + CADA_ROWS - 0.2 } });
+        ws.addImage(id, { tl: { col: 10.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + IMG_ROWS - 0.2 } });
       } else {
-        ws.mergeCells(row, 1, row + CADA_ROWS - 1, 20);
-        const c = ws.getCell(row, 1);
-        c.value = '（未取得地籍圖 — 需上傳土地謄本）';
+        ws.mergeCells(row, 11, row + IMG_ROWS - 1, 20);
+        const c = ws.getCell(row, 11);
+        c.value = '（未取得地籍圖）';
         setStyle(c, {
           font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
           alignment: { horizontal: 'center', vertical: 'middle' },
         });
       }
-      row += CADA_ROWS;
+      row += IMG_ROWS;
 
       row++; // 分隔
 
-      // ============ 格局圖（全寬）============
-      groupTitle('格局參考圖');
-      const PLAN_ROWS = 10;
-      for (let i = 0; i < PLAN_ROWS; i++) ws.getRow(row + i).height = 16;
-      for (let rr = row; rr < row + PLAN_ROWS; rr++) {
-        for (let col = 1; col <= 20; col++) {
+      // ============ 訴求重點 + 格局圖（左右並排）============
+      halfGroupTitle('訴求重點', '格局參考圖');
+
+      const PT_ROWS = 12;  // 並排共同高度，容納 5-7 行訴求
+      for (let i = 0; i < PT_ROWS; i++) ws.getRow(row + i).height = 16;
+      // 訴求重點：左側 col 1-10 合併整塊放文字
+      const pointsEl = document.getElementById('out-points');
+      const pointsText = pointsEl
+        ? Array.from(pointsEl.children).map(n => n.textContent.trim()).filter(Boolean).join('\n')
+        : '';
+      ws.mergeCells(row, 1, row + PT_ROWS - 1, 10);
+      const ptCell = ws.getCell(row, 1);
+      ptCell.value = pointsText || '（請在左側填入訴求重點）';
+      setStyle(ptCell, {
+        font: { name: FONT, size: 10, color: { argb: COLOR.text } },
+        alignment: { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } },
+        border: borderAll,
+      });
+      // 格局圖：右側 col 11-20
+      for (let rr = row; rr < row + PT_ROWS; rr++) {
+        for (let col = 11; col <= 20; col++) {
           const cc = ws.getCell(rr, col);
           cc.border = borderAll;
           if (!cc.fill) cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.pale2 } };
@@ -3807,17 +3865,17 @@
       }
       if (planBytes) {
         const id = wb.addImage({ buffer: planBytes, extension: 'jpeg' });
-        ws.addImage(id, { tl: { col: 0.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + PLAN_ROWS - 0.2 } });
+        ws.addImage(id, { tl: { col: 10.2, row: row - 1 + 0.2 }, br: { col: 19.8, row: row - 1 + PT_ROWS - 0.2 } });
       } else {
-        ws.mergeCells(row, 1, row + PLAN_ROWS - 1, 20);
-        const c = ws.getCell(row, 1);
+        ws.mergeCells(row, 11, row + PT_ROWS - 1, 20);
+        const c = ws.getCell(row, 11);
         c.value = '（未取得格局圖 — 需從左側上傳）';
         setStyle(c, {
           font: { name: FONT, size: 9, italic: true, color: { argb: COLOR.gray } },
           alignment: { horizontal: 'center', vertical: 'middle' },
         });
       }
-      row += PLAN_ROWS;
+      row += PT_ROWS;
 
       // ============ 嫌惡設施頁（決策 1a 自然 2 頁）============
       // 在此插入分頁符（row break），讓嫌惡頁獨立到第 2 頁列印
@@ -4425,6 +4483,65 @@
       S('CP74', partnerPhone);
       S('CP78', '江炳賞(114)高市字第01680號');
 
+      // ===== 擴充欄位動態合併（範本沒預留的資料，動態塞圖片區左側的空白帶）=====
+      // row 53 / 55 / 57 col A-J 是範本沒 merge 的乾淨空白（row 58-62 有土地所有權勾選，避開）
+      // label A:C 合併 + value D:J 合併、row 高調為 18pt 讓字看得到
+      const addMergeRange = (range) => {
+        const openRe = /<mergeCells\s+count="(\d+)"\s*>/;
+        const m = sheetXml.match(openRe);
+        if (m) {
+          const cnt = parseInt(m[1]) + 1;
+          sheetXml = sheetXml.replace(openRe, `<mergeCells count="${cnt}">`);
+          sheetXml = sheetXml.replace('</mergeCells>', `<mergeCell ref="${range}"/></mergeCells>`);
+        } else {
+          sheetXml = sheetXml.replace('</worksheet>', `<mergeCells count="1"><mergeCell ref="${range}"/></mergeCells></worksheet>`);
+        }
+      };
+      const ensureCell = (addr) => {
+        if (findCell(addr)) return;
+        const [, row] = parseAddr(addr);
+        const rowRe = new RegExp(`<row\\s+r="${row}"[^>]*>[\\s\\S]*?<\\/row>`);
+        const rowM = sheetXml.match(rowRe);
+        const newCell = `<c r="${addr}"/>`;
+        if (rowM) {
+          sheetXml = sheetXml.replace(rowM[0], rowM[0].replace(`</row>`, `${newCell}</row>`));
+        } else {
+          const newRow = `<row r="${row}">${newCell}</row>`;
+          sheetXml = sheetXml.replace('</sheetData>', `${newRow}</sheetData>`);
+        }
+      };
+      const setRowHeight = (row, ht) => {
+        const rowRe = new RegExp(`<row r="${row}"[^>]*>`);
+        const m = sheetXml.match(rowRe);
+        if (!m) return;
+        let open = m[0];
+        if (/ht="[\d.]+"/.test(open)) open = open.replace(/ht="[\d.]+"/, `ht="${ht}"`);
+        else open = open.replace(/>$/, ` ht="${ht}">`);
+        if (!/customHeight="1"/.test(open)) open = open.replace(/>$/, '').concat(' customHeight="1">');
+        sheetXml = sheetXml.replace(m[0], open);
+      };
+      // 擴充欄位清單：以後要加新欄位就在這加一筆即可（頁面有值才填）
+      const EXTRA_FIELDS = [
+        { id: 's-bld-width',  label: '建物面寬', unit: ' M' },
+        { id: 's-land-front', label: '臨路面寬', unit: ' M' },
+        { id: 's-land-depth', label: '土地深度', unit: ' M' },
+      ];
+      const extraFilled = EXTRA_FIELDS
+        .map(f => ({ ...f, v: parseFloat(document.getElementById(f.id)?.value || '') }))
+        .filter(f => !isNaN(f.v) && f.v > 0);
+      const EXTRA_ROWS = [53, 55, 57];
+      extraFilled.forEach((f, i) => {
+        const r = EXTRA_ROWS[i]; if (!r) return;
+        const labelAddr = `A${r}`, valueAddr = `D${r}`;
+        ensureCell(labelAddr);
+        ensureCell(valueAddr);
+        addMergeRange(`A${r}:C${r}`);
+        addMergeRange(`D${r}:J${r}`);
+        setRowHeight(r, 18);
+        S(labelAddr, f.label);
+        S(valueAddr, `${f.v}${f.unit}`);
+      });
+
       // 使用者上傳的平面圖 data URL（稍後覆蓋 image3.jpeg）
       const planImg = document.querySelector('#csPlanPreview img, #planPreview img');
       const planDataUrl = (planImg && planImg.src && planImg.src.startsWith('data:')) ? planImg.src : null;
@@ -4728,10 +4845,20 @@
       const roadAddr = d.address
         ? addrToRoad(`${d.district || ''}${d.address}`)
         : (d.district || '');
+      // 整理嫌惡設施摘要讓 AI 避開（不是拿來寫文案）
+      const _hazardSummary = (window._hazardResults || [])
+        .filter(c => c.items?.length)
+        .map(c => `${c.label}：${c.items.slice(0, 3).map(it => it.name).join('、')}`)
+        .join('；');
+      // 建物型態（透天/公寓/華廈/大樓）
+      const _bldType = (typeof classifyBuildingType === 'function') ? classifyBuildingType(d) : '';
       // 基本資料 + 周邊機能一併帶入讓 AI 參考
       const facts = {
+        案件名稱: val('cs-s-case-name'),
+        社區名稱: val('cs-s-community'),
         地段: roadAddr,
-        樓層: d.isWholeBuilding ? `整棟 ${d.totalFloors || ''} 層透天` : (d.floor ? `${d.floor} 樓` : ''),
+        建物型態: _bldType,
+        樓層: d.isWholeBuilding ? `整棟 ${d.totalFloors || ''} 層透天` : (d.floor ? `${d.floor} 樓（總 ${d.totalFloors || '？'} 層）` : ''),
         屋齡: d.age || '',
         建築完成: td('td-completion'),
         座向: val('s-orientation'),
@@ -4747,6 +4874,7 @@
         共用部分: td('td-pub-area'),
         總坪數: td('td-total-area'),
         土地持分: td('td-land'),
+        基地總面積: td('td-base-area'),
         車位: td('td-park'),
         停車狀況: val('s-park-status'),
         機車位: td('td-moto'),
@@ -4768,36 +4896,45 @@
         生活機能: val('s-life'),
         商圈特色: val('s-location'),
         重要發展: val('s-develop'),
+        帶看注意事項: val('s-viewing-notes'),
+        限制登記: (d.restrictionTypes || []).join('、'),
+        抵押狀況: (d.hasMortgage && d.mortgageList?.length)
+          ? `有 ${d.mortgageList.length} 筆合計 ${d.mortgageList.reduce((s, m) => s + (m.amt || 0), 0)} 萬`
+          : '',
+        嫌惡設施_請避開不提: _hazardSummary,
       };
       const factsText = Object.entries(facts)
         .filter(([, v]) => v)
         .map(([k, v]) => `${k}：${v}`).join('\n');
 
-      const prompt = `你是不動產文案大師。從物件資料挑 5 個最有感的賣點，每點寫成一行 15 字以內的中文短句。
+      const prompt = `【硬性規則，違反視為錯誤輸出】
+每一行至少 20 個中文字，上限 30 個中文字。
+少於 20 字的行會被系統拒絕，請展開描述把具體事實（距離分鐘、機能數量、格局用途、建材年份）加進去。
 
-輸出規則（務必遵守）：
-- 剛好 5 行，每行 1 個賣點
-- 每行 15 個中文字以內
-- 不用任何標點符號（頓號、逗號、句號、破折號、冒號都不行）
-- 不用任何表情符號或 emoji
-- 不用編號、項目符號、前綴
-- 只用資料裡的事實，不要編造
-- 地段用資料裡的路段名，不要補門牌或建案名
+你是不動產文案大師，從下方物件資料挑 5 個最有感的賣點，每點寫成一行具體有畫面感的中文短句。
+
+輸出格式：
+- 剛好 5 行、每行 1 個賣點
+- 每行 20-30 個中文字（前面已強調，再次提醒）
+- 一行內可用頓號、逗號分隔子句，句末不加句號
+- 不用 emoji、不用編號、不用項目符號、不用前綴
+- 只用資料裡的事實，嫌惡設施一律不提，不要編造
+- 地段用路段名、商圈名，不要補門牌或建案名
 
 用字避開：最佳、完美、宜居、典藏、匠心、盡享、坐擁、一應俱全
 負面轉正：老公寓→有歷史韻味、小坪數→精巧俐落、屋齡高→累積生活感
 
-範例輸出（學結構不要照抄）：
-捷運站走路八分鐘通勤輕鬆
-前鎮國中學區接送順手
-四維商圈生活機能便利
-三房兩廳格局適合小家庭
-加強磚造結構穩固耐久
+標準範例（每行剛好 20-28 字，學結構不要照抄）：
+步行八分鐘直達凱旋站，捷運紅線一站轉乘美麗島通勤輕鬆
+前鎮國中與成功國小雙學區，接送只要五分鐘生活步調從容
+四維商圈生活機能密集，家樂福大遠百傳統市集十分鐘內到齊
+三房兩廳雙衛浴 35 坪格局方正，適合三代同堂或育兒小家庭
+加強磚造主結構搭配 RC 屋頂，屋齡雖長但建材紮實保養得宜
 
 物件資料：
 ${factsText}
 
-直接輸出 5 行賣點，不要前言、不要結語、不要任何符號。`;
+再次強調：每行 20-30 字，少於 20 字直接拒收。直接輸出 5 行，不要前言、不要結語、不要編號。`;
 
       const url = 'https://shang-gemini-proxy.bingshang1019.workers.dev/v1beta/models/gemini-2.5-flash:generateContent';
       const res = await fetch(url, {
@@ -4806,8 +4943,8 @@ ${factsText}
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.5,
-            maxOutputTokens: 256,
+            temperature: 0.3,   // 降低溫度讓 Gemini 更嚴守字數規則
+            maxOutputTokens: 768,
             thinkingConfig: { thinkingBudget: 0 }
           }
         })
@@ -5473,6 +5610,37 @@ ${factsText}
         `).join('')}
       </div>
     `).join('');
+  }
+
+  // ===== 手動觸發：從現有地址重查鄰、里（NLSC TextQueryMap）=====
+  // 不受「s-village 已有值」的限制，會覆寫欄位
+  async function doNlscLookup() {
+    const dEl = document.getElementById('s-district');
+    const vEl = document.getElementById('s-village');
+    const nEl = document.getElementById('s-neighbor');
+    const statusEl = document.getElementById('school-result');
+    const district = (dEl?.value || deed?.district || '').trim();
+    const addr = (deed?.address || '').trim();
+    if (!district || !addr) {
+      statusEl.innerHTML = '<span style="color:#dc2626">⚠ 需先上傳建物謄本解析出地址（或手動指定區 + 地址）</span>';
+      return;
+    }
+    const fullAddr = district + addr;
+    statusEl.innerHTML = `<span style="color:#666">🔍 向 NLSC 查詢 <code>${escH ? escH(fullAddr) : fullAddr}</code>…</span>`;
+    try {
+      const geo = await nlscGeocode(fullAddr);
+      if (geo && geo.village) {
+        if (geo.district && dEl) dEl.value = (typeof normDist === 'function') ? normDist(geo.district) : geo.district;
+        vEl.value = geo.village;
+        nEl.value = geo.neighbor || '';
+        doLookupSchool();
+        statusEl.innerHTML = `<span style="color:#16a34a;font-weight:600">✓ ${geo.district} ${geo.village} ${geo.neighbor || ''} 鄰（學區已自動比對）</span>`;
+      } else {
+        statusEl.innerHTML = `<span style="color:#dc2626">⚠ NLSC 沒解析出里鄰（地址「${fullAddr}」可能門牌不存在／格式太舊／API 回應異常）<br>建議：直接手動填里 + 鄰再按「查詢」</span>`;
+      }
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color:#dc2626">⚠ NLSC 查詢失敗：${e.message}</span>`;
+    }
   }
 
   // ===== NLSC Geocoding (地址→里鄰) =====
