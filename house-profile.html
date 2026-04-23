@@ -953,11 +953,9 @@
               <tr id="tr-land-use" style="display:none;">
                 <td class="key">使用地類別</td><td class="val" colspan="3" id="td-land-use">－</td>
               </tr>
-              <tr id="tr-fud" style="display:none;">
-                <td class="key">國土功能分區</td><td class="val" colspan="3" id="td-fud">－</td>
-              </tr>
-              <tr class="full-row">
-                <td class="key">臨路面寬×深度</td><td class="val" colspan="3" id="td-land-dim">－</td>
+              <tr>
+                <td class="key">國土功能分區</td><td class="val" id="td-fud">－</td>
+                <td class="key">臨路面寬×深度</td><td class="val" id="td-land-dim">－</td>
               </tr>
 
               <tr class="group-title"><td colspan="4">建物坪數</td></tr>
@@ -3260,15 +3258,9 @@
     const firstPlan = landEntries.find(e => e.urbanPlan || e.detailPlan);
     setText('td-urban-plan', firstPlan?.urbanPlan || '－');
     setText('td-detail-plan', firstPlan?.detailPlan || '－');
-    // 國土功能分區（gisdawh 提供，都市/非都市通吃；沒值整排隱藏）
+    // 國土功能分區（gisdawh 提供，都市/非都市通吃）
     const fudFirst = landEntries.find(e => e.fud);
-    const trFud = document.getElementById('tr-fud');
-    if (fudFirst?.fud) {
-      setText('td-fud', fudFirst.fud);
-      if (trFud) trFud.style.display = '';
-    } else {
-      if (trFud) trFud.style.display = 'none';
-    }
+    setText('td-fud', fudFirst?.fud || '－');
     // 更新左側總坪數標示
     const totalLbl = document.getElementById('land-total-label');
     if (totalLbl) totalLbl.textContent = landTotal ? `土地持分合計：${landTotal} 坪` : '';
@@ -3918,9 +3910,7 @@
       dualRow('都市計畫', td('td-urban-plan'), '細部計畫', td('td-detail-plan'));
       const landUseText = td('td-land-use', '');
       if (landUseText) fullRow('使用地類別', landUseText);
-      const fudText = td('td-fud', '');
-      if (fudText) fullRow('國土功能分區', fudText);
-      fullRow('臨路面寬×深度', td('td-land-dim'));
+      dualRow('國土功能分區', td('td-fud'), '臨路面寬×深度', td('td-land-dim'));
 
       groupTitle('建物坪數');
       dualRow('主建物面積', td('td-main-area'), '附屬建物', td('td-attached'));
