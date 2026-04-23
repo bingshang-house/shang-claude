@@ -935,6 +935,10 @@
                 <td class="key">土地持分</td><td class="val" id="td-land">－</td>
                 <td class="key">使用分區</td><td class="val" id="td-zone">－</td>
               </tr>
+              <tr>
+                <td class="key">測量類別</td><td class="val" id="td-survey-type">－</td>
+                <td class="key">成圖年月</td><td class="val" id="td-survey-date">－</td>
+              </tr>
               <tr id="tr-base-area" style="display:none;">
                 <td class="key">基地總面積</td><td class="val" id="td-base-area">－</td>
                 <td class="key">建物型態</td><td class="val" id="td-bld-type">－</td>
@@ -2439,6 +2443,44 @@
     return null;
   }
 
+  // ===== NLSC 地段測量類別 enricher（地籍圖重測 / 農地重劃 / 區段徵收 ...）=====
+  // API：api.nlsc.gov.tw/other/GetLandSecInfoNlsc/{county}/{sect4}
+  // 回 XML：svType=5 地籍圖重測 / 9 農地重劃 / B 區段徵收 / F 農村社區重劃 ...
+  const NLSC_SURVEY_TYPE = {
+    '5': '地籍圖重測', '6': '工業區整理', '7': '河川浮覆地', '8': '海岸土地測量',
+    '9': '農地重劃',   'A': '國有原野地', 'B': '區段徵收',   'C': '國有林班地',
+    'D': '解除林班地', 'E': '海埔新生地', 'F': '農村社區重劃', 'Z': '其他'
+  };
+  async function queryLandSurveyInfo(distName, sectName) {
+    const map = await getSectCodeMap();
+    const sect4 = map[`${distName}-${sectName}`];
+    if (!sect4) return null;
+    const apiUrl = `https://api.nlsc.gov.tw/other/GetLandSecInfoNlsc/E/${sect4}`;
+    const target = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
+    for (let i = 0; i < 3; i++) {
+      if (i) await new Promise(r => setTimeout(r, 600 + (i - 1) * 800));
+      try {
+        const r = await fetch(target);
+        if (!r.ok) continue;
+        const xml = await r.text();
+        const get = tag => {
+          const m = xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
+          return m ? m[1].trim() : '';
+        };
+        const svType = get('svType');
+        const mYear = get('mYear'), mMonth = get('mMonth');
+        return {
+          svTypeCode: svType,
+          svTypeText: NLSC_SURVEY_TYPE[svType] || '',
+          mapYear: mYear,
+          mapMonth: mMonth,
+          mapDate: (mYear && mMonth) ? `${mYear}-${String(mMonth).padStart(2,'0')}` : '',
+        };
+      } catch (e) { /* retry */ }
+    }
+    return null;
+  }
+
   // ===== SWC 水利局 enricher：山坡地比例、特定水保區、崩塌區、違規案件 =====
   // SWC SectionID 與 gisdawh AA48 完全相同（1483 筆零差異），沿用 sect-code-gisdawh.json
   async function querySwcByLand(distName, sectName, landNo) {
@@ -2660,11 +2702,12 @@
       // NLSC 地籍圖 sectcode（讓地號可點擊開地籍圖）
       _landData[idx].nlscSect = await fetchNlscSect(data.distName, sectName);
 
-      // gisdawh enricher + SWC enricher：併行跑
+      // gisdawh + SWC + NLSC 測量類別：3 個 enricher 併行跑
       try {
-        const [enrich, swc] = await Promise.all([
+        const [enrich, swc, survey] = await Promise.all([
           queryGisdawhByLand(data.distName, sectName, landNo),
           querySwcByLand(data.distName, sectName, landNo),
+          queryLandSurveyInfo(data.distName, sectName),
         ]);
         if (enrich) {
           _landData[idx].fud = enrich.fud;
@@ -2672,13 +2715,13 @@
           if (!_landData[idx].pubPrice && enrich.pubPrice) _landData[idx].pubPrice = enrich.pubPrice;
           if (enrich.aa11) _landData[idx].nonUrbanZone = enrich.aa11;
           if (enrich.aa12) _landData[idx].nonUrbanUse  = enrich.aa12;
-          // CX/CY 存起來給環境風險查詢用（TWD97 TM2, EPSG:3826）
           if (enrich.cx && enrich.cy) {
             _landData[idx].cx = enrich.cx;
             _landData[idx].cy = enrich.cy;
           }
         }
         if (swc) _landData[idx].swc = swc;
+        if (survey) _landData[idx].survey = survey;
       } catch (e) { console.warn('land enricher failed', e); }
 
       let msg = `✓ ${zoneName}`;
@@ -3293,6 +3336,15 @@
 
     // 使用分區：非都市案優先顯示 gisdawh AA11（鄉村區/森林區/一般農業區…），比 KcgTB 的「都市計畫外」具體
     setHtml('td-zone', perLand(landEntries, e => e.nonUrbanZone || e.zone || ''));
+    // 測量類別 / 成圖年月（NLSC，地籍屬性屬該段共同）
+    setHtml('td-survey-type', perLand(landEntries, e => {
+      if (!e.survey || !e.survey.svTypeText) return '';
+      // 地籍圖重測藍色、農地重劃/區段徵收等橘字標註
+      const notable = ['9','B','E','F'].includes(e.survey.svTypeCode);
+      if (notable) return `<span style="color:#b45309;font-weight:700;">⚠ ${e.survey.svTypeText}</span>`;
+      return e.survey.svTypeText;
+    }, '－', { allowHtml: true }));
+    setHtml('td-survey-date', perLand(landEntries, e => e.survey?.mapDate || ''));
     // 使用地類別（AA12，非都市才有：乙種建築用地/林業用地/農牧用地…）
     const useFirst = landEntries.find(e => e.nonUrbanUse);
     const trLandUse = document.getElementById('tr-land-use');
@@ -3970,6 +4022,7 @@
 
       groupTitle('土地與都計');
       dualRow('土地持分', td('td-land'), '使用分區', td('td-zone'));
+      dualRow('測量類別', td('td-survey-type'), '成圖年月', td('td-survey-date'));
       // 建物型態（依 classifyBuildingType：透天/公寓/華廈/大樓）
       // 區分所有 → 與基地總面積並排一列；透天/整棟 → 獨立整排
       const baseArea = td('td-base-area', '');
@@ -5128,6 +5181,8 @@
         建築完成: td('td-completion'),
         座向: val('s-orientation'),
         使用分區: (Object.values(_landData).map(e => e.nonUrbanZone || e.zone).filter(Boolean).join('、')) || '',
+        測量類別: td('td-survey-type'),
+        成圖年月: td('td-survey-date'),
         使用地類別: (Object.values(_landData).map(e => e.nonUrbanUse).filter(Boolean).join('、')) || '',
         都市計畫: td('td-urban-plan'),
         細部計畫: (Object.values(_landData).map(e => e.detailPlan).filter(Boolean).join('、')) || '',
