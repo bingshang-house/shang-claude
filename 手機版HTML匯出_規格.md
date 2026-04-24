@@ -1,10 +1,10 @@
 # 手機版 HTML 匯出功能規格
 
 **所屬專案**：house-profile.html 延伸功能
-**狀態**：🟡 規格確認完成，待開工
+**狀態**：🟢 2026-04-24 完工（commits dfccbde → 3e21861，6 個 commit）
 **規格確認日**：2026-04-24
-**預計工時**：5-7 hr
-**預計分 2-3 個 commit 推送**
+**完工日**：2026-04-24（同日完成）
+**實際工時**：約 2.5 hr（比預估 5-7 hr 快，因選擇 clone DOM 而非手工模板）
 
 ---
 
@@ -43,33 +43,29 @@
 
 ---
 
-## 三、實作任務清單（按順序）
+## 三、實作任務清單（按順序）✅ 全部完成 2026-04-24
 
-### A. 手機版 HTML 匯出（主工程 5-7 hr）
+### A. 手機版 HTML 匯出 ✅
 
-- [ ] 1. HTML 按鈕新增「📱 儲存成手機版（2 份）」（Excel 按鈕旁）
-- [ ] 2. 寫 `exportMobileHtml(mode)` 函式，參數 `'agent'` / `'anon'`
-- [ ] 3. 組裝響應式 HTML 模板：
-  - [ ] 內嵌 CSS（`@media (max-width:768px)` 切單欄）
-  - [ ] viewport meta tag
-  - [ ] 金黃系 UI（沿用現有配色）
-- [ ] 4. 圖片處理：
-  - [ ] Google Static Maps API 截位置圖 → base64 嵌入
-  - [ ] Static Maps API with markers 截嫌惡設施地圖 → base64 嵌入
-  - [ ] 地籍圖 SVG → Canvas → toDataURL PNG → 嵌入
-  - [ ] 格局參考圖（用戶上傳）已是 base64 直接嵌入
-- [ ] 5. 聯絡列條件渲染：
-  - [ ] `mode === 'agent'` 顯示專員+店長（店長無電話）
-  - [ ] `mode === 'anon'` 整組不渲染
-- [ ] 6. 底部公司資訊兩版都保留
-- [ ] 7. 一鍵按鈕觸發兩次 `exportMobileHtml('agent')` + `exportMobileHtml('anon')`
-- [ ] 8. 檔案下載命名：`{案件名}_專員版.html` / `{案件名}_無名版.html`
+- [x] 1. HTML 按鈕新增「📱 儲存成手機版（2 份）」（Excel 按鈕旁）
+- [x] 2. 寫 `exportMobileHtml(mode)` 函式，參數 `'agent'` / `'anon'`
+- [x] 3. 組裝響應式 HTML：改採 **clone `.a4-card` DOM + inline 全站 CSS**（比手工模板好維護）
+- [x] 4. 圖片處理：
+  - [x] Google Static Maps API 截位置圖 → base64
+  - [x] **位置圖外層包 `<a href="google maps search">` 點圖跳 Google Maps**（新增，規格沒寫）
+  - [ ] ~~嫌惡設施地圖 Static Maps with markers~~（本輪沒做；A4 裡沒獨立地圖元件，後續要可另加）
+  - [x] 地籍圖 SVG → Canvas 2x → PNG base64
+  - [x] 格局圖（用戶上傳）已是 base64 保留
+- [x] 5. 聯絡列條件渲染（`mode === 'anon'` 移除 `#out-contact`）
+- [x] 6. 底部公司資訊兩版都保留
+- [x] 7. 一鍵按鈕 `exportMobileHtmlBoth()` 連續呼叫兩次（sleep 400ms 避免瀏覽器擋連續下載）
+- [x] 8. 檔名簡化為 `專員版.html` / `無名版.html`（賞哥要求，原規格 `{案件}_專員版.html` 太長）
 
-### B. Excel 檔名預設修改（15 min）
+### B. Excel 檔名預設修改 ✅
 
-- [ ] 9. 找 `downloadCaseStudyXlsx` 函式（line ~4985）改檔名組合
-- [ ] 10. 找 `downloadA4Xlsx` 函式（line ~4346）改檔名組合
-- [ ] 11. 統一用 `{案件名稱}-{物件地址}-{專員名}.xlsx` 模板，空值 fallback
+- [x] 9. `downloadCaseStudyXlsx` 改用 `buildDownloadFileName('xlsx')`
+- [x] 10. `downloadA4Xlsx` 改用同一 helper
+- [x] 11. 統一 `{案件名稱}-{物件地址}-{專員名}.xlsx`，空值往前 fallback
 
 ---
 
