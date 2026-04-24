@@ -4145,7 +4145,7 @@
       e.removeAttribute('onmouseover'); e.removeAttribute('onmouseenter'); e.removeAttribute('oncontextmenu');
     });
 
-    // 位置圖：iframe → Static Maps base64
+    // 位置圖：iframe → Static Maps base64，外層包 <a> 可點開 Google Maps
     const mapDiv = clone.querySelector('#out-map');
     if (mapDiv) {
       const iframe = mapDiv.querySelector('iframe');
@@ -4159,7 +4159,15 @@
           img.src = 'data:image/jpeg;base64,' + _arrayToBase64(jpg);
           img.alt = '位置圖';
           img.style.cssText = 'width:100%;height:auto;display:block;';
-          mapDiv.appendChild(img);
+          // 點圖跳 Google Maps（新分頁 / 手機會開 app）
+          const link = document.createElement('a');
+          link.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr);
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.title = '點擊開啟 Google 地圖';
+          link.style.cssText = 'display:block;text-decoration:none;';
+          link.appendChild(img);
+          mapDiv.appendChild(link);
         } catch (e) {
           console.warn('位置圖失敗', e);
           mapDiv.appendChild(_makeFallbackBox('位置圖無法載入（需開網路查看）'));
