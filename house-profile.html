@@ -1589,6 +1589,12 @@
     const stairArr = Array.isArray(info.stair) ? info.stair : [];
     const stairText = stairArr.map(s => `${s.story_code} ${s.usage_code_desc || ''}`).join(' ');
     const hasWaterTank = /中繼/.test(stairText);
+    // 中繼水箱所在樓層（顯示用）
+    const waterTankFloors = stairArr
+      .filter(s => /中繼/.test(s.usage_code_desc || ''))
+      .map(s => (s.story_code || '').replace(/^地上0*(\d+)層/, '$1F').replace(/^地下0*(\d+)層/, 'B$1'))
+      .filter(Boolean);
+    const waterTankFloorsText = waterTankFloors.join('、');
 
     // 所有樓層（供透天顯示每層高度用）
     const allFloors = stairArr.map(s => ({
@@ -1609,7 +1615,7 @@
       completeDate: info.complete_date || '',
       totalFloors, totalUnits,
       builder: info.bmp01_name || '',
-      thisFloor, allFloors, hasWaterTank, isGreenBuilding, hasSolar,
+      thisFloor, allFloors, hasWaterTank, waterTankFloorsText, isGreenBuilding, hasSolar,
       coverrate: info.coverrate || '',
       spacerate: info.spacerate || '',
       buildheight: info.buildheight || '',
@@ -1822,7 +1828,7 @@
     } else {
       setText('td-lic-usage', p.thisFloor && p.thisFloor.usage ? fmtUsage(p.thisFloor.usage) : '－');
     }
-    setText('td-lic-watertank', p.hasWaterTank ? '有' : '無');
+    setText('td-lic-watertank', p.hasWaterTank ? (p.waterTankFloorsText ? `有（${p.waterTankFloorsText}）` : '有') : '無');
 
     const greenEl = document.getElementById('td-lic-green');
     if (greenEl) greenEl.innerHTML = p.isGreenBuilding ? '<b style="color:#2d7a2d;">✓ 有</b>' : '無';
@@ -3120,6 +3126,13 @@
     const distM = t.match(/高雄市([^區 ]+區)/);
     if (distM) d.district = `高雄市${distM[1]}`;
 
+    // 建物坐落地號（供 IGBS 地號 match 用；只上傳建物謄本時也能查標章）
+    const sitM = t.match(/建\s*物\s*坐\s*落\s*地\s*號\s*(\S+?段(?:\S+?小段)?)?\s*((?:\d{4,}-\d{3,}\s*)+)/);
+    if (sitM) {
+      d.sitSect = (sitM[1] || d.buildingSect || '').trim();
+      d.sitLandNos = [...sitM[2].matchAll(/\d{4,}-\d{3,}/g)].map(m => m[0]);
+    }
+
     // 里名（從地址或建物坐落抓取）
     const villageM = t.match(/([^\s區]{1,4}里)/);
     if (villageM) d.village = villageM[1];
@@ -3670,7 +3683,18 @@
     // 資料由 GHA 每兩週更新，前端讀 data/igbs-*.json；若尚未載入完成則顯示「載入中」
     (async () => {
       await loadIgbsData();
-      const hits = collectIgbsHitsForAllLands(landEntries);
+      // IGBS 查詢來源：土地謄本 landEntries + 建物謄本坐落地號補強（只上傳建物謄本時也能查）
+      const igbsInput = [...landEntries];
+      if (deed.sitSect && deed.sitLandNos && deed.sitLandNos.length && deed.district) {
+        const dist = deed.district.replace(/^高雄市/, '');
+        for (const lno of deed.sitLandNos) {
+          const loNo = `${deed.sitSect} ${lno}`;
+          if (!igbsInput.some(e => e.loNo === loNo && e.distName === dist)) {
+            igbsInput.push({ distName: dist, loNo, ping: 0 });
+          }
+        }
+      }
+      const hits = collectIgbsHitsForAllLands(igbsInput);
       const fmtGreen = arr => {
         if (!arr.length) return '<span style="color:#888;">無紀錄</span>';
         return arr.map(r => {
