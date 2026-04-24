@@ -3508,10 +3508,10 @@
         _vnRow.style.display = 'none';
       }
     }
-    // 地址（原本塞在 out-title，改放這）
+    // 地址（不加含車位 / 全新成屋 tag；字放大、金色強調）
     if (d.address) {
-      const _tags = [d.age === '全新' ? '全新成屋' : '', effHasPark ? '含車位' : ''].filter(Boolean).join('｜');
-      setText('td-addr', `${d.district || '高雄市前鎮區'}${d.address}${_tags ? '　' + _tags : ''}`);
+      const full = `${d.district || '高雄市前鎮區'}${d.address}`;
+      setHtml('td-addr', `<span style="font-size:16px;font-weight:700;color:#CC8F00;letter-spacing:0.5px;">${escH(full)}</span>`);
     } else {
       setText('td-addr', '－');
     }
