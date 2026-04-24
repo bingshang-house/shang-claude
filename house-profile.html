@@ -3266,23 +3266,22 @@
     // PDF.js 可能把「平方公尺」「權利範圍」拆成跨行的單字，regex 每字間都放 \s*
     const RATIO_RE = /[権權]\s*利\s*[範]\s*[囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/;
     const SQM_RE   = /([\d]+(?:\.[\d]+)?)\s*平\s*方\s*公\s*尺/;
+    // 嚴格 regex：要求「段名 建號 total 平方公尺 權利範圍」連續出現
+    // 避免「一般註記事項本共有部分包括...」誤 split 後抓到下一頁頁首的 08067 + 屋突 187.36 + 車位 100000/184 形成假共有部分
+    const PUB_ITEM_RE = /([一-龥]{1,8}段(?:[一-龥]{1,8}小段)?)\s*(\d{4,5})\s*-\s*(\d{3,4})\s*建\s*號\s*([\d.]+)\s*平\s*方\s*公\s*尺\s*[権權]\s*利\s*[範]\s*[囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/;
     const pubIdx = t.indexOf('共有部分');
     const pubParts = [];
     if (pubIdx >= 0) {
-      const pubSec = t.slice(pubIdx);
-      // 用「共有部分」切塊，每個建號一塊；標題列「共有部分資料」match 不到建號會跳過
-      const blocks = pubSec.split(/共\s*有\s*部\s*分/);
+      const blocks = t.slice(pubIdx).split(/共\s*有\s*部\s*分/);
       for (let i = 1; i < blocks.length; i++) {
-        const blk = blocks[i].slice(0, 600);
-        const kenhM  = blk.match(/(\d{4,5})\s*-\s*(\d{3,4})\s*建\s*號/);
-        const sqmM   = blk.match(SQM_RE);
-        const ratioM = blk.match(RATIO_RE);
-        if (kenhM && sqmM && ratioM) {
-          const total = parseFloat(sqmM[1]);
-          const denom = parseInt(ratioM[1]);
-          const numer = parseInt(ratioM[2]);
+        const blk = blocks[i].slice(0, 500);
+        const m = blk.match(PUB_ITEM_RE);
+        if (m) {
+          const total = parseFloat(m[4]);
+          const denom = parseInt(m[5]);
+          const numer = parseInt(m[6]);
           if (total > 10 && denom > 0) {
-            pubParts.push({ kenh: kenhM[1] + '-' + kenhM[2], total, denom, numer, mine: total * numer / denom });
+            pubParts.push({ kenh: m[2] + '-' + m[3], total, denom, numer, mine: total * numer / denom });
           }
         }
       }
