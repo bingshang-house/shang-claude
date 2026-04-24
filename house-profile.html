@@ -2690,8 +2690,8 @@
       const pubPrice = d4.features?.[0]?.attributes?.AA12 || 0;
 
       // 5. 取地籍坐標（空間查詢用）
+      // 預設用 G97_E_LNPAR_P 地籍幾何重心；查不到時退 gisdawh 回的 CX/CY（市地重劃/地號變更的地常沒 G97 幾何）
       // CADA_TEXT 格式：母號 '900'、子號 '900-47'（不含前導零，不含 dash 後的 padding）
-      // 謄本 '0900-0047' → '900-47'；'0900-0000' → '900'
       let urbanPlan = '', detailPlan = '', bcr = '', far = '';
       const _parts = landNo.split('-');
       const _main = parseInt(_parts[0], 10);
@@ -2699,12 +2699,27 @@
       const cadaText = _sub > 0 ? `${_main}-${_sub}` : String(_main);
       const wG = encodeURIComponent(`AA46N='${data.distName}' AND AA48='${sectCode}' AND CADA_TEXT='${cadaText}'`);
       const dG = await proxyFetch(`${MAPGIS2}/G97_E_LNPAR_P/MapServer/0/query?f=json&where=${wG}&returnGeometry=true&outFields=AA49&outSR=3826`);
+      let cx = null, cy = null;
       if (dG.features?.length && dG.features[0].geometry?.rings?.[0]) {
         const ring = dG.features[0].geometry.rings[0];
-        const cx = ring.reduce((s,p)=>s+p[0],0)/ring.length;
-        const cy = ring.reduce((s,p)=>s+p[1],0)/ring.length;
+        cx = ring.reduce((s,p)=>s+p[0],0)/ring.length;
+        cy = ring.reduce((s,p)=>s+p[1],0)/ring.length;
         // 保存 polygon 給地籍圖 SVG 渲染用（EPSG:3826 TWD97 TM2 單位公尺）
         _landData[idx].polygon = ring;
+      }
+
+      // fallback：G97 查無地籍幾何時，提前拉 gisdawh 拿 CX/CY（同座標系 EPSG:3826）
+      // enrichEarly 會存起來給下方併行 enricher 共用，不重複打
+      let enrichEarly = null;
+      if (cx == null || cy == null) {
+        enrichEarly = await queryGisdawhByLand(data.distName, sectName, landNo);
+        if (enrichEarly?.cx && enrichEarly?.cy) {
+          cx = enrichEarly.cx;
+          cy = enrichEarly.cy;
+        }
+      }
+
+      if (cx != null && cy != null) {
         const spatialQ = new URLSearchParams({
           f:'json',
           geometry: JSON.stringify({x:cx,y:cy,spatialReference:{wkid:3826}}),
@@ -2755,9 +2770,10 @@
       _landData[idx].nlscSect = await fetchNlscSect(data.distName, sectName);
 
       // gisdawh + SWC + NLSC 測量類別：3 個 enricher 併行跑
+      // enrichEarly 為 G97 fallback 時已預載的 gisdawh 結果，共用避免重複打
       try {
         const [enrich, swc, survey] = await Promise.all([
-          queryGisdawhByLand(data.distName, sectName, landNo),
+          enrichEarly ? Promise.resolve(enrichEarly) : queryGisdawhByLand(data.distName, sectName, landNo),
           querySwcByLand(data.distName, sectName, landNo),
           queryLandSurveyInfo(data.distName, sectName),
         ]);
