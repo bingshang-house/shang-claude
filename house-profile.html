@@ -4201,6 +4201,15 @@
       html, body { margin: 0; padding: 0; background: #F7F5F0; font-family: 'PingFang TC','Microsoft JhengHei','Noto Sans TC',sans-serif; color: #333; }
       body { padding: 16px; }
       .a4-card { width: 100% !important; max-width: 900px !important; margin: 0 auto !important; padding: 20px !important; box-shadow: 0 2px 16px rgba(0,0,0,0.08) !important; }
+      /* 表格 fixed layout：欄寬均分不溢、文字自動換行，所有螢幕尺寸都套 */
+      .info-table { table-layout: fixed !important; width: 100% !important; }
+      .info-table td {
+        word-break: break-word !important;
+        overflow-wrap: anywhere !important;
+        white-space: normal !important;
+        vertical-align: top !important;
+      }
+      .info-table td.key { white-space: normal !important; }
       @media (max-width: 768px) {
         body { padding: 8px; }
         .a4-card { padding: 12px !important; border-radius: 8px !important; }
@@ -4209,10 +4218,17 @@
         .price-item { flex: 1 1 45% !important; min-width: 140px !important; padding: 6px !important; }
         .price-divider { display: none !important; }
         .header-top-row, .header-title-row { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; }
-        .header-doc-title { font-size: 18px !important; line-height: 1.35 !important; }
-        .info-table { font-size: 13px !important; }
-        .info-table td { padding: 6px 5px !important; }
+        .header-doc-title { font-size: 17px !important; line-height: 1.35 !important; word-break: break-word !important; }
+        .header-contact { font-size: 12px !important; }
+        .info-table { font-size: 12.5px !important; }
+        .info-table td { padding: 7px 6px !important; line-height: 1.5 !important; }
+        .info-table td.key { font-size: 11.5px !important; padding: 7px 4px !important; }
+        .info-table col.c-key, .info-table .c-key { width: 27% !important; }
+        .info-table col.c-val, .info-table .c-val { width: 23% !important; }
+        /* full-row（地址等）占整行 */
+        .info-table tr.full-row td.val { width: auto !important; }
         .map-box iframe, .map-box img { height: auto !important; max-height: 320px !important; }
+        .section-bar { font-size: 12px !important; padding: 5px 8px !important; }
       }
       /* 列印時保持 A4 風格 */
       @media print {
@@ -4243,9 +4259,7 @@ ${clone.outerHTML}
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const baseName = buildDownloadFileName('html').replace(/\.html$/, '');
-    const suffix = mode === 'agent' ? '專員版' : '無名版';
-    a.download = `${baseName}_${suffix}.html`;
+    a.download = (mode === 'agent' ? '專員版' : '無名版') + '.html';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
