@@ -1026,6 +1026,15 @@
                 <td class="key">太陽能</td><td class="val" id="td-lic-solar">－</td>
                 <td class="key"></td><td class="val"></td>
               </tr>
+
+              <tr class="group-title"><td colspan="4">建築能效標章</td></tr>
+              <tr>
+                <td class="key">綠建築</td><td class="val" id="td-igbs-green">－</td>
+                <td class="key">智慧建築</td><td class="val" id="td-igbs-smart">－</td>
+              </tr>
+              <tr class="full-row">
+                <td class="key">建築能效</td><td class="val" colspan="3" id="td-igbs-bers">－</td>
+              </tr>
               <tr>
                 <td class="key">國小學區</td><td class="val" id="td-school-e">－</td>
                 <td class="key">國中學區</td><td class="val" id="td-school-j">－</td>
@@ -2403,6 +2412,110 @@
     }
   });
 
+  // ===== IGBS 三大標章資料（綠建築 / 智慧建築 / 建築能效）=====
+  // GHA 每兩週抓一次 igbs-tabc.org 存成 data/igbs-*.json；前端直接讀
+  let _igbsData = null;
+  async function loadIgbsData() {
+    if (_igbsData) return _igbsData;
+    try {
+      const [green, smart, bers, meta] = await Promise.all([
+        fetch('./data/igbs-green.json', { cache: 'force-cache' }).then(r => r.json()),
+        fetch('./data/igbs-smart.json', { cache: 'force-cache' }).then(r => r.json()),
+        fetch('./data/igbs-bers.json',  { cache: 'force-cache' }).then(r => r.json()),
+        fetch('./data/igbs-meta.json',  { cache: 'force-cache' }).then(r => r.json()).catch(() => ({})),
+      ]);
+      _igbsData = { green, smart, bers, meta };
+      return _igbsData;
+    } catch (e) {
+      console.warn('IGBS 標章資料載入失敗', e);
+      _igbsData = { green: [], smart: [], bers: [], meta: {} };
+      return _igbsData;
+    }
+  }
+  // 背景預載，A4 render 時直接用
+  loadIgbsData();
+
+  // 從 IGBS LandNumber 文字（e.g.「新興區新興段三小段1755地號等16筆」「高雄市燕巢區燕科段0030-0002地號 等1筆」）抽地號片段
+  // 回傳 Set<'0063-0000'>（4-4 碼 normalized）
+  function extractIgbsLandKeys(landNumberStr, distName, sectName) {
+    if (!landNumberStr) return new Set();
+    let s = String(landNumberStr).replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+    s = s.replace(/\s+/g, '').replace(/^高雄[市縣]/, '');
+    // 拆「、」「,」「；」「等」切塊
+    const chunks = s.split(/[、,；;]|等\d+筆|地號/);
+    const keys = new Set();
+    for (const c of chunks) {
+      if (!c) continue;
+      // 每塊裡可能有多個「1755」「1700-1」「0030-0002」樣式
+      const matches = c.matchAll(/(\d{1,4})(?:-(\d{1,4}))?/g);
+      for (const m of matches) {
+        const main = m[1].padStart(4, '0');
+        const sub  = (m[2] || '0').padStart(4, '0');
+        keys.add(`${main}-${sub}`);
+      }
+    }
+    return keys;
+  }
+
+  // 按給定的 distName + sectName + 4-4 碼地號，match IGBS 3 份資料
+  // 回傳 { green: [hits], smart: [hits], bers: [hits] }
+  function matchIgbsByLand(distName, sectName, landKey44) {
+    if (!_igbsData || !distName || !sectName || !landKey44) return null;
+    const matchOne = (records, landField) => {
+      const hits = [];
+      for (const r of records) {
+        const ln = r[landField] || '';
+        if (!ln) continue;
+        // 快速排除：LandNumber 文字沒提到這個區或段 → skip
+        const lnCompact = ln.replace(/\s+/g, '');
+        if (!lnCompact.includes(distName)) continue;
+        if (!lnCompact.includes(sectName)) continue;
+        const keys = extractIgbsLandKeys(ln, distName, sectName);
+        if (keys.has(landKey44)) hits.push(r);
+      }
+      return hits;
+    };
+    return {
+      green: matchOne(_igbsData.green, 'LandNumber'),
+      smart: matchOne(_igbsData.smart, 'LandNumber'),
+      bers:  matchOne(_igbsData.bers,  'LandNumber'),
+    };
+  }
+
+  // 掃所有 _landData 的地號，匯總 3 份標章命中（任一地號命中 → 該棟建物有此標章）
+  // 去重（可能多筆地號 match 到同一筆 IGBS 紀錄）
+  function collectIgbsHitsForAllLands(landEntries) {
+    if (!_igbsData) return { green: [], smart: [], bers: [] };
+    const uniqById = (arr, idField) => {
+      const seen = new Set();
+      return arr.filter(x => {
+        const id = x[idField] || JSON.stringify(x);
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+    };
+    const all = { green: [], smart: [], bers: [] };
+    for (const e of landEntries) {
+      if (!e.distName || !e.loNo) continue;
+      // 從 loNo（e.g.「瑞崗段四小段 0063-0000」或 e.sect/e.no 拆）抽 sectName + 4-4 碼
+      const m = String(e.loNo).match(/^(.+?段(?:.+?小段)?)\s*(\d+)(?:-(\d+))?/);
+      if (!m) continue;
+      const sectName = m[1].trim();
+      const key44 = m[2].padStart(4, '0') + '-' + (m[3] || '0').padStart(4, '0');
+      const hit = matchIgbsByLand(e.distName, sectName, key44);
+      if (!hit) continue;
+      all.green.push(...hit.green);
+      all.smart.push(...hit.smart);
+      all.bers.push(...hit.bers);
+    }
+    return {
+      green: uniqById(all.green, 'CertificateNumber'),
+      smart: uniqById(all.smart, 'ApplyIndex'), // smart 沒 CertificateNumber
+      bers:  uniqById(all.bers,  'CertificateNumber'),
+    };
+  }
+
   // ===== gisdawh enricher：補 國土功能分區 FUD + 非都市案公告現值/地價 =====
   // 一個 call 回 4 件事（AA16 現值 / AA17 地價 / FUD / CX+CY 幾何中心）
   const GISDAWH_TOKEN = '97A61AC4432B41AA7445CBCCFD8F9DD3268EB473949E0B11D39E1BAC1DFDEF7E87B3F27DD88753F166A01F9A574B93CA';
@@ -3468,6 +3581,43 @@
       if (e.swc.isViolation) return '<span style="color:#dc2626;font-weight:700;">⚠ 是</span>';
       return '否';
     }, '－', { allowHtml: true }));
+
+    // 建築能效標章（IGBS 綠建築 / 智慧建築 / 建築能效）：地號 match
+    // 資料由 GHA 每兩週更新，前端讀 data/igbs-*.json；若尚未載入完成則顯示「載入中」
+    (async () => {
+      await loadIgbsData();
+      const hits = collectIgbsHitsForAllLands(landEntries);
+      const fmtGreen = arr => {
+        if (!arr.length) return '<span style="color:#888;">無紀錄</span>';
+        return arr.map(r => {
+          const parts = [r.DataType, r.GradeEvaluation].filter(Boolean).join(' ');
+          const name = r.BuildingName ? `<span style="color:#666;font-size:10px;">（${escH(r.BuildingName)}）</span>` : '';
+          const expiry = r.CertificateExpiry ? `<span style="color:#7A5500;font-size:10px;">效期 ${escH(r.CertificateExpiry)}</span>` : '';
+          return `<div><span style="color:#166534;font-weight:700;">✓ ${escH(parts)}</span>　${expiry}${name ? '<br>'+name : ''}</div>`;
+        }).join('');
+      };
+      const fmtSmart = arr => {
+        if (!arr.length) return '<span style="color:#888;">無紀錄</span>';
+        return arr.map(r => {
+          const parts = [r.Classification, r.SmartBuildingLevel].filter(v => v && v !== '-').join(' ');
+          const expiry = r.CertificateExpiry ? `<span style="color:#7A5500;font-size:10px;">效期 ${escH(r.CertificateExpiry)}</span>` : '';
+          const name = r.BuildingName ? `<span style="color:#666;font-size:10px;">（${escH(r.BuildingName)}）</span>` : '';
+          return `<div><span style="color:#166534;font-weight:700;">✓ ${escH(parts || '通過')}</span>　${expiry}${name ? '<br>'+name : ''}</div>`;
+        }).join('');
+      };
+      const fmtBers = arr => {
+        if (!arr.length) return '<span style="color:#888;">無紀錄</span>';
+        return arr.map(r => {
+          const parts = [r.DataType, r.EnergyEfficiencyLevel ? `${r.EnergyEfficiencyLevel} 級` : ''].filter(Boolean).join(' ');
+          const expiry = r.CertificateExpiryDate ? `<span style="color:#7A5500;font-size:10px;">效期 ${escH(r.CertificateExpiryDate)}</span>` : '';
+          const name = r.BuildingName ? `<span style="color:#666;font-size:10px;">（${escH(r.BuildingName)}）</span>` : '';
+          return `<div><span style="color:#166534;font-weight:700;">✓ ${escH(parts)}</span>　${expiry}${name ? '<br>'+name : ''}</div>`;
+        }).join('');
+      };
+      setHtml('td-igbs-green', fmtGreen(hits.green));
+      setHtml('td-igbs-smart', fmtSmart(hits.smart));
+      setHtml('td-igbs-bers',  fmtBers(hits.bers));
+    })();
     // 更新左側總坪數標示
     const totalLbl = document.getElementById('land-total-label');
     if (totalLbl) totalLbl.textContent = landTotal ? `土地持分合計：${landTotal} 坪` : '';
@@ -4142,6 +4292,9 @@
       dualRow('本樓樓板高度', td('td-lic-floorheight'), '使用類組', td('td-lic-usage'));
       dualRow('中繼水箱', td('td-lic-watertank'), '綠建築', td('td-lic-green'));
       dualRow('太陽能', td('td-lic-solar'), '', '');
+      // 建築能效標章（IGBS 三大標章：地號 match igbs-tabc.org 資料）
+      dualRow('綠建築標章', td('td-igbs-green'), '智慧建築標章', td('td-igbs-smart'));
+      fullRow('建築能效標章', td('td-igbs-bers'));
       dualRow('國小學區', td('td-school-e'), '國中學區', td('td-school-j'));
       fullRow('社區公設', td('td-facilities'));
 
@@ -5296,6 +5449,9 @@
         中繼水箱: td('td-lic-watertank'),
         綠建築: td('td-lic-green'),
         太陽能: td('td-lic-solar'),
+        綠建築標章: td('td-igbs-green'),
+        智慧建築標章: td('td-igbs-smart'),
+        建築能效標章: td('td-igbs-bers'),
         國小學區: td('td-school-e'),
         國中學區: td('td-school-j'),
         社區公設: val('s-facilities'),
