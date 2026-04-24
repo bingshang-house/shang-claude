@@ -1483,8 +1483,22 @@
   }
 
   async function proxyFetch(arcgisUrl) {
-    const r = await fetch(`${URBAN_PROXY}/?url=${encodeURIComponent(arcgisUrl)}`);
-    return r.json();
+    // ArcGIS 上游偶發回 HTTP 500 「Error performing query operation」，或 200 with error body
+    // 一律 retry 3 次、退避 600ms → 1400ms；全失敗回 {features:[]} 讓呼叫端安全降級顯示 '－'
+    const delays = [0, 600, 1400];
+    let lastErr = null;
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i]) await new Promise(r => setTimeout(r, delays[i]));
+      try {
+        const r = await fetch(`${URBAN_PROXY}/?url=${encodeURIComponent(arcgisUrl)}`);
+        if (!r.ok) { lastErr = new Error('http ' + r.status); continue; }
+        const data = await r.json();
+        if (data && data.error) { lastErr = data.error; continue; }
+        return data;
+      } catch (e) { lastErr = e; }
+    }
+    console.warn('proxyFetch retry exhausted', lastErr, arcgisUrl);
+    return { features: [] };
   }
 
   // ===== buildmis 建築執照存根查詢（高雄市） =====
