@@ -2817,7 +2817,8 @@
       const pubPrice = d4.features?.[0]?.attributes?.AA12 || 0;
 
       // 5. 取地籍坐標（空間查詢用）
-      // 預設用 G97_E_LNPAR_P 地籍幾何重心；查不到時退 gisdawh 回的 CX/CY（市地重劃/地號變更的地常沒 G97 幾何）
+      // G97_E_LNPAR_P 與 gisdawh **並行**發：G97 要 polygon 畫地籍圖，gisdawh 的 CX/CY 當 G97 失敗 fallback
+      // 原本是串行 fallback（G97 先、失敗才打 gisdawh），改並行後 gisdawh 結果也能共用給後面 enricher
       // CADA_TEXT 格式：母號 '900'、子號 '900-47'（不含前導零，不含 dash 後的 padding）
       let urbanPlan = '', detailPlan = '', bcr = '', far = '';
       const _parts = landNo.split('-');
@@ -2825,7 +2826,10 @@
       const _sub  = parseInt(_parts[1] || '0', 10);
       const cadaText = _sub > 0 ? `${_main}-${_sub}` : String(_main);
       const wG = encodeURIComponent(`AA46N='${data.distName}' AND AA48='${sectCode}' AND CADA_TEXT='${cadaText}'`);
-      const dG = await proxyFetch(`${MAPGIS2}/G97_E_LNPAR_P/MapServer/0/query?f=json&where=${wG}&returnGeometry=true&outFields=AA49&outSR=3826`);
+      const [dG, enrichEarly] = await Promise.all([
+        proxyFetch(`${MAPGIS2}/G97_E_LNPAR_P/MapServer/0/query?f=json&where=${wG}&returnGeometry=true&outFields=AA49&outSR=3826`),
+        queryGisdawhByLand(data.distName, sectName, landNo),
+      ]);
       let cx = null, cy = null;
       if (dG.features?.length && dG.features[0].geometry?.rings?.[0]) {
         const ring = dG.features[0].geometry.rings[0];
@@ -2834,32 +2838,32 @@
         // 保存 polygon 給地籍圖 SVG 渲染用（EPSG:3826 TWD97 TM2 單位公尺）
         _landData[idx].polygon = ring;
       }
-
-      // fallback：G97 查無地籍幾何時，提前拉 gisdawh 拿 CX/CY（同座標系 EPSG:3826）
-      // enrichEarly 會存起來給下方併行 enricher 共用，不重複打
-      let enrichEarly = null;
-      if (cx == null || cy == null) {
-        enrichEarly = await queryGisdawhByLand(data.distName, sectName, landNo);
-        if (enrichEarly?.cx && enrichEarly?.cy) {
-          cx = enrichEarly.cx;
-          cy = enrichEarly.cy;
-        }
+      // G97 拿不到重心（市地重劃/地號變更常見）→ 退 gisdawh 的 CX/CY
+      if ((cx == null || cy == null) && enrichEarly?.cx && enrichEarly?.cy) {
+        cx = enrichEarly.cx;
+        cy = enrichEarly.cy;
       }
 
       if (cx != null && cy != null) {
-        const spatialQ = new URLSearchParams({
+        const buildSpatialQ = (outFields) => new URLSearchParams({
           f:'json',
           geometry: JSON.stringify({x:cx,y:cy,spatialReference:{wkid:3826}}),
           geometryType:'esriGeometryPoint',
           inSR:'3826',
           spatialRel:'esriSpatialRelIntersects',
           returnGeometry:'false',
-          outSR:'3826'
+          outSR:'3826',
+          outFields,
         });
 
-        // 6a. 主要計畫名稱（KS_G layer 16，用 URBANLEVEL 篩主要）
-        spatialQ.set('outFields','UPNAME,URBANLEVEL,PUBDATE');
-        const d6 = await proxyFetch(`${URBAN_MS}/16/query?${spatialQ}`);
+        // Step 6-7 三個空間查詢併發（原本串行 ~900ms → 並行 ~300ms）
+        const [d6, dDP, d7] = await Promise.all([
+          proxyFetch(`${URBAN_MS}/16/query?${buildSpatialQ('UPNAME,URBANLEVEL,PUBDATE')}`),
+          proxyFetch(`${URBAN_MS}/22/query?${buildSpatialQ('NAME,DPID')}`),
+          proxyFetch(`${URBAN_MS}/13/query?${buildSpatialQ('NAME,BCRTEXT,FARTEXT')}`),
+        ]);
+
+        // 6a. 主要計畫名稱（URBANLEVEL 篩主要、PUBDATE 取最新）
         if (d6.features?.length) {
           const valid = d6.features
             .filter(f => f.attributes.UPNAME?.trim())
@@ -2868,16 +2872,12 @@
           if (main) urbanPlan = main.attributes.UPNAME.trim();
         }
 
-        // 6b. 細部計畫區名（KS4_PlanD layer 22，NAME 欄位直接拿基底細部計畫名）
-        spatialQ.set('outFields','NAME,DPID');
-        const dDP = await proxyFetch(`${URBAN_MS}/22/query?${spatialQ}`);
+        // 6b. 細部計畫區名（NAME 直接拿基底細部計畫名）
         if (dDP.features?.length) {
           detailPlan = dDP.features[0].attributes.NAME?.trim() || '';
         }
 
-        // 7. 建蔽率 / 容積率（KS_Plan layer 13，直接空間查詢）
-        spatialQ.set('outFields','NAME,BCRTEXT,FARTEXT');
-        const d7 = await proxyFetch(`${URBAN_MS}/13/query?${spatialQ}`);
+        // 7. 建蔽率 / 容積率
         if (d7.features?.length) {
           const a = d7.features[0].attributes;
           bcr = a.BCRTEXT || '';
