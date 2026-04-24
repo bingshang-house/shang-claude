@@ -4214,8 +4214,12 @@
         body { padding: 8px; }
         .a4-card { padding: 12px !important; border-radius: 8px !important; }
         .info-map-row, .map-cadastral-row, .plan-points-row { flex-direction: column !important; gap: 10px !important; }
-        .price-bar { flex-wrap: wrap !important; gap: 8px 0 !important; }
-        .price-item { flex: 1 1 45% !important; min-width: 140px !important; padding: 6px !important; }
+        /* 5 個主指標改 3 欄 grid → 2 行（3+2），比原本 2 欄 3 行緊湊 */
+        .price-bar { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 10px 6px !important; flex-wrap: initial !important; }
+        .price-item { flex: none !important; min-width: 0 !important; padding: 6px 4px !important; }
+        .p-label { font-size: 11px !important; }
+        .p-value { font-size: 16px !important; }
+        .p-unit { font-size: 11px !important; }
         .price-divider { display: none !important; }
         .header-top-row, .header-title-row { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; }
         .header-doc-title { font-size: 17px !important; line-height: 1.35 !important; word-break: break-word !important; }
