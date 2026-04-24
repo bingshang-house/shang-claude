@@ -483,6 +483,12 @@
       font-weight: 700;
     }
     .btn-a4-xlsx:hover { background: linear-gradient(135deg, #7A5500 0%, #5a3e00 100%); }
+    .btn-mobile-html {
+      background: linear-gradient(135deg, #7a3a8a 0%, #4a1c58 100%);
+      color: #fff;
+      font-weight: 700;
+    }
+    .btn-mobile-html:hover { background: linear-gradient(135deg, #4a1c58 0%, #2e0f38 100%); }
 
     /* 嫌惡設施查核（左欄 + A4） */
     .hazard-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #fff; margin-left: 8px; cursor: pointer; user-select: none; }
@@ -527,6 +533,7 @@
   <span class="top-title">🏠 房屋銷售介紹產生器</span>
   <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載永慶制式 CASE STUDY Excel">📊 下載 Excel</button>
   <button class="btn btn-a4-xlsx" onclick="downloadA4Xlsx()" id="btnA4Xlsx" title="下載 A4 銷售資料表 Excel（即右側預覽版面）">📄 下載 A4 銷售表 Excel</button>
+  <button class="btn btn-mobile-html" onclick="exportMobileHtmlBoth()" id="btnMobileHtml" title="一鍵產出專員版 + 無名版手機友善 HTML（離線可看）">📱 儲存成手機版（2 份）</button>
   <label class="hazard-toggle" title="勾選時列印會包含 300m 內嫌惡設施清單（自動分頁）"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含嫌惡設施</label>
   <label class="hazard-toggle" title="勾選時列印會包含 A4 底部「環境注意」清單（土壤液化、淹水、斷層等風險圖層）"><input type="checkbox" id="s-print-env-risks" oninput="toggleEnvRiskPrint()">列印含環境注意</label>
   <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
@@ -4068,6 +4075,199 @@
     const base  = parts.length ? parts.join('-') : '銷售資料表';
     const safe  = base.replace(/[\/\\:*?"<>|\r\n\t]/g, '').slice(0, 80);
     return `${safe}.${ext}`;
+  }
+
+  // ============================================================================
+  // 手機版 HTML 匯出（2026-04-25）
+  // 一鍵產出「專員版」+「無名版」兩份響應式 HTML，圖片 base64 嵌入可離線看
+  // 規格：手機版HTML匯出_規格.md
+  // ============================================================================
+  function _arrayToBase64(uint8) {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < uint8.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, uint8.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
+
+  async function _svgToPngDataUrl(svgEl) {
+    if (!svgEl) return null;
+    const serialized = new XMLSerializer().serializeToString(svgEl);
+    const svgBlob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    try {
+      return await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const vb = svgEl.viewBox?.baseVal;
+            const w = (vb && vb.width) || svgEl.clientWidth || 800;
+            const h = (vb && vb.height) || svgEl.clientHeight || 600;
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(400, w * 2);
+            canvas.height = Math.max(300, h * 2);
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) { reject(e); }
+        };
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
+    } finally { URL.revokeObjectURL(svgUrl); }
+  }
+
+  function _makeFallbackBox(text) {
+    const div = document.createElement('div');
+    div.style.cssText = 'width:100%;height:200px;display:flex;align-items:center;justify-content:center;background:#FFF8E0;color:#7A5500;font-size:13px;border:1px dashed #CC8F00;border-radius:4px;';
+    div.textContent = text;
+    return div;
+  }
+
+  async function exportMobileHtml(mode) {
+    const card = document.querySelector('.a4-card');
+    if (!card) throw new Error('找不到 A4 區塊');
+    const clone = card.cloneNode(true);
+
+    // 聯絡列：anon 完全移除
+    if (mode === 'anon') {
+      const contact = clone.querySelector('#out-contact');
+      if (contact) contact.remove();
+    }
+
+    // 移除互動：按鈕、onclick、放大 modal 觸發
+    clone.querySelectorAll('button').forEach(b => b.remove());
+    clone.querySelectorAll('[onclick]').forEach(e => e.removeAttribute('onclick'));
+    clone.querySelectorAll('[onmouseover],[onmouseenter],[oncontextmenu]').forEach(e => {
+      e.removeAttribute('onmouseover'); e.removeAttribute('onmouseenter'); e.removeAttribute('oncontextmenu');
+    });
+
+    // 位置圖：iframe → Static Maps base64
+    const mapDiv = clone.querySelector('#out-map');
+    if (mapDiv) {
+      const iframe = mapDiv.querySelector('iframe');
+      if (iframe) {
+        iframe.remove();
+        try {
+          const street = String(deed.address || '').replace(/[一二三四五六七八九十]+樓.*$/, '').replace(/\d+樓.*$/, '').trim();
+          const addr = (deed.district || '') + street;
+          const jpg = await fetchStaticMapJpegBytes(addr);
+          const img = document.createElement('img');
+          img.src = 'data:image/jpeg;base64,' + _arrayToBase64(jpg);
+          img.alt = '位置圖';
+          img.style.cssText = 'width:100%;height:auto;display:block;';
+          mapDiv.appendChild(img);
+        } catch (e) {
+          console.warn('位置圖失敗', e);
+          mapDiv.appendChild(_makeFallbackBox('位置圖無法載入（需開網路查看）'));
+        }
+      }
+    }
+
+    // 地籍圖：SVG → Canvas PNG base64
+    const cadaDiv = clone.querySelector('#out-cadastral');
+    const liveSvg = document.querySelector('#out-cadastral svg');
+    if (cadaDiv && liveSvg) {
+      try {
+        const png = await _svgToPngDataUrl(liveSvg);
+        if (png) {
+          cadaDiv.innerHTML = '';
+          const img = document.createElement('img');
+          img.src = png;
+          img.alt = '地籍圖';
+          img.style.cssText = 'width:100%;height:auto;display:block;';
+          cadaDiv.appendChild(img);
+        }
+      } catch (e) {
+        console.warn('地籍圖轉 PNG 失敗', e);
+      }
+    }
+
+    // 格局圖 / 其他 img：確保是 base64，不是 base64 就試 fetch 轉
+    // (用戶上傳的格局圖 planInput 本來就 base64，不用動)
+    // 外部 img src（例如 Google logo）保留 URL，離線看不到也無傷
+
+    // 收集全站 CSS
+    const styleNodes = document.querySelectorAll('style');
+    let allCss = '';
+    styleNodes.forEach(s => { allCss += s.textContent + '\n'; });
+
+    // 手機版響應式 override
+    const mobileCss = `
+      /* 手機版 override */
+      html, body { margin: 0; padding: 0; background: #F7F5F0; font-family: 'PingFang TC','Microsoft JhengHei','Noto Sans TC',sans-serif; color: #333; }
+      body { padding: 16px; }
+      .a4-card { width: 100% !important; max-width: 900px !important; margin: 0 auto !important; padding: 20px !important; box-shadow: 0 2px 16px rgba(0,0,0,0.08) !important; }
+      @media (max-width: 768px) {
+        body { padding: 8px; }
+        .a4-card { padding: 12px !important; border-radius: 8px !important; }
+        .info-map-row, .map-cadastral-row, .plan-points-row { flex-direction: column !important; gap: 10px !important; }
+        .price-bar { flex-wrap: wrap !important; gap: 8px 0 !important; }
+        .price-item { flex: 1 1 45% !important; min-width: 140px !important; padding: 6px !important; }
+        .price-divider { display: none !important; }
+        .header-top-row, .header-title-row { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; }
+        .header-doc-title { font-size: 18px !important; line-height: 1.35 !important; }
+        .info-table { font-size: 13px !important; }
+        .info-table td { padding: 6px 5px !important; }
+        .map-box iframe, .map-box img { height: auto !important; max-height: 320px !important; }
+      }
+      /* 列印時保持 A4 風格 */
+      @media print {
+        body { padding: 0; background: #fff; }
+        .a4-card { box-shadow: none !important; margin: 0 !important; }
+      }
+    `;
+
+    const title = ((typeof deed === 'object' && deed?.address) || '銷售資料表') + (mode === 'agent' ? ' - 專員版' : '');
+
+    const html = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>${title.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</title>
+<style>
+${allCss}
+${mobileCss}
+</style>
+</head>
+<body>
+${clone.outerHTML}
+</body>
+</html>`;
+
+    const blob = new Blob(['﻿', html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const baseName = buildDownloadFileName('html').replace(/\.html$/, '');
+    const suffix = mode === 'agent' ? '專員版' : '無名版';
+    a.download = `${baseName}_${suffix}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  async function exportMobileHtmlBoth() {
+    const btn = document.getElementById('btnMobileHtml');
+    const orig = btn.textContent;
+    btn.textContent = '⏳ 產生中...';
+    btn.disabled = true;
+    try {
+      await exportMobileHtml('agent');
+      await new Promise(r => setTimeout(r, 400)); // 避免瀏覽器連續下載被擋
+      await exportMobileHtml('anon');
+    } catch (e) {
+      console.error('exportMobileHtml failed', e);
+      alert('產生手機版失敗：' + (e.message || e));
+    } finally {
+      btn.textContent = orig;
+      btn.disabled = false;
+    }
   }
 
   async function downloadA4Xlsx() {
