@@ -3308,23 +3308,35 @@
       }
     }
 
-    // 依 parkDenom 拆 pubParts：分母同於車位持份者 = 車位公設；其餘 = 住宅公設
+    // 拆分住宅公設 vs 車位公設：
+    //   新格式（pubParts 多筆，車位有獨立建號）：分母同 parkDenom 的那筆 = 車位公設
+    //   舊格式（pubParts 單筆且含車位）：共有部分和車位共用 total，公設要扣車位
     {
-      const parkParts = d.parkDenom ? pubParts.filter(p => p.denom === d.parkDenom) : [];
-      const resParts  = d.parkDenom ? pubParts.filter(p => p.denom !== d.parkDenom) : pubParts.slice();
-      if (resParts.length > 0) {
-        d.pubArea  = resParts.reduce((s, p) => s + p.mine, 0);
-        // 顯示用：第一筆（通常是大公）的比值
-        d.pubTotal = resParts[0].total;
-        d.pubDenom = resParts[0].denom;
-        d.pubNumer = resParts[0].numer;
-      }
-      if (parkParts.length > 0) {
-        // 車位公設：建號 total × 總持份 / 分母（多車位已累加 parkNumer）
-        d.parkArea = parkParts.reduce((s, p) => s + p.total * d.parkNumer / p.denom, 0);
-      } else if (d.hasParking && d.pubTotal) {
-        // 舊格式 fallback：車位沒獨立建號，用住宅公設 total
-        d.parkArea = d.pubTotal * d.parkNumer / d.parkDenom;
+      if (pubParts.length > 1 && d.parkDenom) {
+        // 新格式
+        const parkParts = pubParts.filter(p => p.denom === d.parkDenom);
+        const resParts  = pubParts.filter(p => p.denom !== d.parkDenom);
+        d.pubArea = resParts.reduce((s, p) => s + p.mine, 0);
+        if (resParts.length > 0) {
+          d.pubTotal = resParts[0].total;
+          d.pubDenom = resParts[0].denom;
+          d.pubNumer = resParts[0].numer;
+        }
+        if (parkParts.length > 0) {
+          d.parkArea = parkParts.reduce((s, p) => s + p.total * d.parkNumer / p.denom, 0);
+        }
+      } else if (pubParts.length === 1 && d.hasParking && d.parkDenom) {
+        // 舊格式：單筆共有部分含車位，減法切出公設
+        const p = pubParts[0];
+        d.pubTotal = p.total; d.pubDenom = p.denom; d.pubNumer = p.numer;
+        d.parkArea = p.total * d.parkNumer / d.parkDenom;
+        d.pubArea  = Math.max(0, p.mine - d.parkArea);
+      } else if (pubParts.length > 0) {
+        // 無車位 / 其他情境：全部算住宅公設
+        d.pubArea  = pubParts.reduce((s, p) => s + p.mine, 0);
+        d.pubTotal = pubParts[0].total;
+        d.pubDenom = pubParts[0].denom;
+        d.pubNumer = pubParts[0].numer;
       }
     }
 
@@ -3376,19 +3388,11 @@
     d.balconyPing   = _bal  ? _bal.ping  : 0;
     d.rainCoverPing = _rain ? _rain.ping : 0;
 
-    if (d.pubArea) {
-      if (d.hasParking && d.parkArea) {
-        d.pubOnlyArea = d.pubArea - d.parkArea;
-        d.parkPing    = sqm2ping(d.parkArea);
-      } else {
-        d.pubOnlyArea = d.pubArea;
-        d.parkPing    = 0;
-      }
-      d.pubOnlyPing = sqm2ping(d.pubOnlyArea);
-    } else {
-      d.pubOnlyPing = 0;
-      d.parkPing    = 0;
-    }
+    // 新版：pubArea 已在 pubParts 分類時扣掉車位公設（只含住宅公設），parkArea 獨立
+    // 舊版會做 pubOnlyArea = pubArea - parkArea，現在不用減
+    d.pubOnlyArea = d.pubArea || 0;
+    d.pubOnlyPing = d.pubOnlyArea ? sqm2ping(d.pubOnlyArea) : 0;
+    d.parkPing    = d.parkArea ? sqm2ping(d.parkArea) : 0;
 
     // 不含車位 = 主建物 + 所有附屬建物 + 公設
     d.totalNoPark   = p2(d.mainPing + d.attachedPing + d.pubOnlyPing);
