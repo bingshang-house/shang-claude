@@ -3243,47 +3243,75 @@
     d.rainCover     = _rain ? _rain.area : 0;
     d.rainCoverPing = _rain ? _rain.ping : 0;
 
-    // 共有部分 ── indexOf 切段，同時接受繁體「權利範圍」及日文字形「権利範囲」
+    // 共有部分 ── 可能有多筆建號（大公 / 小公 / 機電公設 / 車位公設），全部抓
     // PDF.js 可能把「平方公尺」「權利範圍」拆成跨行的單字，regex 每字間都放 \s*
     const RATIO_RE = /[権權]\s*利\s*[範]\s*[囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/;
     const SQM_RE   = /([\d]+(?:\.[\d]+)?)\s*平\s*方\s*公\s*尺/;
     const pubIdx = t.indexOf('共有部分');
+    const pubParts = [];
     if (pubIdx >= 0) {
-      const pubSec = t.slice(pubIdx, pubIdx + 600);
-      console.log('[共有部分 sec]', pubSec);
-      // 面積：直接找「數字 + 平方公尺」（整數或小數皆可，例如 2002 或 7017.05）
-      const pubAreaM = pubSec.match(SQM_RE);
-      const pubRatioM = pubSec.match(RATIO_RE);
-      if (pubAreaM && pubRatioM) {
-        const _pt = parseFloat(pubAreaM[1]);
-        if (_pt > 10) {
-          d.pubTotal = _pt;
-          d.pubDenom = parseInt(pubRatioM[1]);
-          d.pubNumer = parseInt(pubRatioM[2]);
-          d.pubArea  = d.pubTotal * d.pubNumer / d.pubDenom;
+      const pubSec = t.slice(pubIdx);
+      // 用「共有部分」切塊，每個建號一塊；標題列「共有部分資料」match 不到建號會跳過
+      const blocks = pubSec.split(/共\s*有\s*部\s*分/);
+      for (let i = 1; i < blocks.length; i++) {
+        const blk = blocks[i].slice(0, 600);
+        const kenhM  = blk.match(/(\d{4,5})\s*-\s*(\d{3,4})\s*建\s*號/);
+        const sqmM   = blk.match(SQM_RE);
+        const ratioM = blk.match(RATIO_RE);
+        if (kenhM && sqmM && ratioM) {
+          const total = parseFloat(sqmM[1]);
+          const denom = parseInt(ratioM[1]);
+          const numer = parseInt(ratioM[2]);
+          if (total > 10 && denom > 0) {
+            pubParts.push({ kenh: kenhM[1] + '-' + kenhM[2], total, denom, numer, mine: total * numer / denom });
+          }
+        }
+      }
+      console.log('[共有部分 parts]', pubParts);
+    }
+    d.pubParts = pubParts;
+
+    // 停車位 ── 多車位各一行「編號 X 權利範圍 D分之N」，累加所有編號與持份
+    d.hasParking = false;
+    {
+      const parkSearch = pubIdx >= 0 ? t.slice(pubIdx) : t;
+      let parkIdx = parkSearch.indexOf('含停車位');
+      if (parkIdx < 0) parkIdx = parkSearch.indexOf('停車位編號');
+      if (parkIdx >= 0) {
+        const parkSec = parkSearch.slice(parkIdx, parkIdx + 600);
+        console.log('[停車位 sec]', parkSec);
+        const parkItemRe = /編\s*號\s+(\S+?)\s+[権權]\s*利\s*[範]\s*[囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/g;
+        const parkItems = [];
+        let pm;
+        while ((pm = parkItemRe.exec(parkSec)) !== null) {
+          parkItems.push({ no: pm[1], denom: parseInt(pm[2]), numer: parseInt(pm[3]) });
+        }
+        if (parkItems.length > 0) {
+          d.hasParking = true;
+          d.parkNo    = parkItems.map(p => p.no).join('、');
+          d.parkDenom = parkItems[0].denom;
+          d.parkNumer = parkItems.reduce((s, p) => s + p.numer, 0);
         }
       }
     }
 
-    // 停車位 ── 在共有部分之後找「含停車位」或「停車位」
-    d.hasParking = false;
+    // 依 parkDenom 拆 pubParts：分母同於車位持份者 = 車位公設；其餘 = 住宅公設
     {
-      const parkSearch = pubIdx >= 0 ? t.slice(pubIdx) : t;
-      // 找「含停車位」或緊接在公設後的「停車位」段落
-      let parkIdx = parkSearch.indexOf('含停車位');
-      if (parkIdx < 0) parkIdx = parkSearch.indexOf('停車位編號');
-      if (parkIdx >= 0) {
-        const parkSec    = parkSearch.slice(parkIdx, parkIdx + 300);
-        console.log('[停車位 sec]', parkSec);
-        const parkNoM    = parkSec.match(/編\s*號\s+(\S+)/);
-        const parkRatioM = parkSec.match(RATIO_RE);
-        if (parkRatioM) {
-          d.parkNo     = parkNoM ? parkNoM[1] : '－';
-          d.parkDenom  = parseInt(parkRatioM[1]);
-          d.parkNumer  = parseInt(parkRatioM[2]);
-          d.hasParking = true;
-          if (d.pubTotal) d.parkArea = d.pubTotal * d.parkNumer / d.parkDenom;
-        }
+      const parkParts = d.parkDenom ? pubParts.filter(p => p.denom === d.parkDenom) : [];
+      const resParts  = d.parkDenom ? pubParts.filter(p => p.denom !== d.parkDenom) : pubParts.slice();
+      if (resParts.length > 0) {
+        d.pubArea  = resParts.reduce((s, p) => s + p.mine, 0);
+        // 顯示用：第一筆（通常是大公）的比值
+        d.pubTotal = resParts[0].total;
+        d.pubDenom = resParts[0].denom;
+        d.pubNumer = resParts[0].numer;
+      }
+      if (parkParts.length > 0) {
+        // 車位公設：建號 total × 總持份 / 分母（多車位已累加 parkNumer）
+        d.parkArea = parkParts.reduce((s, p) => s + p.total * d.parkNumer / p.denom, 0);
+      } else if (d.hasParking && d.pubTotal) {
+        // 舊格式 fallback：車位沒獨立建號，用住宅公設 total
+        d.parkArea = d.pubTotal * d.parkNumer / d.parkDenom;
       }
     }
 
