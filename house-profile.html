@@ -4059,6 +4059,17 @@
   // 決策：1a 允許溢出 2 頁 / 2a 紅字警告塞 cell / 3a 新按鈕「📄 下載 A4 銷售表 Excel」
   //       4a 全 Windows Office / 5b 多筆土地地號前綴黑字
   // ============================================================================
+  // 下載檔名模板：{案件名}-{地址}-{專員}.{ext}；空值往前 fallback
+  function buildDownloadFileName(ext) {
+    const caseName = (document.getElementById('cs-s-case-name')?.value || '').trim();
+    const addr     = ((typeof deed === 'object' && deed?.address) || '').trim();
+    const partner  = (document.getElementById('cs-s-partner-name')?.value || '').trim();
+    const parts = [caseName, addr, partner].filter(Boolean);
+    const base  = parts.length ? parts.join('-') : '銷售資料表';
+    const safe  = base.replace(/[\/\\:*?"<>|\r\n\t]/g, '').slice(0, 80);
+    return `${safe}.${ext}`;
+  }
+
   async function downloadA4Xlsx() {
     const btn = document.getElementById('btnA4Xlsx');
     const origText = btn.textContent;
@@ -4612,8 +4623,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      let fn = (caseName || '銷售資料表').replace(/[\/\\:*?"<>|]/g, '').slice(0, 60);
-      a.download = `${fn}_${dateStr.replace(/\//g, '-')}.xlsx`;
+      a.download = buildDownloadFileName('xlsx');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -5252,9 +5262,8 @@
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const fname = [val('cs-s-contract') || '銷售表', d.address || '物件'].filter(Boolean).join('-') + '.xlsx';
       a.href = url;
-      a.download = fname;
+      a.download = buildDownloadFileName('xlsx');
       document.body.appendChild(a);
       a.click();
       setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
