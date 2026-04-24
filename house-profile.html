@@ -2519,23 +2519,71 @@
   // ===== gisdawh enricher：補 國土功能分區 FUD + 非都市案公告現值/地價 =====
   // 一個 call 回 4 件事（AA16 現值 / AA17 地價 / FUD / CX+CY 幾何中心）
   const GISDAWH_TOKEN = '97A61AC4432B41AA7445CBCCFD8F9DD3268EB473949E0B11D39E1BAC1DFDEF7E87B3F27DD88753F166A01F9A574B93CA';
-  let _sectCodeMap = null; // lazy
+  // 政府系統 PUA（Private Use Area）字元 → 標準 Unicode 對照
+  // sect-code-gisdawh.json 與 KcgTB 用 BIG5→UTF-8 殘留的 PUA 字，user 輸入都是標準字需 normalize
+  // 未來碰到新的 PUA 段查不到，把 PUA 字元對應標準字補進此表即可
+  const PUA_TO_STD = {
+    '': '廍', // 左營區廍後段、小港區中廍段
+    // 待確認（下面 9 個 PUA 出現的段，哪天查不到再補對應標準字）：
+    //    （橋頭-頂田X段、彌陀-X港段）
+    //    （六龜-花X段）
+    //    （鳥松-崎子X段、大腿段）
+    //    （杉林-十張X段）
+    //    （小港-X莊段）
+    //    （鳥松-X埔段）
+    //    （岡山-X子段）
+    //    （旗山-X碡坑段）
+    //    （大寮-磚子X段）
+  };
+  function normalizePua(s) {
+    if (!s) return s;
+    return String(s).replace(/[-]/g, c => PUA_TO_STD[c] || c);
+  }
+  let _sectCodeMap = null; // lazy，同時存 normalized 與原始 key，value = { code, rawKey }
   async function getSectCodeMap() {
     if (_sectCodeMap) return _sectCodeMap;
+    _sectCodeMap = {};
     try {
       const r = await fetch('./sect-code-gisdawh.json', { cache: 'force-cache' });
       const j = await r.json();
-      _sectCodeMap = j.nameToCode || {};
+      for (const [k, v] of Object.entries(j.nameToCode || {})) {
+        const nk = normalizePua(k);
+        const entry = { code: v, rawKey: k };
+        _sectCodeMap[nk] = entry;
+        if (nk !== k) _sectCodeMap[k] = entry; // 兩種寫法都能 lookup
+      }
     } catch (e) {
       console.warn('sect-code-gisdawh.json 載入失敗', e);
-      _sectCodeMap = {};
     }
     return _sectCodeMap;
   }
-  async function queryGisdawhByLand(distName, sectName, landNo) {
+  // 回 { code, rawKey } 或 null。rawKey 可能含 PUA，給 KcgTB 查詢用
+  async function getSectCodeEntry(distName, sectName) {
     const map = await getSectCodeMap();
-    const code = map[`${distName}-${sectName}`];
-    if (!code) return null; // 外縣市 / 查無對照
+    return map[normalizePua(`${distName}-${sectName}`)] || null;
+  }
+  // 從 rawKey "區名-段名" 拆出段名部分
+  function extractRawSect(rawKey) {
+    const i = rawKey.indexOf('-');
+    return i >= 0 ? rawKey.slice(i + 1) : rawKey;
+  }
+  // KcgTB 地段表 by DIST cache（ArcGIS 對 BIG5 外中文字 where 比對失效，改整區拉下來 JS 比對）
+  // 每區 < 100 筆，遠低於 ArcGIS 1000 筆上限
+  const _kcgSectsByDistCache = {};
+  async function fetchKcgSectsByDist(distCode) {
+    if (_kcgSectsByDistCache[distCode]) return _kcgSectsByDistCache[distCode];
+    const w = encodeURIComponent(`DIST='${distCode}'`);
+    const d = await proxyFetch(`${PROXY_BASE}/KcgVT/KcgTB/MapServer/4/query?f=json&where=${w}&returnGeometry=false&outFields=SECT,KEY03&outSR=3826`);
+    _kcgSectsByDistCache[distCode] = d.features?.map(f => ({
+      sect: f.attributes.SECT,
+      name: f.attributes.KEY03,
+    })) || [];
+    return _kcgSectsByDistCache[distCode];
+  }
+  async function queryGisdawhByLand(distName, sectName, landNo) {
+    const entry = await getSectCodeEntry(distName, sectName);
+    if (!entry) return null; // 外縣市 / 查無對照
+    const code = entry.code;
     const parts = String(landNo).split('-');
     const main = parts[0].padStart(4, '0');
     const sub  = (parts[1] || '0').padStart(4, '0');
@@ -2580,9 +2628,9 @@
     'D': '解除林班地',     'E': '海埔新生地',    'F': '農村社區重劃', 'Z': '其他'
   };
   async function queryLandSurveyInfo(distName, sectName) {
-    const map = await getSectCodeMap();
-    const sect4 = map[`${distName}-${sectName}`];
-    if (!sect4) return null;
+    const entry = await getSectCodeEntry(distName, sectName);
+    if (!entry) return null;
+    const sect4 = entry.code;
     const apiUrl = `https://api.nlsc.gov.tw/other/GetLandSecInfoNlsc/E/${sect4}`;
     const target = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
     for (let i = 0; i < 3; i++) {
@@ -2614,15 +2662,17 @@
   // ===== SWC 水利局 enricher：山坡地比例、特定水保區、崩塌區、違規案件 =====
   // SWC SectionID 與 gisdawh AA48 完全相同（1483 筆零差異），沿用 sect-code-gisdawh.json
   async function querySwcByLand(distName, sectName, landNo) {
-    const map = await getSectCodeMap();
-    const sectionId = map[`${distName}-${sectName}`];
-    if (!sectionId) return null;
+    const entry = await getSectCodeEntry(distName, sectName);
+    if (!entry) return null;
+    const sectionId = entry.code;
+    // SWC CADA_ID 用對照表的 rawSect（可能含 PUA），因為 SWC 後台用同一種編碼
+    const rawSect = extractRawSect(entry.rawKey);
     const parts = String(landNo).split('-');
     const landNo1 = parts[0].replace(/^0+/, '') || '0';
     const landNo2 = (parts[1] || '0').replace(/^0+/, '') || '0';
     const base = 'https://swc.kcg.gov.tw/gsapi';
     const qUrl = `${base}/KSCadaster/query/${sectionId}/${encodeURIComponent(landNo1)}`;
-    const vUrl = `${base}/SwcCase/CheckViolation?CADA_TOWN=${encodeURIComponent(distName)}&CADA_ID=${encodeURIComponent(sectName)}&LAND_NO1=${encodeURIComponent(landNo1)}&LAND_NO2=${encodeURIComponent(landNo2)}`;
+    const vUrl = `${base}/SwcCase/CheckViolation?CADA_TOWN=${encodeURIComponent(distName)}&CADA_ID=${encodeURIComponent(rawSect)}&LAND_NO1=${encodeURIComponent(landNo1)}&LAND_NO2=${encodeURIComponent(landNo2)}`;
     const fetchViaWorker = async (apiUrl) => {
       const target = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
       for (let i = 0; i < 3; i++) {
@@ -2792,10 +2842,16 @@
     el.style.color = '#92400e';
     try {
       // 1. 地段代碼
-      const w1 = encodeURIComponent(`DIST='${distCode}' AND KEY03='${sectName}'`);
-      const d1 = await proxyFetch(`${PROXY_BASE}/KcgVT/KcgTB/MapServer/4/query?f=json&where=${w1}&returnGeometry=false&outFields=SECT&outSR=3826`);
-      if (!d1.features?.length) { el.textContent = '⚠ 找不到地段'; return; }
-      const sectCode = d1.features[0].attributes.SECT;
+      // ⚠ ArcGIS 內部對 BIG5 外生僻字（如「廍」U+5ECD）的 where 比對完全失效（= 與 LIKE 都不行）
+      // 繞過：整區地段表一次拉 cache（每區 < 100 筆），JS 端做精確字串比對，避開 ArcGIS 中文 collation 問題
+      // 同時兼容 PUA 版本（對照表可能含 PUA，KcgTB KEY03 多為標準字；兩個都試最穩）
+      const _entry = await getSectCodeEntry(data.distName, sectName);
+      const _rawSect = _entry ? extractRawSect(_entry.rawKey) : sectName;
+      const _sectsToTry = _rawSect !== sectName ? [sectName, _rawSect] : [sectName];
+      const _distSects = await fetchKcgSectsByDist(distCode);
+      const _exactHit = _distSects.find(s => _sectsToTry.includes(s.name));
+      if (!_exactHit) { el.textContent = '⚠ 找不到地段'; return; }
+      const sectCode = _exactHit.sect;
       const parts    = landNo.split('-');
       const landCode = parts[0].padStart(4,'0') + (parts[1]||'0').padStart(4,'0');
 
