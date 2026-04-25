@@ -7297,11 +7297,17 @@ ${factsText}
   }
   function safeName(s) { return (s || '').replace(/[\/\\:*?"<>|\r\n\t]/g, '').slice(0, 80); }
 
+  // 不該序列化的 input type（file 不能 JS 寫值；button/submit/reset/image 沒 value 概念）
+  function isUnserializableInput(el) {
+    if (el.tagName !== 'INPUT') return false;
+    return ['file', 'button', 'submit', 'reset', 'image'].indexOf(el.type) >= 0;
+  }
   function serializeFormState() {
     const state = { v: 1, savedAt: new Date().toISOString(), formFields: {}, deed: window.deed || {} };
     document.querySelectorAll('.left-panel input, .left-panel textarea, .left-panel select').forEach(el => {
       if (!el.id) return;
       if (el.id === 'gmApiKey' || el.id.startsWith('s-print-')) return;
+      if (isUnserializableInput(el)) return;
       state.formFields[el.id] = (el.type === 'checkbox') ? el.checked : el.value;
     });
     return state;
@@ -7311,6 +7317,7 @@ ${factsText}
     Object.keys(data.formFields).forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
+      if (isUnserializableInput(el)) return;
       if (el.type === 'checkbox') el.checked = !!data.formFields[id];
       else el.value = data.formFields[id] || '';
     });
