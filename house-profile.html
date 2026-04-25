@@ -5829,6 +5829,10 @@ ${clone.outerHTML}
     document.getElementById('planName').textContent = '';
     updateValidationBanner();
     updateCard();
+    // 重置回到「新案模式」，下次存 = 新增
+    if (window.__cloudUI && window.__cloudUI.clearCurrentCase) {
+      window.__cloudUI.clearCurrentCase();
+    }
   }
 
   // ===== Helpers =====
@@ -7492,6 +7496,38 @@ ${factsText}
   }
   function escAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
 
+  // ===== Current case tracking（task #10：載入後再存 = 更新原檔；reset 後 = 新增）=====
+  function getCurrentCase() {
+    return {
+      fileId: sessionStorage.getItem('current_case_file_id') || null,
+      fileName: sessionStorage.getItem('current_case_file_name') || null,
+    };
+  }
+  function setCurrentCase(fileId, fileName) {
+    if (fileId) {
+      sessionStorage.setItem('current_case_file_id', fileId);
+      sessionStorage.setItem('current_case_file_name', fileName || '');
+    } else {
+      sessionStorage.removeItem('current_case_file_id');
+      sessionStorage.removeItem('current_case_file_name');
+    }
+    updateSaveButtonLabel();
+  }
+  function updateSaveButtonLabel() {
+    const btn = document.getElementById('btnCloudSave');
+    if (!btn) return;
+    const cur = getCurrentCase();
+    if (cur.fileId) {
+      const shortName = (cur.fileName || '').replace('.json', '');
+      const display = shortName.length > 16 ? shortName.slice(0, 14) + '…' : shortName;
+      btn.textContent = '💾 更新「' + display + '」';
+      btn.title = '更新此案到 Drive（原檔覆蓋）';
+    } else {
+      btn.textContent = '💾 存到雲端';
+      btn.title = '把目前資料存進你 Google Drive 的「賞好賞銷售資料」資料夾';
+    }
+  }
+
   // ===== UI handlers =====
   window.handleCloudSaveClick = async function() {
     const btn = document.getElementById('btnCloudSave');
@@ -7500,20 +7536,30 @@ ${factsText}
       alert('Drive 尚未就緒，請等待右上「☁️ Drive 已就緒」綠色標示後再試');
       return;
     }
-    const baseName = buildBaseName();
-    if (baseName === '銷售資料表') {
-      if (!confirm('尚未填寫案名 / 地址 / 經紀人，存檔名稱會用「銷售資料表」+ 時間戳。確定繼續？')) return;
+    const cur = getCurrentCase();
+    let filename;
+    if (cur.fileId) {
+      filename = cur.fileName;
+    } else {
+      const baseName = buildBaseName();
+      if (baseName === '銷售資料表') {
+        if (!confirm('尚未填寫案名 / 地址 / 經紀人，存檔名稱會用「銷售資料表」+ 時間戳。確定繼續？')) return;
+      }
+      filename = safeName(baseName) + '_' + timestampForFilename() + '.json';
     }
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = '⏳ 存檔中...';
+    btn.textContent = cur.fileId ? '⏳ 更新中...' : '⏳ 存檔中...';
     try {
       const data = serializeFormState();
-      const filename = safeName(baseName) + '_' + timestampForFilename() + '.json';
-      const result = await uploadJsonToDrive(filename, data);
-      btn.textContent = '✅ 已存到雲端';
+      const result = await uploadJsonToDrive(filename, data, cur.fileId);
+      btn.textContent = cur.fileId ? '✅ 已更新' : '✅ 已存到雲端';
+      // 第一次新增 → 自動進入「編輯模式」，下次存就會更新原檔
+      if (!cur.fileId && result && result.id) {
+        setCurrentCase(result.id, result.name || filename);
+      }
       console.log('Cloud save success:', result);
-      setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 2200);
+      setTimeout(() => { btn.disabled = false; updateSaveButtonLabel(); }, 2200);
     } catch (err) {
       console.error('Cloud save failed:', err);
       alert('存檔失敗：' + (err.message || err));
@@ -7587,7 +7633,8 @@ ${factsText}
           try {
             const data = await downloadJsonFromDrive(id);
             deserializeFormState(data);
-            alert('✅ 已載入：' + name.replace('.json', ''));
+            setCurrentCase(id, name);
+            alert('✅ 已載入：' + name.replace('.json', '') + '\n\n之後按「💾 更新」會覆蓋原檔。\n要存成新檔請按右上「重置」回到新案模式。');
           } catch (err) {
             alert('載入失敗：' + (err.message || err));
           }
@@ -7601,6 +7648,9 @@ ${factsText}
           if (!confirm('確定刪除「' + name.replace('.json', '') + '」？\n（無法復原）')) return;
           try {
             await deleteFileFromDrive(id);
+            // 若刪的是當前載入中的案 → 清 currentCase（避免之後存檔指向已不存在的 fileId）
+            const cur = getCurrentCase();
+            if (cur.fileId === id) setCurrentCase(null, null);
             b.closest('.case-item').remove();
             if (!dd.querySelector('.case-item')) {
               const empty = document.createElement('div');
@@ -7622,7 +7672,19 @@ ${factsText}
     }
   };
 
-  window.__cloudUI = { close: closeDropdown };
+  window.__cloudUI = {
+    close: closeDropdown,
+    clearCurrentCase: () => setCurrentCase(null, null),
+    getCurrentCase,
+  };
+
+  // 頁面載入時恢復按鈕 label（如果 sessionStorage 有 currentCase）
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', updateSaveButtonLabel);
+  } else {
+    updateSaveButtonLabel();
+  }
+
   window.__shangCloud = {
     serializeFormState, deserializeFormState,
     uploadJsonToDrive, downloadJsonFromDrive, deleteFileFromDrive, listCasesFromDrive,
