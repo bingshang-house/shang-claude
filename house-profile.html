@@ -630,6 +630,48 @@
     }
     .drive-status.ready { background: #E8F5E9; color: #2E7D32; }
     .drive-status.error { background: #FFEBEE; color: #C62828; cursor: help; }
+
+    /* ===== Cloud Save / Load 按鈕 ===== */
+    .btn-cloud-save { background: #4285F4; color: #fff; }
+    .btn-cloud-save:hover:not(:disabled) { background: #3367D6; }
+    .btn-cloud-save:disabled { opacity: 0.7; cursor: wait; }
+    .btn-cloud-load { background: #34A853; color: #fff; position: relative; }
+    .btn-cloud-load:hover:not(:disabled) { background: #2E7D32; }
+    .btn-cloud-load:disabled { opacity: 0.7; cursor: wait; }
+
+    /* ===== 我的案件 下拉清單 ===== */
+    .cases-dropdown {
+      position: fixed; z-index: 99998;
+      background: #fff; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+      min-width: 360px; max-width: 480px; max-height: 70vh; overflow-y: auto;
+      padding: 8px 0; font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    }
+    .cases-dropdown-header {
+      padding: 10px 16px; border-bottom: 1px solid #E8E0CC;
+      font-weight: 700; color: #7A5500; font-size: 13px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .cases-dropdown-header .close-x {
+      cursor: pointer; color: #999; font-size: 18px; padding: 0 4px;
+    }
+    .cases-dropdown-header .close-x:hover { color: #C00; }
+    .cases-empty { padding: 28px 16px; text-align: center; color: #999; font-size: 13px; }
+    .cases-loading { padding: 20px 16px; text-align: center; color: #999; font-size: 13px; }
+    .case-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px; cursor: pointer; transition: background .15s;
+      border-bottom: 1px solid #F4EFE0;
+    }
+    .case-item:last-child { border-bottom: none; }
+    .case-item:hover { background: #FFFBF0; }
+    .case-item .name { flex: 1; font-size: 13px; color: #333; word-break: break-all; line-height: 1.4; }
+    .case-item .meta { font-size: 11px; color: #999; margin-top: 2px; }
+    .case-item .delete-btn {
+      background: none; border: 1px solid #E8E0CC; color: #999;
+      padding: 3px 9px; border-radius: 12px; font-size: 11px; cursor: pointer;
+      flex-shrink: 0;
+    }
+    .case-item .delete-btn:hover { border-color: #C00; color: #C00; background: #FFEBEE; }
   </style>
 </head>
 <body>
@@ -682,6 +724,8 @@
   <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載永慶制式 CASE STUDY Excel">📊 下載 Excel</button>
   <button class="btn btn-a4-xlsx" onclick="downloadA4Xlsx()" id="btnA4Xlsx" title="下載 A4 銷售資料表 Excel（即右側預覽版面）">📄 下載 A4 銷售表 Excel</button>
   <button class="btn btn-mobile-html" onclick="exportMobileHtmlBoth()" id="btnMobileHtml" title="一鍵產出專員版 + 無名版手機友善 HTML（離線可看）">📱 儲存成手機版（2 份）</button>
+  <button class="btn btn-cloud-save" onclick="handleCloudSaveClick()" id="btnCloudSave" title="把目前資料存進你 Google Drive 的「賞好賞銷售資料」資料夾">💾 存到雲端</button>
+  <button class="btn btn-cloud-load" onclick="handleCloudListClick()" id="btnCloudLoad" title="從 Google Drive 叫回先前存過的案件">📂 我的案件 ▼</button>
   <label class="hazard-toggle" title="勾選時列印會包含 300m 內嫌惡設施清單（自動分頁）"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含嫌惡設施</label>
   <label class="hazard-toggle" title="勾選時列印會包含 A4 底部「環境注意」清單（土壤液化、淹水、斷層等風險圖層）"><input type="checkbox" id="s-print-env-risks" oninput="toggleEnvRiskPrint()">列印含環境注意</label>
   <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
@@ -7223,6 +7267,260 @@ ${factsText}
   } else {
     bootAuth();
   }
+})();
+</script>
+
+<!-- ===== Cloud Save / Load JS（雲端化階段 1：task #8 + #9） ===== -->
+<script>
+(function(){
+  function getDriveAPI() { return window.__shangDrive || null; }
+  function getAccessToken() {
+    return (window.__authState && window.__authState.accessToken) || sessionStorage.getItem('auth_access_token');
+  }
+  function getFolderId() {
+    const drive = getDriveAPI();
+    if (drive && drive.getFolderId()) return drive.getFolderId();
+    return sessionStorage.getItem('auth_drive_folder_id') || localStorage.getItem('shang_drive_folder_id');
+  }
+
+  function timestampForFilename(d) {
+    d = d || new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes());
+  }
+  function buildBaseName() {
+    const caseName = (document.getElementById('cs-s-case-name')?.value || '').trim();
+    const addr = ((window.deed && window.deed.address) || '').trim();
+    const partner = (document.getElementById('cs-s-partner-name')?.value || '').trim();
+    const parts = [caseName, addr, partner].filter(Boolean);
+    return parts.length ? parts.join('-') : '銷售資料表';
+  }
+  function safeName(s) { return (s || '').replace(/[\/\\:*?"<>|\r\n\t]/g, '').slice(0, 80); }
+
+  function serializeFormState() {
+    const state = { v: 1, savedAt: new Date().toISOString(), formFields: {}, deed: window.deed || {} };
+    document.querySelectorAll('.left-panel input, .left-panel textarea, .left-panel select').forEach(el => {
+      if (!el.id) return;
+      if (el.id === 'gmApiKey' || el.id.startsWith('s-print-')) return;
+      state.formFields[el.id] = (el.type === 'checkbox') ? el.checked : el.value;
+    });
+    return state;
+  }
+  function deserializeFormState(data) {
+    if (!data || !data.formFields) throw new Error('資料格式錯誤');
+    Object.keys(data.formFields).forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.type === 'checkbox') el.checked = !!data.formFields[id];
+      else el.value = data.formFields[id] || '';
+    });
+    if (data.deed) window.deed = data.deed;
+    if (typeof window.updateCard === 'function') window.updateCard();
+  }
+
+  async function uploadJsonToDrive(filename, jsonData, existingFileId) {
+    const folderId = getFolderId();
+    const token = getAccessToken();
+    if (!folderId) throw new Error('Drive 資料夾未就緒');
+    if (!token) throw new Error('登入 token 失效，請重新登入');
+    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+    const metadata = existingFileId
+      ? { name: filename }
+      : { name: filename, mimeType: 'application/json', parents: [folderId] };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', blob);
+    const url = existingFileId
+      ? 'https://www.googleapis.com/upload/drive/v3/files/' + existingFileId + '?uploadType=multipart&fields=id,name,modifiedTime'
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime';
+    const r = await fetch(url, {
+      method: existingFileId ? 'PATCH' : 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: form,
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      throw new Error('Drive 上傳失敗：' + r.status + ' ' + text.slice(0, 200));
+    }
+    return await r.json();
+  }
+  async function downloadJsonFromDrive(fileId) {
+    const token = getAccessToken();
+    if (!token) throw new Error('登入 token 失效，請重新登入');
+    const r = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    if (!r.ok) throw new Error('Drive 下載失敗：' + r.status);
+    return await r.json();
+  }
+  async function deleteFileFromDrive(fileId) {
+    const token = getAccessToken();
+    if (!token) throw new Error('登入 token 失效，請重新登入');
+    const r = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    if (!r.ok && r.status !== 204) throw new Error('Drive 刪除失敗：' + r.status);
+    return true;
+  }
+  async function listCasesFromDrive() {
+    const folderId = getFolderId();
+    const token = getAccessToken();
+    if (!folderId) throw new Error('Drive 資料夾未就緒');
+    if (!token) throw new Error('登入 token 失效，請重新登入');
+    const q = "'" + folderId + "' in parents and mimeType='application/json' and trashed=false";
+    const r = await fetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc', {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    if (!r.ok) throw new Error('Drive 列表失敗：' + r.status);
+    const j = await r.json();
+    return j.files || [];
+  }
+  function formatModifiedTime(iso) {
+    try {
+      const d = new Date(iso);
+      const pad = n => String(n).padStart(2, '0');
+      return d.getFullYear() + '/' + pad(d.getMonth()+1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    } catch { return iso; }
+  }
+  function escAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
+
+  // ===== UI handlers =====
+  window.handleCloudSaveClick = async function() {
+    const btn = document.getElementById('btnCloudSave');
+    if (!btn) return;
+    if (!getFolderId()) {
+      alert('Drive 尚未就緒，請等待右上「☁️ Drive 已就緒」綠色標示後再試');
+      return;
+    }
+    const baseName = buildBaseName();
+    if (baseName === '銷售資料表') {
+      if (!confirm('尚未填寫案名 / 地址 / 經紀人，存檔名稱會用「銷售資料表」+ 時間戳。確定繼續？')) return;
+    }
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ 存檔中...';
+    try {
+      const data = serializeFormState();
+      const filename = safeName(baseName) + '_' + timestampForFilename() + '.json';
+      const result = await uploadJsonToDrive(filename, data);
+      btn.textContent = '✅ 已存到雲端';
+      console.log('Cloud save success:', result);
+      setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 2200);
+    } catch (err) {
+      console.error('Cloud save failed:', err);
+      alert('存檔失敗：' + (err.message || err));
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  };
+
+  let currentDropdown = null;
+  function closeDropdown() {
+    if (currentDropdown) { currentDropdown.remove(); currentDropdown = null; }
+    document.removeEventListener('click', onOutsideClick, true);
+  }
+  function onOutsideClick(e) {
+    if (currentDropdown && !currentDropdown.contains(e.target) && e.target.id !== 'btnCloudLoad') {
+      closeDropdown();
+    }
+  }
+
+  window.handleCloudListClick = async function() {
+    const btn = document.getElementById('btnCloudLoad');
+    if (currentDropdown) { closeDropdown(); return; }
+    if (!getFolderId()) {
+      alert('Drive 尚未就緒，請等待右上「☁️ Drive 已就緒」綠色標示後再試');
+      return;
+    }
+    const rect = btn.getBoundingClientRect();
+    const dd = document.createElement('div');
+    dd.className = 'cases-dropdown';
+    dd.style.top = (rect.bottom + 6) + 'px';
+    dd.style.left = Math.min(rect.left, window.innerWidth - 400) + 'px';
+    dd.innerHTML =
+      '<div class="cases-dropdown-header">' +
+        '<span>📂 我的案件</span>' +
+        '<span class="close-x" onclick="window.__cloudUI.close()">×</span>' +
+      '</div>' +
+      '<div class="cases-loading">讀取中...</div>';
+    document.body.appendChild(dd);
+    currentDropdown = dd;
+    setTimeout(() => document.addEventListener('click', onOutsideClick, true), 0);
+
+    try {
+      const files = await listCasesFromDrive();
+      const loading = dd.querySelector('.cases-loading');
+      if (loading) loading.remove();
+      if (!files.length) {
+        const empty = document.createElement('div');
+        empty.className = 'cases-empty';
+        empty.textContent = '目前還沒有存過任何案件，先做一份吧 🏠';
+        dd.appendChild(empty);
+        return;
+      }
+      const list = files.map(f =>
+        '<div class="case-item" data-id="' + escAttr(f.id) + '" data-name="' + escAttr(f.name) + '">' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div class="name">' + f.name.replace('.json', '') + '</div>' +
+            '<div class="meta">修改於 ' + formatModifiedTime(f.modifiedTime) + '</div>' +
+          '</div>' +
+          '<button class="delete-btn" data-id="' + escAttr(f.id) + '" data-name="' + escAttr(f.name) + '">刪除</button>' +
+        '</div>'
+      ).join('');
+      dd.insertAdjacentHTML('beforeend', list);
+
+      dd.querySelectorAll('.case-item').forEach(item => {
+        item.addEventListener('click', async (e) => {
+          if (e.target.classList.contains('delete-btn')) return;
+          const id = item.dataset.id;
+          const name = item.dataset.name;
+          if (!confirm('要載入「' + name.replace('.json', '') + '」嗎？\n（會覆蓋目前畫面內容）')) return;
+          closeDropdown();
+          try {
+            const data = await downloadJsonFromDrive(id);
+            deserializeFormState(data);
+            alert('✅ 已載入：' + name.replace('.json', ''));
+          } catch (err) {
+            alert('載入失敗：' + (err.message || err));
+          }
+        });
+      });
+      dd.querySelectorAll('.delete-btn').forEach(b => {
+        b.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const id = b.dataset.id;
+          const name = b.dataset.name;
+          if (!confirm('確定刪除「' + name.replace('.json', '') + '」？\n（無法復原）')) return;
+          try {
+            await deleteFileFromDrive(id);
+            b.closest('.case-item').remove();
+            if (!dd.querySelector('.case-item')) {
+              const empty = document.createElement('div');
+              empty.className = 'cases-empty';
+              empty.textContent = '已沒有任何案件';
+              dd.appendChild(empty);
+            }
+          } catch (err) {
+            alert('刪除失敗：' + (err.message || err));
+          }
+        });
+      });
+    } catch (err) {
+      const loading = dd.querySelector('.cases-loading');
+      if (loading) {
+        loading.className = 'cases-empty';
+        loading.textContent = '讀取失敗：' + (err.message || err);
+      }
+    }
+  };
+
+  window.__cloudUI = { close: closeDropdown };
+  window.__shangCloud = {
+    serializeFormState, deserializeFormState,
+    uploadJsonToDrive, downloadJsonFromDrive, deleteFileFromDrive, listCasesFromDrive,
+    buildBaseName, timestampForFilename, safeName,
+  };
 })();
 </script>
 
