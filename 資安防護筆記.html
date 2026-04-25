@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>資安防護筆記 - 賞好賞不動產</title>
+<style>
+  :root {
+    --yc-gold:  #FFB700;
+    --yc-dark:  #CC8F00;
+    --yc-deep:  #7A5500;
+    --yc-light: #FFF8E0;
+    --yc-pale:  #FFFBF0;
+    --bg:       #F7F5F0;
+    --border:   #E8E0CC;
+    --text:     #2b2b2b;
+    --muted:    #6b6b6b;
+    --danger:   #d32f2f;
+    --warn:     #ed6c02;
+    --ok:       #2e7d32;
+    --code-bg:  #2d3748;
+    --code-fg:  #f7fafc;
+    --radius:   12px;
+    --shadow:   0 2px 16px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 20px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.8;
+    font-size: 16px;
+  }
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  .top-bar {
+    background: linear-gradient(135deg, var(--yc-gold) 0%, var(--yc-dark) 100%);
+    color: #fff;
+    padding: 28px 32px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: var(--shadow);
+  }
+  .top-bar h1 {
+    margin: 0 0 4px;
+    font-size: 26px;
+    letter-spacing: 1px;
+  }
+  .top-bar .subtitle {
+    opacity: 0.9;
+    font-size: 13px;
+  }
+  .card {
+    background: #fff;
+    padding: 32px;
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 24px;
+  }
+  .tldr {
+    background: var(--yc-light);
+    border-left: 4px solid var(--yc-dark);
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    font-size: 15px;
+  }
+  .tldr strong { color: var(--yc-deep); }
+  h2 {
+    color: var(--yc-deep);
+    font-size: 22px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--yc-gold);
+    margin: 36px 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h2 .num {
+    background: var(--yc-dark);
+    color: #fff;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  h3 {
+    color: var(--yc-deep);
+    font-size: 17px;
+    margin: 24px 0 10px;
+    padding-left: 10px;
+    border-left: 4px solid var(--yc-gold);
+  }
+  p { margin: 10px 0; }
+  .highlight {
+    background: linear-gradient(180deg, transparent 55%, var(--yc-light) 55%);
+    padding: 0 2px;
+    font-weight: 600;
+    color: var(--yc-deep);
+  }
+  .key-point {
+    background: var(--yc-pale);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--yc-dark);
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin: 14px 0;
+  }
+  .danger-box {
+    background: #fff3f3;
+    border-left: 4px solid var(--danger);
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin: 14px 0;
+    color: #7a1a1a;
+  }
+  .danger-box strong { color: var(--danger); }
+  .ok-box {
+    background: #f1f8f2;
+    border-left: 4px solid var(--ok);
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin: 14px 0;
+  }
+  .ok-box strong { color: var(--ok); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  th {
+    background: var(--yc-light);
+    color: var(--yc-deep);
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 2px solid var(--yc-dark);
+  }
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: var(--yc-pale); }
+  code {
+    background: var(--yc-light);
+    color: var(--yc-deep);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 16px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .badge-urgent { background: var(--danger); color: #fff; }
+  .badge-week   { background: var(--warn); color: #fff; }
+  .badge-later  { background: var(--muted); color: #fff; }
+  ul, ol { padding-left: 24px; }
+  li { margin-bottom: 6px; }
+  .footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 40px;
+    padding: 20px;
+  }
+  .emoji-heading {
+    font-size: 20px;
+    margin-right: 4px;
+  }
+  .action-list {
+    background: var(--yc-light);
+    padding: 18px 24px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .action-list li { margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="top-bar">
+    <h1>🔐 資安防護筆記</h1>
+    <div class="subtitle">賞好賞不動產 · house-profile 工具 · 2026-04-20</div>
+  </div>
+
+  <div class="card">
+
+    <div class="tldr">
+      <strong>📌 一句話重點：</strong>
+      <span class="highlight">前端能看到的程式碼一定會被別人看到</span>，所以
+      <strong>金鑰絕不能放前端、真正值錢的 know-how 要搬後端</strong>。
+      網頁原始碼抄襲無法完全防，但可以提高抄走的成本。
+    </div>
+
+    <!-- 完成進度總覽 -->
+    <div class="key-point" style="margin-bottom: 24px;">
+      <h3 style="margin-top: 0; padding-left: 0; border-left: none; color: var(--ok); font-size: 18px;">📊 完成進度（2026-04-25 更新）</h3>
+      <table style="margin-top: 12px;">
+        <thead>
+          <tr><th style="width: 65%;">項目</th><th>狀態</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>HTML 開頭埋版權註解</td><td style="color: var(--ok); font-weight: 700;">✅ 已完成</td></tr>
+          <tr><td>HTML 加 noindex（不被 Google 收錄）</td><td style="color: var(--ok); font-weight: 700;">✅ 已完成</td></tr>
+          <tr><td>Gemini key 搬 Cloudflare Worker</td><td style="color: var(--ok); font-weight: 700;">✅ 已完成</td></tr>
+          <tr><td>kcg-urban-proxy Worker 加 Origin 檢查</td><td style="color: var(--ok); font-weight: 700;">✅ 已完成</td></tr>
+          <tr><td>GCP 每月預算上限 500 NTD</td><td style="color: var(--ok); font-weight: 700;">✅ 已完成</td></tr>
+          <tr><td>Maps API key 限制 6 個 API（兩把 key）</td><td style="color: var(--ok); font-weight: 700;">✅ 已完成</td></tr>
+          <tr><td>登入制（Gate + 白名單）</td><td style="color: var(--ok); font-weight: 700;">✅ 已完成（雲端化階段 1）</td></tr>
+          <tr><td>Gemini API key 設 API 限制</td><td style="color: var(--muted);">⚪ 跳過（GCP 政策需綁 Service Account；已靠 Worker 後端化保護）</td></tr>
+          <tr><td>Cloudflare Rate Limiting Rules</td><td style="color: var(--muted);">⚪ 跳過（*.workers.dev 不適用；已有免費版 10 萬次/天自動上限）</td></tr>
+          <tr><td>JS 壓縮混淆</td><td style="color: var(--muted);">📅 將來再做（真的有人抄再說）</td></tr>
+          <tr><td>定期用量檢查（每週 30 秒）</td><td style="color: var(--muted);">📅 習慣養成中</td></tr>
+          <tr><td>PDF / GIS 邏輯搬後端</td><td style="color: var(--muted);">📅 工程量大，慢慢搬</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ok-box">
+      <strong>🛡️ 目前防護狀態：</strong>三層保護到位 ——
+      <strong>①</strong> Maps key 綁網域、Gemini key 在 Worker 後端不曝光；
+      <strong>②</strong> Worker 擋非自家網站來的呼叫；
+      <strong>③</strong> GCP 預算 500 NTD/月 + Cloudflare 10 萬次/天上限 = 被攻擊頂多虧 500 元台幣。
+    </div>
+
+    <!-- 一、API 金鑰防盜用 -->
+    <h2><span class="num">1</span>API 金鑰防盜用</h2>
+    <p>金鑰的保護是<strong>可以做到很紮實</strong>的，這是重點投資方向。</p>
+
+    <h3>1-1 不支援網域鎖的 key → 一律搬後端</h3>
+    <table>
+      <thead>
+        <tr><th style="width:26%;">Key</th><th style="width:40%;">會不會外洩</th><th>對策</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Google Maps</strong></td>
+          <td>有綁 <code>github.io</code> 網域，偷到也打不了</td>
+          <td><span style="color:var(--ok);font-weight:700;">✅ 現狀 OK</span></td>
+        </tr>
+        <tr>
+          <td><strong>Gemini</strong></td>
+          <td><span style="color:var(--danger);">不支援網域鎖，偷到就能用</span></td>
+          <td>🔧 搬 Cloudflare Worker</td>
+        </tr>
+        <tr>
+          <td><strong>TGOS</strong></td>
+          <td>申請到後看支不支援鎖</td>
+          <td>若不支援就也走 Worker</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="key-point">
+      <strong>原則：</strong>產一把新 key 前，先問一句
+      <span class="highlight">「這個 API 支不支援綁網域/IP？不支援就放後端」</span>。
+    </div>
+
+    <h3>1-2 Google Cloud 設「每日花費上限」</h3>
+    <p>即使 key 被盜，也不會一次刷你幾萬塊。<span class="highlight">這是最後一道保險</span>。</p>
+    <ol>
+      <li>Google Cloud Console → <strong>Billing</strong></li>
+      <li>→ <strong>Budgets &amp; Alerts</strong></li>
+      <li>→ 設每日 <code>US$5</code> 上限</li>
+      <li>到上限自動停所有 API，隔天恢復</li>
+    </ol>
+
+    <h3>1-3 最小權限：key 只開必要的 API</h3>
+    <p>Google Cloud Console → API 憑證 → 每把 key 點進去 → <strong>只勾這把 key 會用到的 API</strong>，其他全關。</p>
+    <ul>
+      <li>Maps key → 只勾 <code>Maps JavaScript API</code> + <code>Places API (New)</code></li>
+      <li>Gemini key → 只勾 <code>Generative Language API</code></li>
+    </ul>
+
+    <h3>1-4 Cloudflare Worker 加「來源檢查」</h3>
+    <p>現在你的 Worker 網址 <code>kcg-urban-proxy.bingshang1019.workers.dev</code> 是公開的，任何人都能打。</p>
+    <p>加一行 <strong>Origin 檢查</strong>，就能擋掉 99% 的亂用：</p>
+<pre><code>const origin = request.headers.get('Origin') || '';
+const allowed = ['https://bingshang-house.github.io', 'http://localhost'];
+if (!allowed.some(o =&gt; origin.startsWith(o))) {
+  return new Response('Forbidden', { status: 403 });
+}</code></pre>
+    <div class="danger-box">
+      <strong>⚠️ 注意：</strong>Origin 是瀏覽器加的，用 <code>curl</code> 可以偽造 →
+      所以還要搭 <strong>Cloudflare Rate Limiting</strong>（免費方案每 10 秒限制幾次），<span class="highlight">雙保險</span>。
+    </div>
+
+    <h3>1-5 定期檢查用量</h3>
+    <p>每週花 <strong>30 秒</strong>到：</p>
+    <ul>
+      <li><strong>Google Cloud Console → Metrics</strong>：看 Gemini / Maps 呼叫次數有沒有異常飆高</li>
+      <li><strong>Cloudflare Workers → Analytics</strong>：看 Worker 呼叫量</li>
+    </ul>
+    <div class="ok-box">
+      不正常就立刻「<strong>revoke 舊 key + 產新 key</strong>」。<br>
+      走 Worker 的好處：前端不用改，只要改 Worker 環境變數就好。
+    </div>
+
+    <!-- 二、網頁設計防盜用 -->
+    <h2><span class="num">2</span>網頁設計防盜用</h2>
+    <div class="danger-box">
+      <strong>誠實說：</strong>前端的本質是「瀏覽器必須下載你的 HTML/CSS/JS 才能跑」，
+      任何人在瀏覽器按 F12 就看得到，<span class="highlight">這是技術極限，沒有工具能真正防拷貝</span>。
+      <br><br>
+      但可以<strong>提高抄走的成本</strong>。
+    </div>
+
+    <h3>2-1 最重要：把「真正值錢的 know-how」搬後端</h3>
+    <p>你這個工具的價值不是 HTML 版面，而是：</p>
+    <ul>
+      <li>📄 <strong>PDF 解析 regex</strong> 的血淚經驗</li>
+      <li>🗺️ <strong>GIS 圖層 16 / 22 / 13</strong> 怎麼組合</li>
+      <li>🏗️ <strong>buildmis 的 dkey → JSON 端點鏈</strong></li>
+      <li>🎓 <strong>學區資料庫</strong></li>
+    </ul>
+    <div class="key-point">
+      這些東西只要都在 Worker 裡，<span class="highlight">即使別人抄走 HTML 也跑不起來</span>（因為沒有 Worker）。
+      目前 PDF 解析還在前端，將來可以慢慢搬。
+    </div>
+
+    <h3>2-2 HTML 開頭埋版權聲明 + 作者註解</h3>
+<pre><code>&lt;!--
+  © 2026 賞好賞不動產有限公司（高雄市苓雅區中華四路 122 號）
+  作者：江炳賞（亞灣賞哥）　114 年高市字第 01680 號
+  本頁原始碼受著作權法保護，擅自複製、修改、再發佈將依法追訴。
+  聯絡：0971-115207
+--&gt;</code></pre>
+    <p>別人抄走整份原始碼沒刪 → <span class="highlight">有證據告他</span>。</p>
+
+    <h3>2-3 JS 壓縮 + 混淆（可選）</h3>
+    <p>用 <code>Webpack</code> 或 <code>esbuild</code> 把 JS 壓縮混淆後才部署，抄走的人看到是：</p>
+<pre><code>function _0x3a1b(a,b){var c=a+b;return c^0x1234;}</code></pre>
+    <p>逆向回有意義的程式碼要花<strong>好幾個小時</strong>。</p>
+    <div class="danger-box">
+      <strong>代價：</strong>自己 debug 也變痛苦，除非真的有人在抄，否則不急。
+    </div>
+
+    <h3>2-4 網站加 <code>noindex</code> 或改登入制</h3>
+    <p>如果你覺得這工具是內部用的，不希望被 Google 搜到：</p>
+    <ul>
+      <li>HTML 頂部加 <code>&lt;meta name="robots" content="noindex, nofollow"&gt;</code> → Google 不收錄</li>
+      <li>或套一層「<strong>輸入密碼才能進</strong>」（Cloudflare Access 免費方案可做）</li>
+    </ul>
+
+    <h3>2-5 DMCA 投訴（發現抄襲時的武器）</h3>
+    <p>真的發現有人整份照抄：</p>
+    <ul>
+      <li>對方放 <strong>GitHub</strong> → 向 GitHub 提 DMCA takedown（1-3 天會下架）</li>
+      <li>對方放自己網站 → 向他的主機商（Cloudflare、AWS）投訴</li>
+      <li>證據就是 <strong>2-2 那段版權註解</strong></li>
+    </ul>
+
+    <!-- 三、行動清單 -->
+    <h2><span class="num">3</span>優先順序行動清單</h2>
+
+    <div class="action-list">
+      <h3 style="margin-top:0;"><span class="badge badge-urgent">立刻</span>（5 分鐘內完成）</h3>
+      <ol>
+        <li>✅ 換 Gemini key + 搬 Worker（<em>已完成</em>）</li>
+        <li>✅ <strong>Google Cloud 設每月預算上限 500 NTD</strong>（已設定 2026-04-25）</li>
+      </ol>
+
+      <h3><span class="badge badge-week">本週</span>（30 分鐘完成）</h3>
+      <ol start="3">
+        <li>✅ <strong>Worker 加 Origin 檢查</strong>（已完成 2026-04-25；Rate Limiting 因 *.workers.dev 不適用而跳過）</li>
+        <li>✅ <strong>HTML 頂部埋版權註解 + noindex</strong>（已完成 2026-04-25）</li>
+        <li>✅ <strong>Maps API key 限制 6 個 API</strong>（已完成 2026-04-25，兩把 key 都設了 Maps JS / Places New / Static / Routes / Geocoding / Distance Matrix）</li>
+      </ol>
+
+      <h3><span class="badge badge-later">有空再做</span></h3>
+      <ol start="5">
+        <li>📅 JS minify（看有沒有真的出現抄襲再說）</li>
+        <li>📅 <strong>定期用量檢查習慣</strong>（每週 30 秒）</li>
+        <li>📅 把 PDF 解析、GIS 查詢邏輯逐步搬到 Worker</li>
+      </ol>
+    </div>
+
+    <!-- 補充：金鑰被洩漏時的緊急處理 -->
+    <h2><span class="num">4</span>金鑰被洩漏時的緊急處理 SOP</h2>
+    <div class="danger-box">
+      <strong>症狀：</strong>收到 Google 來信說「your API key was leaked」，或呼叫 API 收到
+      <code>403 PERMISSION_DENIED</code>。
+    </div>
+    <ol>
+      <li><strong>立刻到 Google Cloud Console 把該 key 刪掉</strong>（即使已被 Google 自動停用，也要自己刪乾淨）</li>
+      <li>產新 key</li>
+      <li>檢查新 key 的<strong>網域/API 限制</strong>是否跟舊的一樣</li>
+      <li>更新 Worker 的 Secret（<span class="highlight">不要改 HTML</span>）</li>
+      <li>Cloudflare Worker 重新 Deploy</li>
+      <li>測試功能恢復正常</li>
+      <li>檢查 Billing 有沒有異常扣款 → 有的話立刻開 <strong>Google Cloud Support</strong> 申訴</li>
+    </ol>
+
+  </div>
+
+  <div class="footer">
+    © 2026 賞好賞不動產有限公司 · 僅供內部參考 · 最後更新 2026-04-25
+  </div>
+
+</div>
+</body>
+</html>
