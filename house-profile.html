@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="window.__gisLoaded = true; if (window.initAuthGate) window.initAuthGate();"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -524,9 +525,81 @@
       .env-risk-page.has-hits { display: none; }
       .env-risk-page.has-hits.print-include { display: block !important; }
     }
+
+    /* ===== Auth Gate（雲端化階段 1） ===== */
+    body:not(.authed) .main,
+    body:not(.authed) .top-bar { display: none !important; }
+    @media print { #auth-gate-overlay { display: none !important; } }
+
+    #auth-gate-overlay {
+      position: fixed; inset: 0; z-index: 99999;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #FFF8E0 0%, #FFFBF0 100%);
+      font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    }
+    body.authed #auth-gate-overlay { display: none; }
+    .auth-gate-card {
+      background: #fff; padding: 48px 40px; border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.12);
+      text-align: center; max-width: 420px; width: 90%;
+    }
+    .auth-gate-logo { font-size: 64px; margin-bottom: 12px; }
+    .auth-gate-title { font-size: 22px; font-weight: 800; color: #7A5500; letter-spacing: 2px; margin-bottom: 6px; }
+    .auth-gate-subtitle { font-size: 14px; color: #666; margin-bottom: 32px; }
+    .auth-gate-btn {
+      width: 100%; padding: 14px 24px; background: #FFB700; color: #7A5500;
+      border: none; border-radius: 28px; font-size: 14px; font-weight: 700;
+      cursor: pointer; letter-spacing: 1px; transition: all .2s;
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .auth-gate-btn:hover:not(:disabled) { background: #CC8F00; color: #fff; transform: translateY(-1px); }
+    .auth-gate-btn:disabled { opacity: 0.55; cursor: wait; }
+    .auth-gate-google-icon {
+      width: 18px; height: 18px;
+      background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="%23FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="%23FF3D00" d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="%234CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="%231976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>') no-repeat center/contain;
+    }
+    .auth-gate-note { font-size: 12px; color: #999; margin-top: 28px; line-height: 1.6; }
+    .auth-gate-status { font-size: 13px; margin-top: 18px; min-height: 18px; }
+    .auth-gate-status.error { color: #C00; }
+    .auth-gate-info-box {
+      text-align: left; background: #FFF3E0; padding: 14px 16px; border-radius: 10px;
+      margin-top: 16px; border-left: 4px solid #FFB700;
+    }
+    .auth-gate-info-box .who { font-weight: 700; color: #CC8F00; margin-bottom: 6px; word-break: break-all; }
+    .auth-gate-info-box .msg { font-size: 12.5px; color: #555; line-height: 1.7; }
+
+    /* ===== User Badge（top-bar 右上） ===== */
+    .user-badge {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(255,255,255,0.7); padding: 5px 14px;
+      border-radius: 20px; font-size: 12px; color: #7A5500;
+    }
+    .user-badge .user-name { font-weight: 700; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .user-badge .btn-logout {
+      background: none; border: 1px solid #CC8F00; color: #7A5500;
+      padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer;
+      font-weight: 700;
+    }
+    .user-badge .btn-logout:hover { background: #CC8F00; color: #fff; }
   </style>
 </head>
 <body>
+
+<!-- ===== Auth Gate（雲端化階段 1：強制登入） ===== -->
+<div id="auth-gate-overlay">
+  <div class="auth-gate-card">
+    <div class="auth-gate-logo">🏠</div>
+    <h1 class="auth-gate-title">賞好賞銷售資料表</h1>
+    <p class="auth-gate-subtitle">請使用 Google 帳號登入後使用</p>
+    <button id="btnGoogleLogin" class="auth-gate-btn" disabled onclick="handleGoogleLoginClick()">
+      <span class="auth-gate-google-icon"></span>
+      <span id="btnGoogleLoginText">載入中...</span>
+    </button>
+    <p class="auth-gate-note">只限賞好賞團隊使用<br>登入會綁定您的 Google Drive，案件存在您自己的雲端</p>
+    <div id="authGateStatus" class="auth-gate-status"></div>
+  </div>
+</div>
 
 <!-- Top Bar -->
 <div class="top-bar">
@@ -6738,6 +6811,177 @@ ${factsText}
     document.getElementById('school-result').innerHTML = '';
     updateCard();
   }
+</script>
+
+<!-- ===== Auth Gate JS（雲端化階段 1） ===== -->
+<script>
+(function(){
+  const OAUTH_CLIENT_ID = '1054981797930-fhhpephhsc0a1icc6kudnfer11ec1lqf.apps.googleusercontent.com';
+  const WHITELIST_WORKER = 'https://shang-whitelist.bingshang1019.workers.dev';
+  const OAUTH_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file';
+
+  const authState = { email: null, name: null, picture: null, accessToken: null };
+  window.__authState = authState;
+
+  let tokenClient = null;
+
+  function $(id) { return document.getElementById(id); }
+  function setBtnText(t) { const el = $('btnGoogleLoginText'); if (el) el.textContent = t; }
+  function setStatus(msg, cls) {
+    const el = $('authGateStatus');
+    if (!el) return;
+    el.className = 'auth-gate-status' + (cls ? ' ' + cls : '');
+    el.innerHTML = msg || '';
+  }
+
+  window.initAuthGate = function() {
+    if (!window.google || !google.accounts || !google.accounts.oauth2) {
+      setStatus('Google Identity Services 載入失敗，請重新整理', 'error');
+      return;
+    }
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: OAUTH_CLIENT_ID,
+      scope: OAUTH_SCOPES,
+      callback: handleTokenResponse,
+      error_callback: function(err) {
+        const reason = (err && (err.message || err.type)) || '使用者取消';
+        setStatus('登入取消或失敗：' + reason, 'error');
+        const btn = $('btnGoogleLogin');
+        if (btn) btn.disabled = false;
+        setBtnText('使用 Google 登入');
+      }
+    });
+    const btn = $('btnGoogleLogin');
+    if (btn) btn.disabled = false;
+    setBtnText('使用 Google 登入');
+  };
+
+  window.handleGoogleLoginClick = function() {
+    if (!tokenClient) {
+      setStatus('登入服務尚未就緒，請稍候再試', 'error');
+      return;
+    }
+    setStatus('');
+    $('btnGoogleLogin').disabled = true;
+    setBtnText('正在登入...');
+    tokenClient.requestAccessToken();
+  };
+
+  async function handleTokenResponse(response) {
+    if (response.error) {
+      setStatus('登入失敗：' + response.error, 'error');
+      $('btnGoogleLogin').disabled = false;
+      setBtnText('使用 Google 登入');
+      return;
+    }
+    try {
+      setBtnText('讀取使用者資訊...');
+      const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: 'Bearer ' + response.access_token },
+      });
+      const userInfo = await userInfoRes.json();
+      authState.email = (userInfo.email || '').toLowerCase();
+      authState.name = userInfo.name || '';
+      authState.picture = userInfo.picture || '';
+      authState.accessToken = response.access_token;
+
+      setBtnText('檢查使用權限...');
+      const checkRes = await fetch(WHITELIST_WORKER + '/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authState.email }),
+      });
+      const checkJson = await checkRes.json();
+
+      if (checkJson.ok) {
+        sessionStorage.setItem('auth_email', authState.email);
+        sessionStorage.setItem('auth_name', authState.name);
+        sessionStorage.setItem('auth_picture', authState.picture);
+        sessionStorage.setItem('auth_access_token', authState.accessToken);
+        sessionStorage.setItem('auth_token_at', String(Date.now()));
+        document.body.classList.add('authed');
+        renderUserBadge();
+      } else {
+        setStatus(
+          '<div class="auth-gate-info-box">' +
+            '<div class="who">⚠️ ' + authState.email + '</div>' +
+            '<div class="msg">您的 Gmail 尚未開通使用權限。<br>自助申請功能即將上線（下個版本），目前請聯繫賞哥開通。</div>' +
+          '</div>'
+        );
+        $('btnGoogleLogin').disabled = false;
+        setBtnText('換個 Google 帳號登入');
+      }
+    } catch (err) {
+      console.error('Auth error:', err);
+      setStatus('系統錯誤：' + (err.message || err), 'error');
+      $('btnGoogleLogin').disabled = false;
+      setBtnText('使用 Google 登入');
+    }
+  }
+
+  function renderUserBadge() {
+    const old = $('user-badge');
+    if (old) old.remove();
+    const badge = document.createElement('div');
+    badge.id = 'user-badge';
+    badge.className = 'user-badge';
+    const display = authState.name || authState.email;
+    badge.innerHTML =
+      '<span class="user-name" title="' + authState.email + '">👤 ' + display + '</span>' +
+      '<button class="btn-logout" onclick="window.handleLogoutClick()">登出</button>';
+    const topBar = document.querySelector('.top-bar');
+    if (topBar) topBar.appendChild(badge);
+  }
+
+  window.handleLogoutClick = function() {
+    sessionStorage.removeItem('auth_email');
+    sessionStorage.removeItem('auth_name');
+    sessionStorage.removeItem('auth_picture');
+    sessionStorage.removeItem('auth_access_token');
+    sessionStorage.removeItem('auth_token_at');
+    authState.email = null;
+    authState.name = null;
+    authState.picture = null;
+    authState.accessToken = null;
+    document.body.classList.remove('authed');
+    const badge = $('user-badge');
+    if (badge) badge.remove();
+    setStatus('');
+    setBtnText('使用 Google 登入');
+    const btn = $('btnGoogleLogin');
+    if (btn) btn.disabled = false;
+  };
+
+  function restoreSession() {
+    const email = sessionStorage.getItem('auth_email');
+    const accessToken = sessionStorage.getItem('auth_access_token');
+    const tokenAt = parseInt(sessionStorage.getItem('auth_token_at') || '0', 10);
+    // access_token 有效期 1 hr，超過視為過期
+    if (email && accessToken && tokenAt && (Date.now() - tokenAt < 3600000)) {
+      authState.email = email;
+      authState.name = sessionStorage.getItem('auth_name') || '';
+      authState.picture = sessionStorage.getItem('auth_picture') || '';
+      authState.accessToken = accessToken;
+      document.body.classList.add('authed');
+      renderUserBadge();
+      return true;
+    }
+    return false;
+  }
+
+  function bootAuth() {
+    const restored = restoreSession();
+    if (!restored && window.__gisLoaded) {
+      window.initAuthGate();
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootAuth);
+  } else {
+    bootAuth();
+  }
+})();
 </script>
 
 </body>

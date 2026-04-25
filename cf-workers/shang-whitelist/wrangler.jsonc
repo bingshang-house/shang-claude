@@ -1,0 +1,14 @@
+/**
+ * Cloudflare Worker：shang-whitelist
+ * 雲端化專案階段 1：白名單檢查 + 自助申請通知信
+ * 環境變數透過 Dashboard → Settings → Variables and Secrets 設定（不用 secret，明文 var 即可，反正 Worker 程式碼不公開）
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "shang-whitelist",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-04-25",
+	"observability": {
+		"enabled": true
+	}
+}
