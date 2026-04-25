@@ -568,6 +568,47 @@
     .auth-gate-info-box .who { font-weight: 700; color: #CC8F00; margin-bottom: 6px; word-break: break-all; }
     .auth-gate-info-box .msg { font-size: 12.5px; color: #555; line-height: 1.7; }
 
+    /* ===== 自助申請表單（不在白名單時顯示） ===== */
+    .apply-form { margin-top: 16px; }
+    .apply-info-box {
+      background: #FFF3E0; padding: 12px 14px; border-radius: 10px;
+      border-left: 4px solid #FFB700; margin-bottom: 16px; text-align: left;
+    }
+    .apply-info-who { font-weight: 700; color: #CC8F00; margin-bottom: 4px; word-break: break-all; }
+    .apply-info-msg { font-size: 12.5px; color: #555; line-height: 1.6; }
+    .apply-field { margin-bottom: 12px; text-align: left; }
+    .apply-field label { display: block; font-size: 12px; font-weight: 700; color: #7A5500; margin-bottom: 4px; }
+    .apply-field input,
+    .apply-field textarea {
+      width: 100%; padding: 9px 12px; border: 1px solid #E8E0CC; border-radius: 8px;
+      font-size: 13px; font-family: inherit; background: #FFFBF0;
+      resize: vertical; box-sizing: border-box;
+    }
+    .apply-field input:focus,
+    .apply-field textarea:focus { outline: none; border-color: #FFB700; background: #fff; }
+    .apply-submit-btn {
+      width: 100%; padding: 12px 24px; background: #FFB700; color: #7A5500;
+      border: none; border-radius: 24px; font-size: 14px; font-weight: 700;
+      cursor: pointer; letter-spacing: 1px; transition: all .2s; margin-top: 6px;
+    }
+    .apply-submit-btn:hover:not(:disabled) { background: #CC8F00; color: #fff; transform: translateY(-1px); }
+    .apply-submit-btn:disabled { opacity: 0.55; cursor: wait; }
+    .apply-error { font-size: 13px; color: #C00; margin-top: 8px; min-height: 18px; }
+    .apply-cancel-btn {
+      background: none; border: 1px dashed #B0A080; color: #888;
+      padding: 7px 16px; border-radius: 16px; font-size: 11px; cursor: pointer;
+      margin-top: 14px;
+    }
+    .apply-cancel-btn:hover { color: #7A5500; border-color: #CC8F00; }
+    .apply-success { padding: 12px 0; }
+    .apply-success-icon { font-size: 48px; margin-bottom: 8px; }
+    .apply-success-title { font-size: 18px; font-weight: 800; color: #7A5500; margin-bottom: 8px; }
+    .apply-success-msg { font-size: 13px; color: #555; line-height: 1.7; margin-bottom: 14px; }
+    .apply-success-meta {
+      font-size: 11px; color: #999; padding-top: 12px; border-top: 1px dashed #E8E0CC;
+    }
+    .apply-success-meta span { color: #7A5500; font-weight: 700; word-break: break-all; }
+
     /* ===== User Badge（top-bar 右上） ===== */
     .user-badge {
       margin-left: auto;
@@ -596,8 +637,35 @@
       <span class="auth-gate-google-icon"></span>
       <span id="btnGoogleLoginText">載入中...</span>
     </button>
-    <p class="auth-gate-note">只限賞好賞團隊使用<br>登入會綁定您的 Google Drive，案件存在您自己的雲端</p>
+    <p class="auth-gate-note" id="auth-gate-note">只限賞好賞團隊使用<br>登入會綁定您的 Google Drive，案件存在您自己的雲端</p>
     <div id="authGateStatus" class="auth-gate-status"></div>
+
+    <!-- 自助申請表單（登入後不在白名單時顯示） -->
+    <div id="apply-form" class="apply-form" style="display:none;">
+      <div class="apply-info-box">
+        <div class="apply-info-who">⚠️ <span id="apply-info-email"></span></div>
+        <div class="apply-info-msg">您的 Gmail 尚未開通使用權限，請填寫資料申請：</div>
+      </div>
+      <div class="apply-field">
+        <label>您的姓名</label>
+        <input type="text" id="apply-name" placeholder="例：王小明" maxlength="30" autocomplete="name">
+      </div>
+      <div class="apply-field">
+        <label>申請用途</label>
+        <textarea id="apply-purpose" placeholder="例：賞哥的合作夥伴、想看銷售資料表" rows="3" maxlength="200"></textarea>
+      </div>
+      <button class="apply-submit-btn" id="btn-submit-apply" onclick="window.handleApplySubmitClick()">送出申請</button>
+      <div id="apply-error" class="apply-error"></div>
+      <button class="apply-cancel-btn" onclick="window.handleApplyCancel()">換個 Google 帳號登入</button>
+    </div>
+
+    <!-- 申請成功訊息 -->
+    <div id="apply-success" class="apply-success" style="display:none;">
+      <div class="apply-success-icon">✅</div>
+      <div class="apply-success-title">申請已送出</div>
+      <div class="apply-success-msg">通知信已發送給賞哥審核，<br>核准後會由賞哥另行聯繫您。</div>
+      <div class="apply-success-meta">您的 Gmail：<span id="apply-success-email"></span></div>
+    </div>
   </div>
 </div>
 
@@ -6902,14 +6970,16 @@ ${factsText}
         document.body.classList.add('authed');
         renderUserBadge();
       } else {
-        setStatus(
-          '<div class="auth-gate-info-box">' +
-            '<div class="who">⚠️ ' + authState.email + '</div>' +
-            '<div class="msg">您的 Gmail 尚未開通使用權限。<br>自助申請功能即將上線（下個版本），目前請聯繫賞哥開通。</div>' +
-          '</div>'
-        );
-        $('btnGoogleLogin').disabled = false;
-        setBtnText('換個 Google 帳號登入');
+        // 不在白名單 → 顯示自助申請表單
+        setStatus('');
+        $('btnGoogleLogin').style.display = 'none';
+        const noteEl = $('auth-gate-note');
+        if (noteEl) noteEl.style.display = 'none';
+        $('apply-info-email').textContent = authState.email;
+        // 預填 Google 那邊拿到的姓名
+        const nameInput = $('apply-name');
+        if (nameInput && authState.name && !nameInput.value) nameInput.value = authState.name;
+        $('apply-form').style.display = 'block';
       }
     } catch (err) {
       console.error('Auth error:', err);
@@ -6932,6 +7002,64 @@ ${factsText}
     const topBar = document.querySelector('.top-bar');
     if (topBar) topBar.appendChild(badge);
   }
+
+  window.handleApplySubmitClick = async function() {
+    const name = $('apply-name').value.trim();
+    const purpose = $('apply-purpose').value.trim();
+    const errEl = $('apply-error');
+    errEl.textContent = '';
+
+    if (!name) { errEl.textContent = '請填姓名'; return; }
+    if (!purpose) { errEl.textContent = '請填申請用途'; return; }
+    if (!authState.email) { errEl.textContent = '登入狀態異常，請重新整理'; return; }
+
+    const btn = $('btn-submit-apply');
+    btn.disabled = true;
+    btn.textContent = '送出中...';
+
+    try {
+      const r = await fetch(WHITELIST_WORKER + '/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email: authState.email, purpose }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        $('apply-form').style.display = 'none';
+        $('apply-success-email').textContent = authState.email;
+        $('apply-success').style.display = 'block';
+      } else {
+        errEl.textContent = '送出失敗：' + (j.error || '未知錯誤');
+        btn.disabled = false;
+        btn.textContent = '送出申請';
+      }
+    } catch (err) {
+      errEl.textContent = '系統錯誤：' + (err.message || err);
+      btn.disabled = false;
+      btn.textContent = '送出申請';
+    }
+  };
+
+  window.handleApplyCancel = function() {
+    // 先撤銷舊 token，避免下次自動用同帳號
+    const oldToken = authState.accessToken;
+    if (oldToken && window.google && google.accounts && google.accounts.oauth2) {
+      try { google.accounts.oauth2.revoke(oldToken, () => {}); } catch (e) {}
+    }
+    $('apply-form').style.display = 'none';
+    $('apply-success').style.display = 'none';
+    const errEl = $('apply-error');
+    if (errEl) errEl.textContent = '';
+    const noteEl = $('auth-gate-note');
+    if (noteEl) noteEl.style.display = '';
+    $('btnGoogleLogin').style.display = '';
+    $('btnGoogleLogin').disabled = false;
+    setBtnText('使用 Google 登入');
+    authState.email = null;
+    authState.name = null;
+    authState.picture = null;
+    authState.accessToken = null;
+  };
 
   window.handleLogoutClick = function() {
     sessionStorage.removeItem('auth_email');
