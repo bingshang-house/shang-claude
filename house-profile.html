@@ -6930,6 +6930,67 @@ ${factsText}
     document.getElementById('school-result').innerHTML = '';
     updateCard();
   }
+
+  // ===== Cloud save/load 用：暴露 state 給外部 script + 重建 entries DOM =====
+  function rebuildEntriesFromData() {
+    const buildingsArr = Object.values(_buildingData).filter(b => b);
+    const landsArr = Object.values(_landData).filter(l => l);
+
+    document.getElementById('building-entries').innerHTML = '';
+    document.getElementById('land-entries').innerHTML = '';
+    _buildingData = {};
+    _buildingIdx = 0;
+    _landData = {};
+    _landIdx = 0;
+
+    if (buildingsArr.length === 0) addBuildingEntry();
+    else buildingsArr.forEach(b => addBuildingEntry(b));
+    if (landsArr.length === 0) addLandEntry();
+    else landsArr.forEach(l => addLandEntry(l));
+
+    syncDeedAlias();
+    if (typeof renderHazardPanel === 'function') renderHazardPanel();
+    if (typeof renderHazardA4 === 'function') renderHazardA4();
+    if (typeof updateValidationBanner === 'function') updateValidationBanner();
+    if (typeof updateCard === 'function') updateCard();
+  }
+
+  window.__shangState = {
+    getDeed: () => deed,
+    setDeed: (v) => { deed = v || {}; },
+    getBuildings: () => {
+      const cloned = {};
+      Object.entries(_buildingData).forEach(([k, v]) => {
+        if (!v) return;
+        const c = { ...v };
+        if (v.expectedLandNos instanceof Set) c.expectedLandNos = Array.from(v.expectedLandNos);
+        if (v.expectedBuildingNos instanceof Set) c.expectedBuildingNos = Array.from(v.expectedBuildingNos);
+        cloned[k] = c;
+      });
+      return { data: cloned, idx: _buildingIdx };
+    },
+    setBuildings: (v) => {
+      _buildingData = {};
+      Object.entries((v && v.data) || {}).forEach(([k, val]) => {
+        if (!val) return;
+        if (Array.isArray(val.expectedLandNos)) val.expectedLandNos = new Set(val.expectedLandNos);
+        if (Array.isArray(val.expectedBuildingNos)) val.expectedBuildingNos = new Set(val.expectedBuildingNos);
+        _buildingData[k] = val;
+      });
+      _buildingIdx = (v && v.idx) || Object.keys(_buildingData).length;
+    },
+    getLands: () => ({ data: JSON.parse(JSON.stringify(_landData)), idx: _landIdx }),
+    setLands: (v) => {
+      _landData = (v && v.data) || {};
+      _landIdx = (v && v.idx) || Object.keys(_landData).length;
+    },
+    getHazards: () => ({ results: _hazardResults, ignored: Array.from(_hazardIgnored) }),
+    setHazards: (v) => {
+      _hazardResults = (v && v.results) || [];
+      _hazardIgnored = new Set((v && v.ignored) || []);
+    },
+    rebuildEntries: rebuildEntriesFromData,
+  };
 </script>
 
 <!-- ===== Auth Gate JS（雲端化階段 1） ===== -->
@@ -7303,13 +7364,21 @@ ${factsText}
     return ['file', 'button', 'submit', 'reset', 'image'].indexOf(el.type) >= 0;
   }
   function serializeFormState() {
-    const state = { v: 1, savedAt: new Date().toISOString(), formFields: {}, deed: window.deed || {} };
+    const state = { v: 2, savedAt: new Date().toISOString(), formFields: {} };
     document.querySelectorAll('.left-panel input, .left-panel textarea, .left-panel select').forEach(el => {
       if (!el.id) return;
       if (el.id === 'gmApiKey' || el.id.startsWith('s-print-')) return;
       if (isUnserializableInput(el)) return;
       state.formFields[el.id] = (el.type === 'checkbox') ? el.checked : el.value;
     });
+    if (window.__shangState) {
+      state.deed = window.__shangState.getDeed();
+      state.buildings = window.__shangState.getBuildings();
+      state.lands = window.__shangState.getLands();
+      state.hazards = window.__shangState.getHazards();
+    } else {
+      state.deed = window.deed || {};
+    }
     return state;
   }
   function deserializeFormState(data) {
@@ -7321,8 +7390,16 @@ ${factsText}
       if (el.type === 'checkbox') el.checked = !!data.formFields[id];
       else el.value = data.formFields[id] || '';
     });
-    if (data.deed) window.deed = data.deed;
-    if (typeof window.updateCard === 'function') window.updateCard();
+    if (window.__shangState) {
+      if (data.deed) window.__shangState.setDeed(data.deed);
+      if (data.buildings) window.__shangState.setBuildings(data.buildings);
+      if (data.lands) window.__shangState.setLands(data.lands);
+      if (data.hazards) window.__shangState.setHazards(data.hazards);
+      if (window.__shangState.rebuildEntries) window.__shangState.rebuildEntries();
+    } else {
+      if (data.deed) window.deed = data.deed;
+      if (typeof window.updateCard === 'function') window.updateCard();
+    }
   }
 
   async function uploadJsonToDrive(filename, jsonData, existingFileId) {
