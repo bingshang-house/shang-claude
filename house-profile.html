@@ -632,6 +632,8 @@
     .drive-status.error { background: #FFEBEE; color: #C62828; cursor: help; }
 
     /* ===== 手機版 top-bar：按鈕多時 wrap 換行 ===== */
+    .btn-mobile-toggle { display: none; background: #7A5500; color: #fff; }
+    .btn-mobile-toggle:hover { background: #5A3F00; }
     @media (max-width: 768px) {
       .top-bar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
       .top-bar .btn { padding: 6px 12px; font-size: 11px; letter-spacing: 0.5px; }
@@ -640,6 +642,15 @@
       .user-badge { margin-left: 0; padding: 4px 10px; flex-basis: 100%; justify-content: center; gap: 6px; }
       .user-badge .user-name { max-width: 160px; }
       .drive-status { font-size: 10px; padding: 1px 6px; }
+
+      /* 切換按鈕只在手機顯示 */
+      .btn-mobile-toggle { display: inline-flex; }
+      /* 手機預設只顯示左欄表單；點切換按鈕後 body.show-a4 → 顯示右欄 A4 */
+      .main { display: block !important; }
+      .left-panel, .right-panel { width: 100% !important; max-width: 100% !important; }
+      body:not(.show-a4) .right-panel { display: none; }
+      body.show-a4 .left-panel { display: none; }
+      body.show-a4 .right-panel { display: block; overflow-x: auto; }
     }
 
     /* ===== Cloud Save / Load 按鈕 ===== */
@@ -732,6 +743,7 @@
 <!-- Top Bar -->
 <div class="top-bar">
   <span class="top-title">🏠 房屋銷售介紹產生器</span>
+  <button class="btn btn-mobile-toggle" id="btnMobileToggle" onclick="handleMobileToggle()" title="手機版：切換看左欄表單 / 右欄 A4 預覽">📄 看 A4 預覽</button>
   <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載永慶制式 CASE STUDY Excel">📊 下載 Excel</button>
   <button class="btn btn-a4-xlsx" onclick="downloadA4Xlsx()" id="btnA4Xlsx" title="下載 A4 銷售資料表 Excel（即右側預覽版面）">📄 下載 A4 銷售表 Excel</button>
   <button class="btn btn-mobile-html" onclick="exportMobileHtmlBoth()" id="btnMobileHtml" title="一鍵產出專員版 + 無名版手機友善 HTML（離線可看）">📱 儲存成手機版（2 份）</button>
@@ -7687,6 +7699,15 @@ ${factsText}
     close: closeDropdown,
     clearCurrentCase: () => setCurrentCase(null, null),
     getCurrentCase,
+  };
+
+  // ===== 手機版：左欄表單 / 右欄 A4 切換 =====
+  window.handleMobileToggle = function() {
+    const btn = document.getElementById('btnMobileToggle');
+    const isShowingA4 = document.body.classList.toggle('show-a4');
+    if (btn) btn.textContent = isShowingA4 ? '✏️ 回表單' : '📄 看 A4 預覽';
+    // 切回頂部，避免使用者看不到內容
+    window.scrollTo(0, 0);
   };
 
   // 頁面載入時恢復按鈕 label（如果 sessionStorage 有 currentCase）
