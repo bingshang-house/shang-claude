@@ -6955,33 +6955,56 @@ ${factsText}
     if (typeof updateCard === 'function') updateCard();
   }
 
+  // 把 expectedLandNos/expectedBuildingNos Set 轉成 Array（給 JSON.stringify 用）
+  function _setsToArrays(obj) {
+    if (!obj) return obj;
+    const c = { ...obj };
+    if (c.expectedLandNos instanceof Set) c.expectedLandNos = Array.from(c.expectedLandNos);
+    if (c.expectedBuildingNos instanceof Set) c.expectedBuildingNos = Array.from(c.expectedBuildingNos);
+    return c;
+  }
+  // 載入時把 Array 轉回 Set；非 Array / 非 Set 全部用空 Set 兜底（修 v2 早期錯誤序列化的 plain {} 殘留）
+  function _arraysToSets(obj) {
+    if (!obj) return obj;
+    const fixSet = (val) => {
+      if (val instanceof Set) return val;
+      if (Array.isArray(val)) return new Set(val);
+      return new Set();
+    };
+    if ('expectedLandNos' in obj) obj.expectedLandNos = fixSet(obj.expectedLandNos);
+    if ('expectedBuildingNos' in obj) obj.expectedBuildingNos = fixSet(obj.expectedBuildingNos);
+    return obj;
+  }
+
   window.__shangState = {
     getDeed: () => deed,
     setDeed: (v) => { deed = v || {}; },
     getBuildings: () => {
       const cloned = {};
       Object.entries(_buildingData).forEach(([k, v]) => {
-        if (!v) return;
-        const c = { ...v };
-        if (v.expectedLandNos instanceof Set) c.expectedLandNos = Array.from(v.expectedLandNos);
-        if (v.expectedBuildingNos instanceof Set) c.expectedBuildingNos = Array.from(v.expectedBuildingNos);
-        cloned[k] = c;
+        if (v) cloned[k] = _setsToArrays(v);
       });
       return { data: cloned, idx: _buildingIdx };
     },
     setBuildings: (v) => {
       _buildingData = {};
       Object.entries((v && v.data) || {}).forEach(([k, val]) => {
-        if (!val) return;
-        if (Array.isArray(val.expectedLandNos)) val.expectedLandNos = new Set(val.expectedLandNos);
-        if (Array.isArray(val.expectedBuildingNos)) val.expectedBuildingNos = new Set(val.expectedBuildingNos);
-        _buildingData[k] = val;
+        if (val) _buildingData[k] = _arraysToSets(val);
       });
       _buildingIdx = (v && v.idx) || Object.keys(_buildingData).length;
     },
-    getLands: () => ({ data: JSON.parse(JSON.stringify(_landData)), idx: _landIdx }),
+    getLands: () => {
+      const cloned = {};
+      Object.entries(_landData).forEach(([k, v]) => {
+        if (v) cloned[k] = _setsToArrays(v);
+      });
+      return { data: cloned, idx: _landIdx };
+    },
     setLands: (v) => {
-      _landData = (v && v.data) || {};
+      _landData = {};
+      Object.entries((v && v.data) || {}).forEach(([k, val]) => {
+        if (val) _landData[k] = _arraysToSets(val);
+      });
       _landIdx = (v && v.idx) || Object.keys(_landData).length;
     },
     getHazards: () => ({ results: _hazardResults, ignored: Array.from(_hazardIgnored) }),
