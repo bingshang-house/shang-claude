@@ -631,6 +631,17 @@
     .drive-status.ready { background: #E8F5E9; color: #2E7D32; }
     .drive-status.error { background: #FFEBEE; color: #C62828; cursor: help; }
 
+    /* ===== 手機版 top-bar：按鈕多時 wrap 換行 ===== */
+    @media (max-width: 768px) {
+      .top-bar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+      .top-bar .btn { padding: 6px 12px; font-size: 11px; letter-spacing: 0.5px; }
+      .top-bar .top-title { font-size: 14px; flex-basis: 100%; margin-bottom: 4px; letter-spacing: 1px; }
+      .top-bar .hazard-toggle { font-size: 10px; }
+      .user-badge { margin-left: 0; padding: 4px 10px; flex-basis: 100%; justify-content: center; gap: 6px; }
+      .user-badge .user-name { max-width: 160px; }
+      .drive-status { font-size: 10px; padding: 1px 6px; }
+    }
+
     /* ===== Cloud Save / Load 按鈕 ===== */
     .btn-cloud-save { background: #4285F4; color: #fff; }
     .btn-cloud-save:hover:not(:disabled) { background: #3367D6; }
