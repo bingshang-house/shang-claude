@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<!--
+  © 2026 賞好賞不動產有限公司
+  房地合一稅 2.0 試算 - prototype（響應式）
+-->
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>房地合一稅 2.0 試算（prototype）</title>
+  <style>
+    :root {
+      --yc-gold: #FFB700;
+      --yc-dark: #CC8F00;
+      --yc-deep: #7A5500;
+      --yc-light: #FFF8E0;
+      --yc-pale:  #FFFBF0;
+      --bg:       #F7F5F0;
+      --border:   #E8E0CC;
+      --danger:   #C53030;
+      --success:  #2F855A;
+      --muted:    #8A7A55;
+      --radius: 12px;
+      --shadow: 0 2px 16px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: #2A2A2A;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .topbar {
+      background: var(--yc-gold);
+      color: var(--yc-deep);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .topbar .sub {
+      font-size: 12px;
+      color: var(--yc-deep);
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 1024px) {
+      .layout {
+        grid-template-columns: 1fr 380px;
+        align-items: start;
+      }
+      .result-panel {
+        position: sticky;
+        top: 70px;
+      }
+    }
+
+    /* 卡片 */
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      color: var(--yc-deep);
+      border-bottom: 2px solid var(--yc-gold);
+      padding-bottom: 6px;
+    }
+    .card h2 .badge {
+      font-size: 11px;
+      background: var(--yc-light);
+      color: var(--yc-deep);
+      padding: 2px 8px;
+      border-radius: 8px;
+      margin-left: 8px;
+      font-weight: normal;
+    }
+    .card .hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* 表單 */
+    .field {
+      margin-bottom: 12px;
+    }
+    .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--yc-deep);
+      margin-bottom: 4px;
+    }
+    .field label .req {
+      color: var(--danger);
+      margin-left: 2px;
+    }
+    .field label .auto {
+      font-size: 11px;
+      background: var(--success);
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      font-weight: normal;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+      font-family: inherit;
+      background: var(--yc-pale);
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--yc-dark);
+      background: #fff;
+    }
+    input[readonly] {
+      background: #F0EFE8;
+      color: var(--muted);
+    }
+
+    /* 雙欄 grid（桌機） */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 600px) {
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* 勾選類 */
+    .checkrow {
+      display: flex;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--yc-pale);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .checkrow:hover { border-color: var(--yc-dark); }
+    .checkrow input[type="checkbox"],
+    .checkrow input[type="radio"] {
+      margin-right: 10px;
+      width: 18px;
+      height: 18px;
+      accent-color: var(--yc-dark);
+      flex-shrink: 0;
+    }
+    .checkrow .label {
+      flex: 1;
+      font-size: 14px;
+    }
+    .checkrow .desc {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .checkrow.active {
+      background: var(--yc-light);
+      border-color: var(--yc-dark);
+    }
+    .radio-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    /* 折疊 */
+    details {
+      background: var(--yc-pale);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0;
+      margin-bottom: 8px;
+    }
+    details summary {
+      cursor: pointer;
+      padding: 10px 14px;
+      font-weight: 600;
+      color: var(--yc-deep);
+      font-size: 14px;
+      list-style: none;
+      position: relative;
+    }
+    details summary::after {
+      content: '▾';
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      transition: transform 0.2s;
+    }
+    details[open] summary::after {
+      transform: translateY(-50%) rotate(180deg);
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details > .body {
+      padding: 0 14px 14px;
+    }
+
+    /* 5 題自住問答 */
+    .qa-list .qa {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+    .qa-list .qa .q {
+      font-size: 13px;
+      color: var(--yc-deep);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .qa-list .qa .yn {
+      display: flex;
+      gap: 8px;
+    }
+    .qa-list .qa .yn label {
+      flex: 1;
+      padding: 8px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--yc-pale);
+      font-size: 13px;
+    }
+    .qa-list .qa .yn input { display: none; }
+    .qa-list .qa .yn input:checked + span {
+      color: #fff;
+    }
+    .qa-list .qa .yn label:has(input:checked) {
+      background: var(--yc-dark);
+      border-color: var(--yc-dark);
+      color: #fff;
+    }
+
+    /* 必要費用 grid */
+    .fee-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    @media (min-width: 600px) {
+      .fee-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* 結果面板 */
+    .result-panel .card {
+      background: linear-gradient(180deg, var(--yc-light) 0%, #fff 100%);
+      border-color: var(--yc-dark);
+    }
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 14px;
+      border-bottom: 1px dashed var(--border);
+    }
+    .result-row.total {
+      border-bottom: none;
+      border-top: 2px solid var(--yc-dark);
+      margin-top: 8px;
+      padding-top: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--yc-deep);
+    }
+    .result-row .key {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .result-row .val {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-weight: 600;
+    }
+    .rr-tag {
+      display: inline-block;
+      padding: 4px 10px;
+      background: var(--yc-dark);
+      color: #fff;
+      border-radius: 6px;
+      font-size: 12px;
+      margin: 4px 4px 4px 0;
+    }
+    .rr-tag.warn { background: var(--danger); }
+    .rr-tag.ok { background: var(--success); }
+
+    .final-amount {
+      text-align: center;
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--yc-deep);
+      color: #fff;
+      border-radius: var(--radius);
+    }
+    .final-amount .label {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    .final-amount .val {
+      font-size: 26px;
+      font-weight: 700;
+      margin-top: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+    }
+
+    .alert {
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin: 8px 0;
+    }
+    .alert-info {
+      background: var(--yc-light);
+      color: var(--yc-deep);
+      border-left: 4px solid var(--yc-dark);
+    }
+    .alert-warn {
+      background: #FFF5F5;
+      color: var(--danger);
+      border-left: 4px solid var(--danger);
+    }
+    .alert-ok {
+      background: #F0FFF4;
+      color: var(--success);
+      border-left: 4px solid var(--success);
+    }
+
+    .footer-note {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      padding: 16px;
+      line-height: 1.5;
+    }
+
+    /* 手機優化：底部留空避免被遮 */
+    @media (max-width: 1023px) {
+      .container { padding-bottom: 80px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>房地合一稅 2.0 試算 <span style="font-size:12px;font-weight:normal;">prototype</span></h1>
+  <div class="sub">110/7/1 後交易適用 · 屋主面前手填模式</div>
+</div>
+
+<div class="container">
+  <div class="layout">
+
+    <!-- 左：輸入區 -->
+    <div class="input-panel">
+
+      <!-- 1. 案件類型 -->
+      <div class="card">
+        <h2>① 案件類型 <span class="badge">必填</span></h2>
+
+        <div class="field">
+          <label>居住身分 <span class="req">*</span></label>
+          <div class="radio-group">
+            <label class="checkrow">
+              <input type="radio" name="resident" value="resident" checked>
+              <div class="label">居住者<span class="desc">本國籍多半是</span></div>
+            </label>
+            <label class="checkrow">
+              <input type="radio" name="resident" value="non-resident">
+              <div class="label">非居住者<span class="desc">外國買家、海外台商</span></div>
+            </label>
+          </div>
+          <div class="hint">非居住者：≤2年 45%、>2年 35%，無自住優惠</div>
+        </div>
+
+        <div class="field">
+          <label>特殊情形（影響稅率）</label>
+          <label class="checkrow">
+            <input type="checkbox" id="involuntary">
+            <div class="label">調職、非自願因素<span class="desc">5 年內 → 20%</span></div>
+          </label>
+          <label class="checkrow">
+            <input type="checkbox" id="urbanRenewal">
+            <div class="label">都市更新 / 危老重建<span class="desc">第 1 次移轉 5 年內 → 20%</span></div>
+          </label>
+          <label class="checkrow">
+            <input type="checkbox" id="repurchase">
+            <div class="label">重購自住<span class="desc">2 年內買新自住房可扣抵</span></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- 2. 自住優惠資格 -->
+      <div class="card" id="selfUseCard">
+        <h2>② 自住優惠資格 <span class="badge">屋主問答</span></h2>
+        <div class="hint" style="margin-bottom:10px">5 題全勾「是」才適用 10% 優惠（超過 400 萬部分）</div>
+
+        <div class="qa-list">
+          <div class="qa">
+            <div class="q">1. 您（或配偶/未成年子女）在這個房子的戶籍滿 6 年了嗎？</div>
+            <div class="yn">
+              <label><input type="radio" name="qa1" value="yes"><span>是</span></label>
+              <label><input type="radio" name="qa1" value="no" checked><span>否</span></label>
+            </div>
+          </div>
+          <div class="qa">
+            <div class="q">2. 這 6 年內房子有沒有出租或拿來做生意？</div>
+            <div class="yn">
+              <label><input type="radio" name="qa2" value="no"><span>沒有</span></label>
+              <label><input type="radio" name="qa2" value="yes" checked><span>有</span></label>
+            </div>
+          </div>
+          <div class="qa">
+            <div class="q">3. 您（含配偶/未成年子女）以前賣房有用過自住優惠嗎？</div>
+            <div class="yn">
+              <label><input type="radio" name="qa3" value="no"><span>沒用過</span></label>
+              <label><input type="radio" name="qa3" value="yes" checked><span>用過了</span></label>
+            </div>
+          </div>
+          <div class="qa">
+            <div class="q">4. 房子的建物與土地是同一人所有嗎？</div>
+            <div class="yn">
+              <label><input type="radio" name="qa4" value="yes" checked><span>是</span></label>
+              <label><input type="radio" name="qa4" value="no"><span>否</span></label>
+            </div>
+          </div>
+          <div class="qa">
+            <div class="q">5. 您是否符合上面 4 題（沒問題、放心勾選自住）？</div>
+            <div class="yn">
+              <label><input type="radio" name="qa5" value="yes"><span>適用自住</span></label>
+              <label><input type="radio" name="qa5" value="no" checked><span>不適用</span></label>
+            </div>
+          </div>
+        </div>
+
+        <div id="selfUseStatus" class="alert alert-warn">❌ 不適用自住，套一般稅率</div>
+      </div>
+
+      <!-- 3. 從謄本帶入（自動） -->
+      <div class="card">
+        <h2>③ 標的物資料 <span class="badge">謄本自動帶入</span></h2>
+        <div class="grid-2">
+          <div class="field">
+            <label>所有權人 <span class="auto">自動</span></label>
+            <input type="text" id="owner" placeholder="（從建物謄本帶入）">
+          </div>
+          <div class="field">
+            <label>登記原因 <span class="auto">自動</span></label>
+            <select id="acquireReason">
+              <option value="">（從謄本帶入）</option>
+              <option value="a">a 買賣</option>
+              <option value="b">b 拍賣</option>
+              <option value="c">c 繼承</option>
+              <option value="d">d 受遺贈</option>
+              <option value="e">e 一般贈與</option>
+              <option value="f">f 配偶贈與 ⚠️</option>
+              <option value="h">h 廢止徵收</option>
+              <option value="z">z 其他</option>
+            </select>
+          </div>
+        </div>
+        <div id="reasonAlert"></div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label>取得日期 <span class="auto">謄本</span></label>
+            <input type="date" id="acquireDate">
+            <div class="hint" id="acquireDateHint">登記日期</div>
+          </div>
+          <div class="field">
+            <label>交易日期（移轉登記日）<span class="req">*</span></label>
+            <input type="date" id="txnDate">
+            <div class="hint">⚠️ 不是簽約日，是移轉登記日</div>
+          </div>
+        </div>
+
+        <div id="rrInfo" style="margin-top:8px"></div>
+      </div>
+
+      <!-- 4. 金額 -->
+      <div class="card">
+        <h2>④ 成交金額 <span class="badge">手填</span></h2>
+        <div class="field">
+          <label>成交價額 AA <span class="req">*</span></label>
+          <input type="text" id="aa" inputmode="numeric" placeholder="0">
+          <div class="hint">建物與土地未分開時，可填合計</div>
+        </div>
+      </div>
+
+      <!-- 5. 附表二 ZA -->
+      <details open>
+        <summary>⑤ 附表二・可減除成本 ZA</summary>
+        <div class="body">
+          <div class="field">
+            <label>取得方式</label>
+            <div class="radio-group">
+              <label class="checkrow">
+                <input type="radio" name="acqType" value="purchase" checked>
+                <div class="label">出價取得<span class="desc">買賣、拍賣</span></div>
+              </label>
+              <label class="checkrow">
+                <input type="radio" name="acqType" value="inherit">
+                <div class="label">繼承/受贈<span class="desc">用評定現值</span></div>
+              </label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>原始取得成本</label>
+            <input type="text" id="zaOrigin" inputmode="numeric" placeholder="0">
+            <div class="hint" id="zaOriginHint">當初買進的成交價</div>
+          </div>
+
+          <div class="field">
+            <label>取得時的必要費用（有發票/憑證才算）</label>
+            <div class="fee-grid">
+              <div><label style="font-size:12px">契稅</label><input type="text" class="zaFee" id="fee_qishui" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">印花稅</label><input type="text" class="zaFee" id="fee_yinhua" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">代書費</label><input type="text" class="zaFee" id="fee_daishu" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">規費</label><input type="text" class="zaFee" id="fee_guifei" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">仲介費（買進時付的）</label><input type="text" class="zaFee" id="fee_zhongjie" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">公證費</label><input type="text" class="zaFee" id="fee_gongzheng" inputmode="numeric" placeholder="0"></div>
+              <div style="grid-column:1 / -1"><label style="font-size:12px">增置/改良/修繕費 💡 最常忘</label><input type="text" class="zaFee" id="fee_xiushan" inputmode="numeric" placeholder="0"><div class="hint">裝潢、加蓋、廚房翻新、衛浴改造，有發票就算</div></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>改良土地費用 ZA2</label>
+            <input type="text" id="zaImprove" inputmode="numeric" placeholder="0">
+            <div class="hint">從土地增值稅繳款書「改良土地費用」欄抄</div>
+          </div>
+
+          <div class="alert alert-info">
+            ZA 合計：<strong id="zaTotal">0</strong> 元
+          </div>
+        </div>
+      </details>
+
+      <!-- 6. 附表三 ZB -->
+      <details open>
+        <summary>⑥ 附表三・可減除移轉費用 ZB</summary>
+        <div class="body">
+
+          <div class="field">
+            <label>已提示證明文件（出售時付的）</label>
+            <div class="fee-grid">
+              <div><label style="font-size:12px">仲介費（賞哥這次收的）</label><input type="text" class="zbFee" id="zb_zhongjie" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">代書費（過戶）</label><input type="text" class="zbFee" id="zb_daishu" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">規費</label><input type="text" class="zbFee" id="zb_guifei" inputmode="numeric" placeholder="0"></div>
+            </div>
+            <div class="hint" id="zb1Sum">小計 ZB1：0 元</div>
+          </div>
+
+          <div class="field">
+            <label>未提示證明（系統自動）</label>
+            <div class="alert alert-info" id="zb2Hint">
+              ZB2 = min(成交價 × 3%, 30 萬)<br>
+              <strong>= <span id="zb2Val">0</span> 元</strong>
+            </div>
+            <div class="hint">⚠️ 2.0 是 3% 上限 30 萬（不是舊制 5%）</div>
+          </div>
+
+          <div class="field">
+            <label>土地增值稅可減除部分 ZB3</label>
+            <input type="text" id="zb3" inputmode="numeric" placeholder="0">
+            <div class="hint">申報移轉現值超過公告現值的部分對應的土增稅，從繳款書抄</div>
+          </div>
+
+          <div class="alert alert-ok">
+            ZB = max(ZB1+ZB3, ZB2+ZB3) = <strong id="zbTotal">0</strong> 元
+            <div class="hint" id="zbWhich"></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 7. 土地漲價總數額 -->
+      <div class="card">
+        <h2>⑦ 土地漲價總數額</h2>
+        <div class="field">
+          <input type="text" id="landGain" inputmode="numeric" placeholder="0">
+          <div class="hint">直接從土地增值稅繳款書「土地漲價總數額」欄抄</div>
+        </div>
+      </div>
+
+      <!-- 8. 附表四 ZC -->
+      <details>
+        <summary>⑧ 附表四・前 3 年內交易損失 ZC（少見）</summary>
+        <div class="body">
+          <div class="field">
+            <label>前 3 年內已核定的交易損失合計</label>
+            <input type="text" id="zc" inputmode="numeric" placeholder="0">
+            <div class="hint">需有國稅局核定文號，多半屋主沒有</div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 9. 附表五 ZD -->
+      <details id="zdSection" style="display:none">
+        <summary>⑨ 附表五・重購扣抵 ZD</summary>
+        <div class="body">
+          <div class="grid-2">
+            <div class="field">
+              <label>重購價額 (1)</label>
+              <input type="text" id="repurchasePrice" inputmode="numeric" placeholder="0">
+            </div>
+            <div class="field">
+              <label>出售價額 (2)</label>
+              <input type="text" id="repurchaseSell" inputmode="numeric" placeholder="0">
+              <div class="hint">通常等於 AA</div>
+            </div>
+          </div>
+          <div class="alert alert-info">
+            扣抵稅額 ZD = <strong id="zdVal">0</strong> 元
+          </div>
+        </div>
+      </details>
+
+    </div>
+
+    <!-- 右：試算結果（桌機 sticky / 手機在下方） -->
+    <div class="result-panel">
+      <div class="card">
+        <h2>試算結果</h2>
+
+        <div id="rrSummary" style="margin-bottom: 12px"></div>
+
+        <div class="result-row">
+          <span class="key">成交價額 AA</span>
+          <span class="val" id="rAA">0</span>
+        </div>
+        <div class="result-row">
+          <span class="key">− 可減除成本 ZA</span>
+          <span class="val" id="rZA">0</span>
+        </div>
+        <div class="result-row">
+          <span class="key">− 可減除費用 ZB</span>
+          <span class="val" id="rZB">0</span>
+        </div>
+        <div class="result-row total">
+          <span>＝ 交易所得 GI</span>
+          <span class="val" id="rGI">0</span>
+        </div>
+
+        <div class="result-row" style="margin-top:8px">
+          <span class="key">− 前 3 年損失 ZC</span>
+          <span class="val" id="rZC">0</span>
+        </div>
+        <div class="result-row">
+          <span class="key">− 土地漲價總數額</span>
+          <span class="val" id="rLG">0</span>
+        </div>
+        <div class="result-row total">
+          <span>＝ 課稅所得 GL</span>
+          <span class="val" id="rGL">0</span>
+        </div>
+
+        <div class="result-row" style="margin-top:8px">
+          <span class="key">適用稅率</span>
+          <span class="val" id="rRate">—</span>
+        </div>
+        <div class="result-row" id="rDmRow" style="display:none">
+          <span class="key">− 自住免稅額 DM</span>
+          <span class="val">4,000,000</span>
+        </div>
+        <div class="result-row total">
+          <span>＝ 應納稅額 AF</span>
+          <span class="val" id="rAF">0</span>
+        </div>
+
+        <div class="result-row" id="rZdRow" style="display:none">
+          <span class="key">− 重購扣抵 ZD</span>
+          <span class="val" id="rZD">0</span>
+        </div>
+
+        <div class="final-amount">
+          <div class="label">本次應自行繳納稅額 AH</div>
+          <div class="val" id="rAH">$ 0</div>
+        </div>
+
+        <div id="warnings"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer-note">
+    本試算結果僅供買賣雙方議價參考，實際應納稅額以國稅局核定為準。<br>
+    © 賞好賞不動產有限公司 · 江炳賞　114 年高市字第 01680 號
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n||0).toLocaleString('en-US');
+const num = v => {
+  if (typeof v === 'string') v = v.replace(/[^0-9.-]/g,'');
+  return Number(v) || 0;
+};
+
+// 千分位輸入即時格式化
+function attachNumFormat(el) {
+  el.addEventListener('input', () => {
+    const cur = el.value.replace(/[^0-9]/g,'');
+    el.value = cur ? Number(cur).toLocaleString('en-US') : '';
+    calc();
+  });
+}
+document.querySelectorAll('input[inputmode="numeric"]').forEach(attachNumFormat);
+document.querySelectorAll('input[type="checkbox"], input[type="radio"], select, input[type="date"]').forEach(el => {
+  el.addEventListener('change', calc);
+});
+
+// 取得日期 hint 隨登記原因變
+$('acquireReason').addEventListener('change', () => {
+  const r = $('acquireReason').value;
+  const hint = $('acquireDateHint');
+  const alert = $('reasonAlert');
+  alert.innerHTML = '';
+  if (r === 'f') {
+    hint.textContent = '⚠️ 配偶贈與 → 填配偶第 1 次相互贈與前的原始取得日';
+    alert.innerHTML = '<div class="alert alert-warn">⚠️ 配偶贈與 (f)：取得日期要追溯到配偶當年原始取得日，不是這次登記日</div>';
+  } else if (['c','d','h'].includes(r)) {
+    hint.textContent = '⚠️ ' + ({c:'繼承',d:'受遺贈',h:'廢止徵收'}[r]) + ' → 取得日請參閱說明八';
+    alert.innerHTML = '<div class="alert alert-warn">⚠️ ' + ({c:'繼承',d:'受遺贈',h:'廢止徵收'}[r]) + '：取得日期可能不等於登記日，請確認</div>';
+  } else {
+    hint.textContent = '登記日期';
+  }
+});
+
+// 重購勾選 → 顯示 ZD 區
+$('repurchase').addEventListener('change', () => {
+  $('zdSection').style.display = $('repurchase').checked ? 'block' : 'none';
+});
+
+function selfUseEligible() {
+  const isResident = document.querySelector('[name="resident"]:checked').value === 'resident';
+  if (!isResident) return false;
+  const q1 = document.querySelector('[name="qa1"]:checked')?.value === 'yes';
+  const q2 = document.querySelector('[name="qa2"]:checked')?.value === 'no';
+  const q3 = document.querySelector('[name="qa3"]:checked')?.value === 'no';
+  const q4 = document.querySelector('[name="qa4"]:checked')?.value === 'yes';
+  const q5 = document.querySelector('[name="qa5"]:checked')?.value === 'yes';
+  return q1 && q2 && q3 && q4 && q5;
+}
+
+function calcRR() {
+  const a = $('acquireDate').value;
+  const t = $('txnDate').value;
+  if (!a || !t) return null;
+  const ad = new Date(a), td = new Date(t);
+  const ms = td - ad;
+  if (ms < 0) return null;
+  const years = ms / (365.25 * 86400 * 1000);
+  return years;
+}
+
+function bracketAndRate(years, opts) {
+  const { isResident, selfUse, involuntary, urbanRenewal } = opts;
+  if (!isResident) {
+    return years <= 2
+      ? { bracket: '≤ 2 年（非居住者）', rate: 0.45, dm: 0 }
+      : { bracket: '> 2 年（非居住者）', rate: 0.35, dm: 0 };
+  }
+  // 居住者
+  if (selfUse) {
+    return { bracket: '自住房地', rate: 0.10, dm: 4000000 };
+  }
+  if ((involuntary || urbanRenewal) && years <= 5) {
+    return { bracket: (involuntary ? '調職/非自願' : '都更/危老') + '（≤ 5 年）', rate: 0.20, dm: 0 };
+  }
+  if (years <= 2) return { bracket: '≤ 2 年', rate: 0.45, dm: 0 };
+  if (years <= 5) return { bracket: '2-5 年', rate: 0.35, dm: 0 };
+  if (years <= 10) return { bracket: '5-10 年', rate: 0.20, dm: 0 };
+  return { bracket: '> 10 年', rate: 0.15, dm: 0 };
+}
+
+function calc() {
+  // 自住資格 banner
+  const selfUseOk = selfUseEligible();
+  const isResident = document.querySelector('[name="resident"]:checked').value === 'resident';
+  const status = $('selfUseStatus');
+  if (!isResident) {
+    status.className = 'alert alert-warn';
+    status.innerHTML = '❌ 非居住者無自住優惠';
+  } else if (selfUseOk) {
+    status.className = 'alert alert-ok';
+    status.innerHTML = '✅ 適用自住，超過 400 萬部分課 10%';
+  } else {
+    status.className = 'alert alert-warn';
+    status.innerHTML = '❌ 不適用自住，套一般稅率';
+  }
+
+  // 持有期間
+  const yrs = calcRR();
+  const rrInfo = $('rrInfo');
+  if (yrs == null) {
+    rrInfo.innerHTML = '<div class="hint">填好兩個日期後自動算持有期間</div>';
+  } else {
+    const y = Math.floor(yrs);
+    const m = Math.floor((yrs - y) * 12);
+    rrInfo.innerHTML = `<span class="rr-tag ok">持有 ${y} 年 ${m} 個月</span>`;
+  }
+
+  // ZA
+  const zaOrigin = num($('zaOrigin').value);
+  const zaFees = ['fee_qishui','fee_yinhua','fee_daishu','fee_guifei','fee_zhongjie','fee_gongzheng','fee_xiushan']
+    .reduce((s,id) => s + num($(id).value), 0);
+  const zaImprove = num($('zaImprove').value);
+  const ZA = zaOrigin + zaFees + zaImprove;
+  $('zaTotal').textContent = fmt(ZA);
+
+  // ZB
+  const zb1 = ['zb_zhongjie','zb_daishu','zb_guifei'].reduce((s,id) => s + num($(id).value), 0);
+  $('zb1Sum').textContent = `小計 ZB1：${fmt(zb1)} 元`;
+  const AA = num($('aa').value);
+  const zb2 = Math.min(Math.floor(AA * 0.03), 300000);
+  $('zb2Val').textContent = fmt(zb2);
+  const zb3 = num($('zb3').value);
+  const zbA = zb1 + zb3;
+  const zbB = zb2 + zb3;
+  const ZB = Math.max(zbA, zbB);
+  $('zbTotal').textContent = fmt(ZB);
+  $('zbWhich').textContent = zbA >= zbB ? `採已提示證明（${fmt(zbA)}）` : `採未提示證明（${fmt(zbB)}）`;
+
+  // GI / GL
+  const GI = AA - ZA - ZB;
+  const ZC = num($('zc').value);
+  const LG = num($('landGain').value);
+  let GL = GI - ZC - LG;
+  if (GL < 0) GL = 0;
+
+  // 稅率
+  const involuntary = $('involuntary').checked;
+  const urbanRenewal = $('urbanRenewal').checked;
+  const repurchase = $('repurchase').checked;
+  const { bracket, rate, dm } = bracketAndRate(yrs ?? 0, {
+    isResident, selfUse: selfUseOk, involuntary, urbanRenewal
+  });
+
+  // AF
+  let AF = 0;
+  if (dm > 0) {
+    AF = Math.max(0, GL - dm) * rate;
+    $('rDmRow').style.display = 'flex';
+  } else {
+    AF = GL * rate;
+    $('rDmRow').style.display = 'none';
+  }
+  AF = Math.floor(AF);
+
+  // ZD 重購扣抵
+  let ZD = 0;
+  if (repurchase) {
+    const p1 = num($('repurchasePrice').value);
+    const p2 = num($('repurchaseSell').value);
+    if (p2 > 0) {
+      ZD = p1 >= p2 ? AF : Math.floor(AF * (p1/p2));
+    }
+    $('zdVal').textContent = fmt(ZD);
+    $('rZdRow').style.display = 'flex';
+  } else {
+    $('rZdRow').style.display = 'none';
+  }
+  const AH = Math.max(0, AF - ZD);
+
+  // 渲染右側
+  $('rAA').textContent = fmt(AA);
+  $('rZA').textContent = fmt(ZA);
+  $('rZB').textContent = fmt(ZB);
+  $('rGI').textContent = fmt(GI);
+  $('rZC').textContent = fmt(ZC);
+  $('rLG').textContent = fmt(LG);
+  $('rGL').textContent = fmt(GL);
+  $('rRate').textContent = (rate * 100) + '%';
+  $('rAF').textContent = fmt(AF);
+  $('rZD').textContent = fmt(ZD);
+  $('rAH').textContent = '$ ' + fmt(AH);
+
+  // 右側上方持有期間 summary
+  const rrS = $('rrSummary');
+  if (yrs == null) {
+    rrS.innerHTML = '<div class="alert alert-warn">⚠️ 請先填取得日期 + 交易日期</div>';
+  } else {
+    const y = Math.floor(yrs);
+    const m = Math.floor((yrs - y) * 12);
+    rrS.innerHTML = `
+      <span class="rr-tag">${y} 年 ${m} 月</span>
+      <span class="rr-tag ${selfUseOk ? 'ok' : 'warn'}">${bracket}</span>
+      <span class="rr-tag">稅率 ${(rate*100)}%</span>
+    `;
+  }
+
+  // 警語
+  const warns = [];
+  const reason = $('acquireReason').value;
+  if (reason === 'f') warns.push('配偶贈與：取得日要追配偶原始取得日');
+  if (['c','d','h'].includes(reason)) warns.push(`${reason} 案件：取得日不等於登記日`);
+  if (yrs != null && yrs <= 2 && !selfUseOk && isResident) warns.push('短期持有，稅率最高 45%');
+  if (GI < 0) warns.push(`本次交易為損失（${fmt(GI)}），應納稅額 0`);
+  $('warnings').innerHTML = warns.length
+    ? '<div class="alert alert-warn">' + warns.map(w => '⚠️ ' + w).join('<br>') + '</div>'
+    : '';
+}
+
+calc();
+</script>
+</body>
+</html>
