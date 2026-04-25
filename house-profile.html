@@ -623,6 +623,13 @@
       font-weight: 700;
     }
     .user-badge .btn-logout:hover { background: #CC8F00; color: #fff; }
+    .drive-status {
+      font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      background: #FFF3E0; color: #B0A080; font-weight: 600;
+      transition: all .3s;
+    }
+    .drive-status.ready { background: #E8F5E9; color: #2E7D32; }
+    .drive-status.error { background: #FFEBEE; color: #C62828; cursor: help; }
   </style>
 </head>
 <body>
@@ -6887,8 +6894,10 @@ ${factsText}
   const OAUTH_CLIENT_ID = '1054981797930-fhhpephhsc0a1icc6kudnfer11ec1lqf.apps.googleusercontent.com';
   const WHITELIST_WORKER = 'https://shang-whitelist.bingshang1019.workers.dev';
   const OAUTH_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file';
+  const DRIVE_FOLDER_NAME = '賞好賞銷售資料';
+  const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 
-  const authState = { email: null, name: null, picture: null, accessToken: null };
+  const authState = { email: null, name: null, picture: null, accessToken: null, driveFolderId: null };
   window.__authState = authState;
 
   let tokenClient = null;
@@ -6969,6 +6978,8 @@ ${factsText}
         sessionStorage.setItem('auth_token_at', String(Date.now()));
         document.body.classList.add('authed');
         renderUserBadge();
+        // 背景設定 Drive 資料夾（不擋登入流程）
+        setupDriveFolder();
       } else {
         // 不在白名單 → 顯示自助申請表單
         setStatus('');
@@ -6998,6 +7009,7 @@ ${factsText}
     const display = authState.name || authState.email;
     badge.innerHTML =
       '<span class="user-name" title="' + authState.email + '">👤 ' + display + '</span>' +
+      '<span class="drive-status" id="drive-status" title="連接中...">☁️ 連接中</span>' +
       '<button class="btn-logout" onclick="window.handleLogoutClick()">登出</button>';
     const topBar = document.querySelector('.top-bar');
     if (topBar) topBar.appendChild(badge);
@@ -7067,10 +7079,12 @@ ${factsText}
     sessionStorage.removeItem('auth_picture');
     sessionStorage.removeItem('auth_access_token');
     sessionStorage.removeItem('auth_token_at');
+    sessionStorage.removeItem('auth_drive_folder_id');
     authState.email = null;
     authState.name = null;
     authState.picture = null;
     authState.accessToken = null;
+    authState.driveFolderId = null;
     document.body.classList.remove('authed');
     const badge = $('user-badge');
     if (badge) badge.remove();
@@ -7078,6 +7092,98 @@ ${factsText}
     setBtnText('使用 Google 登入');
     const btn = $('btnGoogleLogin');
     if (btn) btn.disabled = false;
+  };
+
+  // ===== Drive API helpers =====
+  function setDriveStatus(state, label, title) {
+    const el = $('drive-status');
+    if (!el) return;
+    el.className = 'drive-status' + (state ? ' ' + state : '');
+    el.textContent = label;
+    if (title) el.setAttribute('title', title);
+  }
+
+  async function driveFetch(path, init) {
+    const res = await fetch(DRIVE_API + path, {
+      ...(init || {}),
+      headers: {
+        ...((init && init.headers) || {}),
+        Authorization: 'Bearer ' + authState.accessToken,
+      },
+    });
+    return res;
+  }
+
+  async function checkDriveFolder(folderId) {
+    try {
+      const r = await driveFetch('/files/' + encodeURIComponent(folderId) + '?fields=id,trashed');
+      if (!r.ok) return false;
+      const j = await r.json();
+      return !j.trashed;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function findOrCreateDriveFolder() {
+    // 先試 localStorage 記住的 ID
+    let folderId = localStorage.getItem('shang_drive_folder_id');
+    if (folderId && await checkDriveFolder(folderId)) return folderId;
+
+    // 搜尋既存資料夾（drive.file scope 下只看到此 app 自己建的）
+    const q = "name='" + DRIVE_FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+    const searchRes = await driveFetch('/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)');
+    if (searchRes.ok) {
+      const searchJson = await searchRes.json();
+      if (searchJson.files && searchJson.files.length > 0) {
+        folderId = searchJson.files[0].id;
+        localStorage.setItem('shang_drive_folder_id', folderId);
+        return folderId;
+      }
+    }
+
+    // 沒找到 → 建新的
+    const createRes = await driveFetch('/files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: DRIVE_FOLDER_NAME,
+        mimeType: 'application/vnd.google-apps.folder',
+      }),
+    });
+    if (!createRes.ok) {
+      const text = await createRes.text();
+      throw new Error('建立資料夾失敗：' + createRes.status + ' ' + text.slice(0, 100));
+    }
+    const createJson = await createRes.json();
+    folderId = createJson.id;
+    if (folderId) localStorage.setItem('shang_drive_folder_id', folderId);
+    return folderId;
+  }
+
+  async function setupDriveFolder() {
+    setDriveStatus('', '☁️ 連接中', '正在連接 Google Drive...');
+    try {
+      const folderId = await findOrCreateDriveFolder();
+      if (!folderId) throw new Error('沒拿到 folder_id');
+      authState.driveFolderId = folderId;
+      sessionStorage.setItem('auth_drive_folder_id', folderId);
+      setDriveStatus('ready', '☁️ Drive 已就緒', 'Drive 資料夾：' + DRIVE_FOLDER_NAME);
+      return folderId;
+    } catch (err) {
+      console.error('Drive setup failed:', err);
+      setDriveStatus('error', '⚠️ Drive 連線失敗', String(err.message || err));
+      return null;
+    }
+  }
+
+  // 開放給後續存檔模組用
+  window.__shangDrive = {
+    setupDriveFolder,
+    findOrCreateDriveFolder,
+    checkDriveFolder,
+    driveFetch,
+    getFolderId: () => authState.driveFolderId,
   };
 
   function restoreSession() {
@@ -7090,8 +7196,16 @@ ${factsText}
       authState.name = sessionStorage.getItem('auth_name') || '';
       authState.picture = sessionStorage.getItem('auth_picture') || '';
       authState.accessToken = accessToken;
+      authState.driveFolderId = sessionStorage.getItem('auth_drive_folder_id') || localStorage.getItem('shang_drive_folder_id') || null;
       document.body.classList.add('authed');
       renderUserBadge();
+      // 已恢復 → 顯示「已就緒」狀態（不重打 Drive API，假設仍有效）
+      if (authState.driveFolderId) {
+        setDriveStatus('ready', '☁️ Drive 已就緒', 'Drive 資料夾已連接');
+      } else {
+        // 沒記住的 folder_id → 背景重設
+        setupDriveFolder();
+      }
       return true;
     }
     return false;
