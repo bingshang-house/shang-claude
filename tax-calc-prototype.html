@@ -525,9 +525,37 @@
         <div id="rrInfo" style="margin-top:8px"></div>
       </div>
 
-      <!-- 4. 金額 -->
+      <!-- 4. 土地謄本 + 漲價總數額（從原 ⑦ 移上） -->
       <div class="card">
-        <h2>④ 成交金額 <span class="badge">手填</span></h2>
+        <h2>④ 土地漲價總數額 <span class="badge">謄本自動帶入或手填</span></h2>
+
+        <!-- 4a. 上傳土地謄本自動算（推薦）-->
+        <div class="field">
+          <label>📎 從土地謄本自動帶入（可多份）</label>
+          <input type="file" id="landDeedInput" accept="application/pdf" multiple style="font-size:13px;">
+          <button type="button" id="landDeedClear" style="margin-left:8px;font-size:12px;padding:3px 10px;cursor:pointer;">清空</button>
+          <div class="hint">支援同時上傳多份土地謄本；自動算出每筆地的漲價總數額並累加</div>
+        </div>
+        <div id="landDeedList" style="margin: 8px 0; font-size: 12px;"></div>
+        <div id="landTaxRefBox" style="display:none; padding:10px 12px; background:#FFF8E0; border:1px solid var(--yc-dark); border-radius:6px; margin: 8px 0;">
+          <div style="font-size: 12px; color: var(--yc-deep); margin-bottom: 4px;">📊 土地增值稅參考（賣方議價用，本表不直接套用）：</div>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div>自用住宅 10%：<strong style="color:#b91c1c;font-size:16px;" id="landTaxSelfUse">0</strong> 元</div>
+            <div>一般稅率：<strong style="color:#b91c1c;font-size:16px;" id="landTaxGeneral">0</strong> 元</div>
+          </div>
+        </div>
+
+        <!-- 4b. 漲價總數額（自動帶入，可手動改）-->
+        <div class="field">
+          <label>土地漲價總數額（可手動修改）</label>
+          <input type="text" id="landGain" inputmode="numeric" placeholder="0">
+          <div class="hint" id="landGainHint">尚未上傳謄本；可手動填入或上傳謄本自動帶</div>
+        </div>
+      </div>
+
+      <!-- 5. 成交金額 -->
+      <div class="card">
+        <h2>⑤ 成交金額 <span class="badge">手填</span></h2>
         <div class="field">
           <label>成交價額 AA <span class="req">*</span></label>
           <input type="text" id="aa" inputmode="numeric" placeholder="0">
@@ -535,9 +563,9 @@
         </div>
       </div>
 
-      <!-- 5. 附表二 ZA -->
+      <!-- 6. 附表二 ZA -->
       <details open>
-        <summary>⑤ 附表二・可減除成本 ZA</summary>
+        <summary>⑥ 附表二・可減除成本 ZA</summary>
         <div class="body">
           <div class="field">
             <label>取得方式</label>
@@ -585,9 +613,9 @@
         </div>
       </details>
 
-      <!-- 6. 附表三 ZB -->
+      <!-- 7. 附表三 ZB -->
       <details open>
-        <summary>⑥ 附表三・可減除移轉費用 ZB</summary>
+        <summary>⑦ 附表三・可減除移轉費用 ZB</summary>
         <div class="body">
 
           <div class="field">
@@ -625,34 +653,6 @@
           </div>
         </div>
       </details>
-
-      <!-- 7. 土地漲價總數額 -->
-      <div class="card">
-        <h2>⑦ 土地漲價總數額</h2>
-
-        <!-- 7a. 上傳土地謄本自動算（推薦）-->
-        <div class="field">
-          <label>📎 從土地謄本自動帶入（可多份）</label>
-          <input type="file" id="landDeedInput" accept="application/pdf" multiple style="font-size:13px;">
-          <button type="button" id="landDeedClear" style="margin-left:8px;font-size:12px;padding:3px 10px;cursor:pointer;">清空</button>
-          <div class="hint">支援同時上傳多份土地謄本；自動算出每筆地的漲價總數額並累加</div>
-        </div>
-        <div id="landDeedList" style="margin: 8px 0; font-size: 12px;"></div>
-        <div id="landTaxRefBox" style="display:none; padding:10px 12px; background:#FFF8E0; border:1px solid var(--yc-dark); border-radius:6px; margin: 8px 0;">
-          <div style="font-size: 12px; color: var(--yc-deep); margin-bottom: 4px;">📊 土地增值稅參考（賣方議價用，本表不直接套用）：</div>
-          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-            <div>自用住宅 10%：<strong style="color:#b91c1c;font-size:16px;" id="landTaxSelfUse">0</strong> 元</div>
-            <div>一般稅率：<strong style="color:#b91c1c;font-size:16px;" id="landTaxGeneral">0</strong> 元</div>
-          </div>
-        </div>
-
-        <!-- 7b. 漲價總數額（自動帶入，可手動改）-->
-        <div class="field">
-          <label>土地漲價總數額（可手動修改）</label>
-          <input type="text" id="landGain" inputmode="numeric" placeholder="0">
-          <div class="hint" id="landGainHint">尚未上傳謄本；可手動填入或上傳謄本自動帶</div>
-        </div>
-      </div>
 
       <!-- 8. 附表四 ZC -->
       <details>
