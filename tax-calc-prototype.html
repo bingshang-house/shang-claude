@@ -818,8 +818,15 @@ $('zb_zhongjie').addEventListener('input', () => { _zbZhongjieUserEdited = true;
 $('zb_lvyue').addEventListener('input', () => { _zbLvyueUserEdited = true; });
 
 // zaOrigin 變動 → 自動帶買進履約保證費（萬分之三）
+// 注意：只有「買賣 (a)」或未選時才自動帶；繼承/贈與/拍賣等沒履保費
 $('zaOrigin').addEventListener('input', () => {
   if (_zaLvyueUserEdited) return;
+  const reason = $('acquireReason').value;
+  if (reason && reason !== 'a') {
+    $('fee_lvyue').value = '';
+    calc();
+    return;
+  }
   const za = num($('zaOrigin').value);
   const fee = Math.round(za * 0.0003);
   $('fee_lvyue').value = fee ? fee.toLocaleString('en-US') : '';
@@ -1099,6 +1106,17 @@ $('acquireReason').addEventListener('change', () => {
   } else {
     zaHint.textContent = '當初買進的成交價';
     zaHint.style.color = '';
+  }
+  // 履保費連動：非買賣（含繼承/贈與/拍賣等）→ 清空 fee_lvyue；買賣或未選 → 重算
+  if (!_zaLvyueUserEdited) {
+    if (r === 'a' || r === '') {
+      const za = num($('zaOrigin').value);
+      const fee = Math.round(za * 0.0003);
+      $('fee_lvyue').value = fee ? fee.toLocaleString('en-US') : '';
+    } else {
+      $('fee_lvyue').value = '';
+    }
+    calc();
   }
 });
 
