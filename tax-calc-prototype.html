@@ -599,10 +599,10 @@
       <div class="card">
         <h2>③ 標的物資料 <span class="badge">謄本自動帶入或手填</span></h2>
         <div class="field">
-          <label>📎 從建物謄本自動帶入（可選）</label>
-          <input type="file" id="buildingDeedInput" accept="application/pdf" style="font-size:13px;">
+          <label>📎 從建物謄本自動帶入（可選；支援 PDF 或照片）</label>
+          <input type="file" id="buildingDeedInput" accept="application/pdf,image/*" multiple style="font-size:13px;">
           <button type="button" id="buildingDeedClear" style="margin-left:8px;font-size:12px;padding:3px 10px;cursor:pointer;">清空</button>
-          <div class="hint" id="buildingDeedHint">不上傳也可以，下面欄位都可手動填</div>
+          <div class="hint" id="buildingDeedHint">不上傳也可以，下面欄位都可手動填。照片：拍清楚「建物所有權部」那頁；多頁可一起選。</div>
         </div>
         <div class="grid-2">
           <div class="field">
@@ -649,10 +649,10 @@
 
         <!-- 4a. 上傳土地謄本自動算（推薦）-->
         <div class="field">
-          <label>📎 從土地謄本自動帶入（可多份）</label>
-          <input type="file" id="landDeedInput" accept="application/pdf" multiple style="font-size:13px;">
+          <label>📎 從土地謄本自動帶入（可多份；支援 PDF 或照片）</label>
+          <input type="file" id="landDeedInput" accept="application/pdf,image/*" multiple style="font-size:13px;">
           <button type="button" id="landDeedClear" style="margin-left:8px;font-size:12px;padding:3px 10px;cursor:pointer;">清空</button>
-          <div class="hint">支援同時上傳多份土地謄本；自動算出每筆地的漲價總數額並累加</div>
+          <div class="hint">PDF：可同時選多份不同筆的謄本。<br>照片：每次選的照片視為「同一筆地」（多頁拍一起選），多筆地請分次上傳。</div>
         </div>
         <div id="landDeedList" style="margin: 8px 0; font-size: 12px;"></div>
         <div id="landTaxRefBox" style="display:none; padding:10px 12px; background:#FFF8E0; border:1px solid var(--yc-dark); border-radius:6px; margin: 8px 0;">
@@ -1017,11 +1017,16 @@ $('urbanRenewal').addEventListener('change', updateOldRegimeAlert);
 // 使用者手動改 landGain → 鎖定不被謄本自動值覆寫
 $('landGain').addEventListener('input', () => { _landGainUserEdited = true; });
 
-// ===== 土地謄本上傳 → 自動算漲價總數額 =====
+// ===== 土地謄本上傳 → 自動算漲價總數額（PDF 直解、圖片走 Gemini OCR）=====
 $('landDeedInput').addEventListener('change', async (e) => {
   const files = [...(e.target.files || [])];
   if (!files.length) return;
-  for (const file of files) {
+
+  const pdfs = files.filter(f => f.type === 'application/pdf');
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+
+  // PDF：每份各算一筆地
+  for (const file of pdfs) {
     try {
       const deed = await parseLandDeed(file);
       if (deed) _landDeeds.push(deed);
@@ -1029,6 +1034,22 @@ $('landDeedInput').addEventListener('change', async (e) => {
       console.error('parseLandDeed failed', file.name, err);
     }
   }
+
+  // 圖片：所有圖片合併視為「同一筆地」的多頁照片
+  if (imgs.length) {
+    const tmpId = 'tmp-img-' + Date.now();
+    $('landDeedList').insertAdjacentHTML('beforeend',
+      `<div id="${tmpId}" style="padding:4px 8px;color:var(--yc-deep);">📸 OCR 辨識中…（${imgs.length} 張照片）</div>`);
+    try {
+      const deed = await geminiOCRLand(imgs);
+      if (deed) _landDeeds.push(deed);
+    } catch (err) {
+      console.error('geminiOCRLand failed', err);
+      _landDeeds.push({ fileName: imgs.map(f => f.name).join(','), error: 'OCR 失敗：' + err.message });
+    }
+    document.getElementById(tmpId)?.remove();
+  }
+
   e.target.value = ''; // 允許重複上傳同檔
   renderDeedList();
 });
@@ -1038,13 +1059,25 @@ $('landDeedClear').addEventListener('click', () => {
   renderDeedList();
 });
 
-// ===== 建物謄本上傳 → 自動帶所有權人 / 登記原因 / 取得日期 =====
+// ===== 建物謄本上傳 → 自動帶所有權人 / 登記原因 / 取得日期（PDF/圖片皆可）=====
 $('buildingDeedInput').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  $('buildingDeedHint').textContent = '解析中…';
+  const files = [...(e.target.files || [])];
+  if (!files.length) return;
+
+  const pdfs = files.filter(f => f.type === 'application/pdf');
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+
+  $('buildingDeedHint').textContent = imgs.length ? `📸 OCR 辨識中…（${imgs.length} 張照片）` : '解析中…';
+  $('buildingDeedHint').style.color = '';
   try {
-    const r = await parseBuildingDeed(file);
+    let r = null;
+    if (pdfs.length) {
+      // 有 PDF 直接走 PDF（PDF 比較準）
+      r = await parseBuildingDeed(pdfs[0]);
+    } else if (imgs.length) {
+      // 純圖片走 Gemini
+      r = await geminiOCRBuilding(imgs);
+    }
     if (!r) {
       $('buildingDeedHint').textContent = '⚠ 解析失敗，請手動填寫';
       $('buildingDeedHint').style.color = '#b91c1c';
@@ -1060,11 +1093,12 @@ $('buildingDeedInput').addEventListener('change', async (e) => {
     if (r.owner) parts.push(`所有權人：${r.owner}`);
     if (r.reasonText) parts.push(`登記原因：${r.reasonText}`);
     if (r.acquireDate) parts.push(`取得日期：${r.acquireDate}`);
-    $('buildingDeedHint').innerHTML = `✓ 已帶入 ${parts.join('、')}`;
+    const tag = imgs.length && !pdfs.length ? '📸 ' : '';
+    $('buildingDeedHint').innerHTML = `${tag}✓ 已帶入 ${parts.join('、')}`;
     $('buildingDeedHint').style.color = '#2F855A';
     calc();
   } catch (err) {
-    console.error('parseBuildingDeed failed', err);
+    console.error('building deed parse failed', err);
     $('buildingDeedHint').textContent = '⚠ 解析錯誤：' + err.message;
     $('buildingDeedHint').style.color = '#b91c1c';
   }
@@ -1184,6 +1218,129 @@ async function parseLandDeed(file) {
     numerator: parseInt(ratioM[2], 10),
     prevYearROC, prevMonth, prevValue,
     currentValue,
+  };
+}
+
+// ===== Gemini Vision OCR：照片版謄本辨識 =====
+const GEMINI_OCR_URL = 'https://shang-gemini-proxy.bingshang1019.workers.dev/v1beta/models/gemini-2.5-flash:generateContent';
+
+async function fileToBase64(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  // chunk 避免 stack overflow
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+async function geminiCall(parts, schemaHint) {
+  const res = await fetch(GEMINI_OCR_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 1024,
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini ${res.status}: ${err.slice(0, 150)}`);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+  if (!text) throw new Error('Gemini 回傳空白（' + (data?.candidates?.[0]?.finishReason || '?') + '）');
+  // 嘗試 parse JSON（responseMimeType=json 但仍要 defensive）
+  const cleaned = text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+  return JSON.parse(cleaned);
+}
+
+const BUILDING_PROMPT = `你是台灣電子謄本辨識專家。下方是同一份建物謄本的照片（可能多張），請抽取以下欄位，回傳純 JSON：
+{
+  "owner": "建物所有權部第一順位的所有權人姓名（不要建物標示部第一次登記人；姓名可能含＊或*遮蔽字）",
+  "reasonText": "登記原因原始中文（例：買賣、第一次登記、繼承、夫妻贈與）",
+  "reasonCode": "代號 a/b/c/d/e/f/h/z（買賣→a 拍賣→b 繼承→c 受遺贈→d 一般贈與→e 配偶贈與或夫妻贈與→f 廢止徵收→h 其他→z）",
+  "acquireDate": "登記日期 YYYY-MM-DD（民國年要+1911 轉西元；例 民國108年5月10日 → 2019-05-10）"
+}
+注意：取「建物所有權部」第一順位的登記日期，不是「建物標示部」的第一次登記日。
+找不到的欄位填 null。只回 JSON 物件，不要 markdown、不要解釋。`;
+
+const LAND_PROMPT = `你是台灣電子謄本辨識專家。下方是同一筆土地謄本的照片（可能多張），請抽取以下欄位，回傳純 JSON：
+{
+  "loNo": "完整地號（含段名+小段+數字，例：旗津段0900-0060 或 籬子內段籬子內小段0063-0000）",
+  "fullArea": 土地標示部「面積」欄的平方公尺數值（純數字，可帶小數）,
+  "numerator": 土地所有權部「權利範圍」分子（數字；「全部」等同 1）,
+  "denominator": 權利範圍分母（數字；「全部」等同 1；「10000分之205」分母是 10000 分子是 205，但本欄是分母）,
+  "currentValue": 公告土地現值（元/平方公尺，純數字）,
+  "prevYearROC": 前次移轉現值的民國年（純整數，例 79）,
+  "prevMonth": 前次移轉現值的月（純整數 1-12）,
+  "prevValue": 前次移轉現值的單價（元/平方公尺，純數字）
+}
+規則：
+- 公告土地現值在「土地標示部」最下方表格，格式「公告土地現值 民國XXX年XX月 XXXX 元/平方公尺」
+- 前次移轉現值在「土地所有權部」的「前次移轉現值或原規定地價」表格
+- 權利範圍：「全部」→ numerator=1, denominator=1；「10000分之205」→ numerator=205, denominator=10000
+找不到的欄位填 null。只回 JSON 物件，不要 markdown、不要解釋。`;
+
+async function geminiOCRBuilding(imageFiles) {
+  const parts = [];
+  for (const f of imageFiles) {
+    parts.push({ inline_data: { mime_type: f.type, data: await fileToBase64(f) } });
+  }
+  parts.push({ text: BUILDING_PROMPT });
+  const obj = await geminiCall(parts);
+  // 後處理：reasonCode 對照（Gemini 偶爾失誤，這邊兜底）
+  if (obj.reasonText && !obj.reasonCode) {
+    const t = obj.reasonText;
+    if (/買賣/.test(t)) obj.reasonCode = 'a';
+    else if (/拍賣/.test(t)) obj.reasonCode = 'b';
+    else if (/繼承/.test(t)) obj.reasonCode = 'c';
+    else if (/受遺贈|遺贈/.test(t)) obj.reasonCode = 'd';
+    else if (/配偶.*贈|夫妻.*贈/.test(t)) obj.reasonCode = 'f';
+    else if (/贈與/.test(t)) obj.reasonCode = 'e';
+    else if (/廢止徵收/.test(t)) obj.reasonCode = 'h';
+    else obj.reasonCode = 'z';
+  }
+  return obj;
+}
+
+async function geminiOCRLand(imageFiles) {
+  const parts = [];
+  for (const f of imageFiles) {
+    parts.push({ inline_data: { mime_type: f.type, data: await fileToBase64(f) } });
+  }
+  parts.push({ text: LAND_PROMPT });
+  const obj = await geminiCall(parts);
+  // 轉成 _landDeeds 期望的格式
+  const fileName = '📸 ' + imageFiles.map(f => f.name).join(' + ');
+  if (obj.fullArea == null || obj.numerator == null || obj.denominator == null
+      || obj.currentValue == null || obj.prevValue == null
+      || obj.prevYearROC == null || obj.prevMonth == null) {
+    return {
+      fileName, loNo: obj.loNo || fileName,
+      error: !obj.fullArea ? '面積'
+           : (!obj.numerator || !obj.denominator) ? '持分'
+           : !obj.currentValue ? '公告現值'
+           : !obj.prevValue ? '前次現值' : '年月',
+    };
+  }
+  return {
+    fileName,
+    loNo: obj.loNo || '（地號未辨識）',
+    fullArea: Number(obj.fullArea),
+    numerator: Number(obj.numerator),
+    denominator: Number(obj.denominator),
+    prevYearROC: Number(obj.prevYearROC),
+    prevMonth: Number(obj.prevMonth),
+    prevValue: Number(obj.prevValue),
+    currentValue: Number(obj.currentValue),
   };
 }
 
