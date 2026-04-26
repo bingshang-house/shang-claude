@@ -561,6 +561,7 @@
               <div><label style="font-size:12px">代書費</label><input type="text" class="zaFee" id="fee_daishu" inputmode="numeric" placeholder="0"></div>
               <div><label style="font-size:12px">規費</label><input type="text" class="zaFee" id="fee_guifei" inputmode="numeric" placeholder="0"></div>
               <div><label style="font-size:12px">仲介費（買進時付的）</label><input type="text" class="zaFee" id="fee_zhongjie" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">履約保證費（買進時付的）</label><input type="text" class="zaFee" id="fee_lvyue" inputmode="numeric" placeholder="0"><div class="hint">通常 = 取得價 × 萬分之三，自動帶可改</div></div>
               <div><label style="font-size:12px">公證費</label><input type="text" class="zaFee" id="fee_gongzheng" inputmode="numeric" placeholder="0"></div>
               <div style="grid-column:1 / -1"><label style="font-size:12px">增置/改良/修繕費 💡 最常忘</label><input type="text" class="zaFee" id="fee_xiushan" inputmode="numeric" placeholder="0"><div class="hint">裝潢、加蓋、廚房翻新、衛浴改造，有發票就算</div></div>
             </div>
@@ -586,7 +587,8 @@
           <div class="field">
             <label>已提示證明文件（出售時付的）</label>
             <div class="fee-grid">
-              <div><label style="font-size:12px">仲介費（賞哥這次收的）</label><input type="text" class="zbFee" id="zb_zhongjie" inputmode="numeric" placeholder="0"></div>
+              <div><label style="font-size:12px">仲介費（賞哥這次收的）</label><input type="text" class="zbFee" id="zb_zhongjie" inputmode="numeric" placeholder="0"><div class="hint">通常 = 售價 × 4%，自動帶可改</div></div>
+              <div><label style="font-size:12px">履約保證費（出售時付的）</label><input type="text" class="zbFee" id="zb_lvyue" inputmode="numeric" placeholder="0"><div class="hint">通常 = 售價 × 萬分之三，自動帶可改</div></div>
               <div><label style="font-size:12px">代書費（過戶）</label><input type="text" class="zbFee" id="zb_daishu" inputmode="numeric" placeholder="0"></div>
               <div><label style="font-size:12px">規費</label><input type="text" class="zbFee" id="zb_guifei" inputmode="numeric" placeholder="0"></div>
             </div>
@@ -602,11 +604,14 @@
             <div class="hint">⚠️ 2.0 是 3% 上限 30 萬（不是舊制 5%）</div>
           </div>
 
-          <div class="field">
-            <label>土地增值稅可減除部分 ZB3</label>
-            <input type="text" id="zb3" inputmode="numeric" placeholder="0">
-            <div class="hint">申報移轉現值超過公告現值的部分對應的土增稅，從繳款書抄</div>
-          </div>
+<details style="margin: 8px 0;">
+            <summary style="cursor:pointer;color:#666;font-size:13px;padding:4px 0;">進階：土地增值稅可減除部分 ZB3（一般不需要）</summary>
+            <div class="field">
+              <label>土地增值稅可減除部分 ZB3</label>
+              <input type="text" id="zb3" inputmode="numeric" placeholder="0">
+              <div class="hint">2.0 限制下，僅當賣方申報移轉現值超過公告現值（灌價案）才有值，多數案件 = 0</div>
+            </div>
+          </details>
 
           <div class="alert alert-ok">
             ZB = max(ZB1+ZB3, ZB2+ZB3) = <strong id="zbTotal">0</strong> 元
@@ -775,8 +780,10 @@ let _landDeeds = []; // [{ fileName, loNo, fullArea, numerator, denominator, pre
 
 // 使用者是否手動改過 landGain（不自動覆寫）
 let _landGainUserEdited = false;
-// 使用者是否手動改過 zb_zhongjie 仲介費（不自動覆寫）
+// 使用者是否手動改過自動帶入欄位（不自動覆寫）
 let _zbZhongjieUserEdited = false;
+let _zbLvyueUserEdited = false;
+let _zaLvyueUserEdited = false;
 
 // 千分位輸入即時格式化
 function attachNumFormat(el) {
@@ -788,16 +795,31 @@ function attachNumFormat(el) {
 }
 document.querySelectorAll('input[inputmode="numeric"]').forEach(attachNumFormat);
 
-// AA 變動 → 自動帶仲介費 ZB1 = AA × 4%（除非使用者手動改過）
+// AA 變動 → 自動帶仲介費 4% + 履約保證費 萬分之三（除非使用者手動改過）
 $('aa').addEventListener('input', () => {
-  if (_zbZhongjieUserEdited) return;
   const AA = num($('aa').value);
-  const fee = Math.round(AA * 0.04);
-  $('zb_zhongjie').value = fee ? fee.toLocaleString('en-US') : '';
+  if (!_zbZhongjieUserEdited) {
+    const fee = Math.round(AA * 0.04);
+    $('zb_zhongjie').value = fee ? fee.toLocaleString('en-US') : '';
+  }
+  if (!_zbLvyueUserEdited) {
+    const fee = Math.round(AA * 0.0003);
+    $('zb_lvyue').value = fee ? fee.toLocaleString('en-US') : '';
+  }
   calc();
 });
-// 使用者改 zb_zhongjie 後鎖定（避免 AA 變動洗掉）
 $('zb_zhongjie').addEventListener('input', () => { _zbZhongjieUserEdited = true; });
+$('zb_lvyue').addEventListener('input', () => { _zbLvyueUserEdited = true; });
+
+// zaOrigin 變動 → 自動帶買進履約保證費（萬分之三）
+$('zaOrigin').addEventListener('input', () => {
+  if (_zaLvyueUserEdited) return;
+  const za = num($('zaOrigin').value);
+  const fee = Math.round(za * 0.0003);
+  $('fee_lvyue').value = fee ? fee.toLocaleString('en-US') : '';
+  calc();
+});
+$('fee_lvyue').addEventListener('input', () => { _zaLvyueUserEdited = true; });
 
 // 使用者手動改 landGain → 鎖定不被謄本自動值覆寫
 $('landGain').addEventListener('input', () => { _landGainUserEdited = true; });
@@ -963,6 +985,7 @@ $('acquireReason').addEventListener('change', () => {
   const r = $('acquireReason').value;
   const hint = $('acquireDateHint');
   const alert = $('reasonAlert');
+  const zaHint = $('zaOriginHint');
   alert.innerHTML = '';
   if (r === 'f') {
     hint.textContent = '⚠️ 配偶贈與 → 填配偶第 1 次相互贈與前的原始取得日';
@@ -972,6 +995,15 @@ $('acquireReason').addEventListener('change', () => {
     alert.innerHTML = '<div class="alert alert-warn">⚠️ ' + ({c:'繼承',d:'受遺贈',h:'廢止徵收'}[r]) + '：取得日期可能不等於登記日，請確認</div>';
   } else {
     hint.textContent = '登記日期';
+  }
+  // 繼承/贈與時，原始取得成本要填「當時申報現值總額」（土地+房屋）
+  if (['c','d','e','f'].includes(r)) {
+    const reasonName = {c:'繼承',d:'受遺贈',e:'一般贈與',f:'配偶贈與'}[r];
+    zaHint.innerHTML = `⚠️ ${reasonName}：請填「<strong>當時申報現值總額</strong>」（土地公告現值 + 房屋評定現值的合計）`;
+    zaHint.style.color = '#b91c1c';
+  } else {
+    zaHint.textContent = '當初買進的成交價';
+    zaHint.style.color = '';
   }
 });
 
@@ -1051,14 +1083,14 @@ function calc() {
 
   // ZA
   const zaOrigin = num($('zaOrigin').value);
-  const zaFees = ['fee_qishui','fee_yinhua','fee_daishu','fee_guifei','fee_zhongjie','fee_gongzheng','fee_xiushan']
+  const zaFees = ['fee_qishui','fee_yinhua','fee_daishu','fee_guifei','fee_zhongjie','fee_lvyue','fee_gongzheng','fee_xiushan']
     .reduce((s,id) => s + num($(id).value), 0);
   const zaImprove = num($('zaImprove').value);
   const ZA = zaOrigin + zaFees + zaImprove;
   $('zaTotal').textContent = fmt(ZA);
 
   // ZB
-  const zb1 = ['zb_zhongjie','zb_daishu','zb_guifei'].reduce((s,id) => s + num($(id).value), 0);
+  const zb1 = ['zb_zhongjie','zb_lvyue','zb_daishu','zb_guifei'].reduce((s,id) => s + num($(id).value), 0);
   $('zb1Sum').textContent = `小計 ZB1：${fmt(zb1)} 元`;
   const AA = num($('aa').value);
   const zb2 = Math.min(Math.floor(AA * 0.03), 300000);
