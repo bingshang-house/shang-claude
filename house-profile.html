@@ -533,6 +533,32 @@
       .env-risk-page.has-hits.print-include { display: block !important; }
     }
 
+    /* ===== 土地增值稅試算 ===== */
+    .land-tax-section { margin: 14px 0 6px; border: 1px solid #E8E0CC; border-radius: 6px; background: #FFFBF0; }
+    .land-tax-head { display: flex; justify-content: space-between; align-items: center; }
+    .land-tax-print-toggle { font-size: 12px; font-weight: 400; color: #fff; cursor: pointer; user-select: none; }
+    .land-tax-print-toggle input { vertical-align: -2px; margin-right: 4px; }
+    .land-tax-summary { padding: 10px 14px; font-size: 13px; line-height: 1.7; }
+    .land-tax-summary .lt-total { font-size: 14px; font-weight: 700; color: #A87500; }
+    .land-tax-summary .lt-num { font-family: 'Helvetica', sans-serif; font-weight: 700; }
+    .land-tax-summary .lt-row { display: flex; justify-content: space-between; padding: 2px 0; }
+    .land-tax-summary .lt-row .lt-label { color: #6b5a2c; }
+    .land-tax-detail-wrap { padding: 0 14px 8px; font-size: 12px; }
+    .land-tax-detail-wrap summary { cursor: pointer; color: #6b5a2c; padding: 4px 0; }
+    .lt-land-item { padding: 6px 0; border-top: 1px dashed #E8E0CC; }
+    .lt-land-item .lt-loNo { font-weight: 700; color: #333; }
+    .lt-land-item .lt-exempt { color: #b91c1c; font-size: 11px; margin-left: 4px; }
+    .lt-land-item .lt-row { display: flex; justify-content: space-between; padding: 1px 0; color: #666; }
+    .land-tax-note { padding: 6px 14px 10px; font-size: 10px; color: #888; }
+    @media print {
+      #land-tax-section { display: none !important; }
+      #land-tax-section.print-include { display: block !important; }
+      #land-tax-section.print-include .land-tax-print-toggle { display: none; }
+      #land-tax-section.print-include .land-tax-detail-wrap > summary { display: none; }
+      #land-tax-section.print-include .land-tax-detail-wrap[open] #land-tax-detail,
+      #land-tax-section.print-include .land-tax-detail-wrap #land-tax-detail { display: block !important; }
+    }
+
     /* ===== Auth Gate（雲端化階段 1） ===== */
     body:not(.authed) .main,
     body:not(.authed) .top-bar { display: none !important; }
@@ -1274,6 +1300,24 @@
             </table>
           </div>
 
+          <!-- ===== 土地增值稅試算（賣方資訊；預設不列印；勾「列印含土增稅」才印） ===== -->
+          <div id="land-tax-section" class="land-tax-section" style="display:none;">
+            <div class="section-bar bar-blue land-tax-head">
+              ▌ 土地增值稅試算（賣方資訊）
+              <label class="land-tax-print-toggle">
+                <input type="checkbox" id="land-tax-print-toggle"> 列印含土增稅
+              </label>
+            </div>
+            <div class="land-tax-summary" id="land-tax-summary"></div>
+            <details class="land-tax-detail-wrap">
+              <summary>顯示分筆明細</summary>
+              <div id="land-tax-detail"></div>
+            </details>
+            <div class="land-tax-note">
+              ※ 計算依據：經物價指數調整後之前次移轉現值（土稅 §31）。最終免徵 / 不課徵 / 自用 10% 認定權在稅捐處，本表僅供賣方議價參考。
+            </div>
+          </div>
+
           <div class="map-cadastral-row">
             <div class="map-box">
               <div class="section-bar bar-blue">▌ 位置圖</div>
@@ -1369,6 +1413,7 @@
 </div>
 
 <script src="school-districts.js"></script>
+<script src="tax-lib.js"></script>
 <script>
   // ===== PDF.js Worker =====
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -1384,6 +1429,13 @@
   // 嫌惡設施查核 state
   let _hazardResults = [];            // [{ key, label, items:[{ name, d, id }] }]
   let _hazardIgnored = new Set();     // 使用者手動移除的 id / name，重查時自動過濾
+
+  // CPI 物價指數對照表（GHA cron 每月更新 data/cpi-tax-index.json）
+  let _cpiData = null;
+  fetch('data/cpi-tax-index.json')
+    .then(r => r.ok ? r.json() : null)
+    .then(d => { _cpiData = d; if (d) renderLandTaxSection(); })
+    .catch(() => {});
 
   // ===== Init date =====
   (function() {
@@ -1644,10 +1696,28 @@
         const distM2 = t.match(/高雄市([^\s]{1,4}區)/);
         const distName = distM2 ? distM2[1] : (deed.district || '').replace('高雄市','');
         const expected = extractExpectedParcels(raw, 'land');
+
+        // 前次移轉現值（土增稅起算點）
+        // 切「前次移轉現值或原規定地價」section 後找「XXX年YY月 序號 N,NNN.N 元/平方公尺」
+        // 賞哥指示：起算點 = 此處的「年月」（不是登記日期、也不是原因發生日期）
+        let prevYearROC = null, prevMonth = null, prevValue = null;
+        const prevSecIdx = t.search(/前\s*次\s*移\s*轉\s*現\s*值\s*或\s*原\s*規\s*定\s*地\s*價/);
+        if (prevSecIdx >= 0) {
+          const sec = t.slice(prevSecIdx, prevSecIdx + 600);
+          const pm = sec.match(/(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*\d+\s*([\d,]+(?:\.\d+)?)\s*元/);
+          if (pm) {
+            prevYearROC = parseInt(pm[1], 10);
+            prevMonth = parseInt(pm[2], 10);
+            prevValue = parseFloat(pm[3].replace(/,/g, ''));
+          }
+        }
+
         _landData[idx] = {
           loNo, ping, fullArea: total,
+          numerator: numer, denominator: denom,
           detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪`,
           distName,
+          prevYearROC, prevMonth, prevValue,
           _raw: raw,
           expectedLandNos: expected.expectedLandNos,
           expectedBuildingNos: expected.expectedBuildingNos,
@@ -4122,6 +4192,81 @@
       setText(`out-${k}`, v ? (v.value.trim() || '－') : '－');
     });
 
+    // 土地增值稅試算（依謄本 + GIS 資料即時重算）
+    renderLandTaxSection();
+  }
+
+  // ===== 土地增值稅試算 =====
+  // 對每筆 _landData 算自用 + 一般稅率，總額累加；明細收合可展開
+  // 預設不列印，勾「列印含土增稅」才印（賣方銷售評估場景）
+  function renderLandTaxSection() {
+    const sec = document.getElementById('land-tax-section');
+    if (!sec || !window.taxLib) return;
+    const lands = Object.values(_landData || {}).filter(l => l && l.fullArea);
+    if (!_cpiData || lands.length === 0) {
+      sec.style.display = 'none';
+      return;
+    }
+
+    const results = [];
+    for (const l of lands) {
+      // 必要資料：前次年月、前次現值、公告現值（單價）
+      if (l.prevYearROC == null || l.prevMonth == null || l.prevValue == null) continue;
+      if (!l.pubVal) continue;
+      const cpiIndex = window.taxLib.cpiLookup(_cpiData, l.prevYearROC, l.prevMonth);
+      if (cpiIndex == null) continue;
+      const r = window.taxLib.calcLandFull({
+        currentValue: l.pubVal,
+        previousValue: l.prevValue,
+        cpiIndex,
+        area: l.fullArea,
+        numerator: l.numerator || 1,
+        denominator: l.denominator || 1,
+        prevYearROC: l.prevYearROC,
+        prevMonth: l.prevMonth,
+        zone: l.nonUrbanZone || l.zone || '',
+        landType: l.nonUrbanUse || '',
+      });
+      results.push({ ...r, loNo: l.loNo, fullArea: l.fullArea, numerator: l.numerator, denominator: l.denominator, cpiIndex });
+    }
+
+    if (results.length === 0) {
+      sec.style.display = 'none';
+      return;
+    }
+
+    const sum = window.taxLib.sumLands(results);
+    const fmt = n => Number(n || 0).toLocaleString('en-US');
+    const yrs = results[0].holdingYears;
+    const yrsLabel = yrs >= 40 ? '> 40 年' : yrs >= 30 ? '30~40 年' : yrs >= 20 ? '20~30 年' : `${Math.floor(yrs)} 年`;
+
+    document.getElementById('land-tax-summary').innerHTML = `
+      <div class="lt-row"><span class="lt-label">總漲價總數額</span><span class="lt-num">${fmt(sum.landGain)} 元</span></div>
+      <div class="lt-row lt-total"><span>一般稅率（持有 ${yrsLabel}）</span><span class="lt-num">${fmt(sum.generalTax)} 元</span></div>
+      <div class="lt-row lt-total"><span>自用住宅 10%（符合條件再用）</span><span class="lt-num">${fmt(sum.selfUseTax)} 元</span></div>
+    `;
+
+    document.getElementById('land-tax-detail').innerHTML = results.map(r => `
+      <div class="lt-land-item">
+        <div class="lt-loNo">${escH(r.loNo || '—')}　<span style="font-weight:400;color:#888;font-size:11px;">${r.fullArea} ㎡ × ${r.numerator}/${r.denominator}　CPI ${r.cpiIndex}</span>${r.exemption ? `<span class="lt-exempt">${escH(r.exemption.hint)}（${escH(r.exemption.lawRef)}）</span>` : ''}</div>
+        <div class="lt-row"><span>申報移轉現值</span><span class="lt-num">${fmt(r.reportedValue)}</span></div>
+        <div class="lt-row"><span>調整後前次現值</span><span class="lt-num">${fmt(r.adjustedPrevious)}</span></div>
+        <div class="lt-row"><span>漲價總數額（${r.gainBracket} 級，倍數 ${r.gainRatio.toFixed(2)}）</span><span class="lt-num">${fmt(r.landGain)}</span></div>
+        <div class="lt-row"><span>自用 10%</span><span class="lt-num">${fmt(r.selfUseTax)}</span></div>
+        <div class="lt-row"><span>一般稅率（${escH(r.holdingDiscount)}）</span><span class="lt-num">${fmt(r.generalTax)}</span></div>
+      </div>
+    `).join('');
+
+    sec.style.display = '';
+
+    // 列印 toggle 綁定（一次就好）
+    const tg = document.getElementById('land-tax-print-toggle');
+    if (tg && !tg._bound) {
+      tg._bound = true;
+      tg.addEventListener('change', () => {
+        sec.classList.toggle('print-include', tg.checked);
+      });
+    }
   }
 
   // ===== Plan Image =====
