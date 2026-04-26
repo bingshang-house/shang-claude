@@ -99,35 +99,79 @@
     return '無減徵';
   }
 
+  // 自用住宅面積上限（土稅 §34，單位 ㎡）
+  // 一生一次：都市 3 公畝(300) / 非都市 7 公畝(700)
+  // 一生一屋：都市 1.5 公畝(150) / 非都市 3.5 公畝(350) — 條件嚴，預設用一生一次
+  const SELF_USE_LIMIT = {
+    urban: 300,
+    nonUrban: 700,
+  };
+
   /**
    * @param {object} input
    * @param {number} input.landGain - 土地漲價總數額 (a)
    * @param {number} input.adjustedPrevious - 調整後前次現值 (b)
    * @param {1|2|3} input.gainBracket
    * @param {number} input.holdingYears
-   * @returns {{generalTax, selfUseTax, generalRate, generalCoef, holdingDiscount}}
+   * @param {number} [input.landAreaShare] - 持分後面積（㎡），用於自用上限判斷
+   * @param {boolean} [input.isUrban=true] - 都市土地 true / 非都市 false
+   * @returns {{generalTax, selfUseTax, selfUseInLimit, selfUseLimit, ...}}
    */
   function calcLandTax(input) {
-    const { landGain, adjustedPrevious, gainBracket, holdingYears } = input;
+    const {
+      landGain, adjustedPrevious, gainBracket, holdingYears,
+      landAreaShare, isUrban = true,
+    } = input;
 
     const tier = holdingTier(holdingYears);
     const [rate, coef] = RATE_TABLE[gainBracket][tier];
 
-    // 自用稅率 10%（不適用減徵，已是最低）
-    const selfUseTax = Math.max(0, Math.round(landGain * 0.10));
-
-    // 一般稅率：a × rate − b × coef，再 round
+    // 一般稅率：a × rate − b × coef，最終 round
     const generalTax = Math.max(
       0, Math.round(landGain * rate - adjustedPrevious * coef)
     );
 
+    // 自用稅率：按 §34 面積上限拆分計算
+    const selfUseLimit = isUrban ? SELF_USE_LIMIT.urban : SELF_USE_LIMIT.nonUrban;
+    let selfUseTax, selfUseInLimit;
+    if (!landAreaShare || landAreaShare <= selfUseLimit) {
+      // 全部適用 10%
+      selfUseTax = Math.max(0, Math.round(landGain * 0.10));
+      selfUseInLimit = true;
+    } else {
+      // 部分 10% + 超過部分套一般稅率（按面積比例拆）
+      const eligibleRatio = selfUseLimit / landAreaShare;
+      const eligiblePart = Math.round(landGain * eligibleRatio * 0.10);
+      const excessPart = Math.round(generalTax * (1 - eligibleRatio));
+      selfUseTax = Math.max(0, eligiblePart + excessPart);
+      selfUseInLimit = false;
+    }
+
     return {
       generalTax,
       selfUseTax,
+      selfUseInLimit,
+      selfUseLimit,
+      isUrban,
       generalRate: rate,
       generalCoef: coef,
       holdingDiscount: holdingDiscountLabel(holdingYears),
     };
+  }
+
+  /**
+   * 從謄本「使用分區」/「使用地類別」判斷都市 / 非都市
+   * （影響自用稅面積上限：都市 300 ㎡ / 非都市 700 ㎡）
+   * @returns {boolean} true=都市, false=非都市
+   */
+  function detectUrbanType(zone = '', landType = '', nonUrbanZone = '', nonUrbanUse = '') {
+    // 非都市判斷：謄本「使用地類別」有值（甲建/乙建/農牧/林業...）= 非都市
+    // 或 GIS 有抓到非都市分區（一般農業區/特定農業區/山坡地保育區/森林區/鄉村區）
+    if (nonUrbanUse && nonUrbanUse.trim() && !/^\(?空白\)?$/.test(nonUrbanUse)) return false;
+    if (nonUrbanZone && nonUrbanZone.trim() && !/^\(?空白\)?$/.test(nonUrbanZone)) return false;
+    if (landType && landType.trim() && !/^\(?空白\)?$/.test(landType)) return false;
+    // 預設都市（同 etax 試算頁面預設）
+    return true;
   }
 
   // ========== 免徵類型偵測（依謄本「使用分區」/「使用地類別」） ==========
@@ -184,17 +228,24 @@
     const years = input.holdingYears != null
       ? input.holdingYears
       : calcHoldingYears(input.prevYearROC, input.prevMonth);
+    const landAreaShare = (input.area || 0) * (input.numerator || 1) / (input.denominator || 1);
+    const isUrban = input.isUrban != null
+      ? input.isUrban
+      : detectUrbanType(input.zone, input.landType, input.nonUrbanZone, input.nonUrbanUse);
     const tax = calcLandTax({
       landGain: gain.landGain,
       adjustedPrevious: gain.adjustedPrevious,
       gainBracket: gain.gainBracket,
       holdingYears: years,
+      landAreaShare,
+      isUrban,
     });
     const exemption = detectExemption(input.zone, input.landType);
     return {
       ...gain,
       ...tax,
       holdingYears: years,
+      landAreaShare,
       exemption,
     };
   }
@@ -218,9 +269,11 @@
     calcLandFull,
     calcHoldingYears,
     detectExemption,
+    detectUrbanType,
     sumLands,
     holdingTier,
     RATE_TABLE,
+    SELF_USE_LIMIT,
   };
 
   if (typeof window !== 'undefined') window.taxLib = api;

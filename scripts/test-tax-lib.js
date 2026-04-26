@@ -117,6 +117,43 @@ console.log('\n--- Test 5: 多筆累加 ---');
   expect('總一般稅', sum.generalTax, 0 + 329424);
 }
 
+// ========== Test 6.5: 都市/非都市自用上限（§34）==========
+console.log('\n--- Test 6.5: 自用面積上限 (§34) ---');
+{
+  // 都市土地、面積 250 ㎡ < 300 → 全套 10%
+  const r1 = lib.calcLandTax({
+    landGain: 1000000, adjustedPrevious: 100000, gainBracket: 3,
+    holdingYears: 10, landAreaShare: 250, isUrban: true,
+  });
+  expect('都市 250㎡ 自用稅', r1.selfUseTax, 100000);
+  expect('都市 250㎡ 在上限內', r1.selfUseInLimit, true);
+
+  // 都市土地、面積 600 ㎡ > 300 → 拆分（300/600=50% 自用 + 50% 一般）
+  // 一般 = 1000000 × 40% - 100000 × 30% = 400000 - 30000 = 370000
+  // 自用拆分 = 1000000 × 0.5 × 10% + 370000 × 0.5 = 50000 + 185000 = 235000
+  const r2 = lib.calcLandTax({
+    landGain: 1000000, adjustedPrevious: 100000, gainBracket: 3,
+    holdingYears: 10, landAreaShare: 600, isUrban: true,
+  });
+  expect('都市 600㎡ 一般稅', r2.generalTax, 370000);
+  expect('都市 600㎡ 自用稅（拆分）', r2.selfUseTax, 235000);
+  expect('都市 600㎡ 超上限', r2.selfUseInLimit, false);
+
+  // 非都市土地、面積 500 ㎡ < 700 → 全套 10%
+  const r3 = lib.calcLandTax({
+    landGain: 1000000, adjustedPrevious: 100000, gainBracket: 3,
+    holdingYears: 10, landAreaShare: 500, isUrban: false,
+  });
+  expect('非都市 500㎡ 自用稅', r3.selfUseTax, 100000);
+  expect('非都市 500㎡ 在上限內', r3.selfUseInLimit, true);
+
+  // detectUrbanType
+  expect('住宅區 → 都市', lib.detectUrbanType('住宅區', '', '', ''), true);
+  expect('使用地類別有值 → 非都市', lib.detectUrbanType('', '甲種建築用地', '', ''), false);
+  expect('GIS nonUrbanZone 有值 → 非都市', lib.detectUrbanType('', '', '一般農業區', ''), false);
+  expect('全空 → 預設都市', lib.detectUrbanType('', '', '', ''), true);
+}
+
 // ========== Test 6: 免徵偵測 ==========
 console.log('\n--- Test 6: 免徵偵測 ---');
 {

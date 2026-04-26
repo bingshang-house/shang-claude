@@ -4227,8 +4227,10 @@
         denominator: l.denominator || 1,
         prevYearROC: l.prevYearROC,
         prevMonth: l.prevMonth,
-        zone: l.nonUrbanZone || l.zone || '',
+        zone: l.zone || '',
         landType: l.nonUrbanUse || '',
+        nonUrbanZone: l.nonUrbanZone || '',
+        nonUrbanUse: l.nonUrbanUse || '',
       });
       results.push({ ...r, loNo: l.loNo, fullArea: l.fullArea, numerator: l.numerator, denominator: l.denominator, cpiIndex });
     }
@@ -4249,16 +4251,23 @@
       <div class="lt-row lt-total"><span>自用住宅 10%（符合條件再用）</span><span class="lt-num">${fmt(sum.selfUseTax)} 元</span></div>
     `;
 
-    document.getElementById('land-tax-detail').innerHTML = results.map(r => `
+    document.getElementById('land-tax-detail').innerHTML = results.map(r => {
+      const urbanLabel = r.isUrban ? '都市土地' : '非都市土地';
+      const areaShareTxt = `持分 ${r.landAreaShare.toFixed(2)} ㎡`;
+      const limitTxt = r.selfUseInLimit
+        ? `自用上限 ${r.selfUseLimit} ㎡，未超`
+        : `<span style="color:#b91c1c;">超過自用上限 ${r.selfUseLimit} ㎡，已自動拆分</span>`;
+      return `
       <div class="lt-land-item">
-        <div class="lt-loNo">${escH(r.loNo || '—')}　<span style="font-weight:400;color:#888;font-size:11px;">${r.fullArea} ㎡ × ${r.numerator}/${r.denominator}　CPI ${r.cpiIndex}</span>${r.exemption ? `<span class="lt-exempt">${escH(r.exemption.hint)}（${escH(r.exemption.lawRef)}）</span>` : ''}</div>
+        <div class="lt-loNo">${escH(r.loNo || '—')}　<span style="font-weight:400;color:#888;font-size:11px;">${urbanLabel}　${r.fullArea} ㎡ × ${r.numerator}/${r.denominator}　CPI ${r.cpiIndex}</span>${r.exemption ? `<span class="lt-exempt">${escH(r.exemption.hint)}（${escH(r.exemption.lawRef)}）</span>` : ''}</div>
+        <div class="lt-row" style="font-size:11px;color:#888;"><span>${areaShareTxt}</span><span>${limitTxt}</span></div>
         <div class="lt-row"><span>申報移轉現值</span><span class="lt-num">${fmt(r.reportedValue)}</span></div>
         <div class="lt-row"><span>調整後前次現值</span><span class="lt-num">${fmt(r.adjustedPrevious)}</span></div>
         <div class="lt-row"><span>漲價總數額（${r.gainBracket} 級，倍數 ${r.gainRatio.toFixed(2)}）</span><span class="lt-num">${fmt(r.landGain)}</span></div>
         <div class="lt-row"><span>自用 10%</span><span class="lt-num">${fmt(r.selfUseTax)}</span></div>
         <div class="lt-row"><span>一般稅率（${escH(r.holdingDiscount)}）</span><span class="lt-num">${fmt(r.generalTax)}</span></div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
 
     sec.style.display = '';
 
