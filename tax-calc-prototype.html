@@ -381,6 +381,97 @@
     @media (max-width: 1023px) {
       .container { padding-bottom: 80px; }
     }
+
+    /* 完成 / 修改 / LINE 分享按鈕 */
+    .cta {
+      display: block;
+      width: 100%;
+      padding: 14px 16px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .cta-finish {
+      background: var(--yc-dark);
+      color: #fff;
+      margin: 16px 0 8px;
+      box-shadow: 0 2px 8px rgba(204, 143, 0, 0.3);
+    }
+    .cta-finish:hover { background: var(--yc-deep); transform: translateY(-1px); }
+    .cta-finish .small { display: block; font-size: 11px; font-weight: normal; opacity: 0.85; margin-top: 2px; }
+    .cta-edit {
+      background: #fff;
+      color: var(--yc-deep);
+      border: 2px solid var(--yc-dark);
+      padding: 10px;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .cta-edit:hover { background: var(--yc-light); }
+    .cta-share {
+      background: #06c755;
+      color: #fff;
+      margin-top: 12px;
+    }
+    .cta-share:hover { background: #05a847; transform: translateY(-1px); }
+    .cta-share .small { display: block; font-size: 11px; font-weight: normal; opacity: 0.9; margin-top: 2px; }
+
+    /* 報告模式：把輸入區收掉，結果變主視覺 */
+    body.report-mode .input-panel { display: none; }
+    body.report-mode .consultant-card { display: none; }
+    body.report-mode .cta-finish { display: none; }
+    body:not(.report-mode) .cta-edit,
+    body:not(.report-mode) .cta-share { display: none; }
+    @media (min-width: 1024px) {
+      body.report-mode .layout {
+        grid-template-columns: 1fr;
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      body.report-mode .result-panel { position: static; }
+    }
+    body.report-mode .result-panel .final-amount .val { font-size: 32px; }
+    body.report-mode .result-panel .card { padding: 20px; }
+    body.report-mode .result-panel h2 { font-size: 18px; }
+
+    /* 顧問卡片 */
+    .consultant-card {
+      background: var(--yc-pale) !important;
+    }
+    .consultant-card summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--yc-deep);
+      position: relative;
+    }
+    .consultant-card summary::after {
+      content: '▾';
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      transition: transform 0.2s;
+    }
+    .consultant-card[open] summary::after {
+      transform: translateY(-50%) rotate(180deg);
+    }
+    .consultant-card summary::-webkit-details-marker { display: none; }
+    .consultant-card .body {
+      padding: 0 14px 14px;
+    }
+    .consultant-card .body .hint-tip {
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -391,6 +482,32 @@
 </div>
 
 <div class="container">
+
+  <!-- 顧問資訊（折疊，可選填）-->
+  <details class="card consultant-card" id="consultantCard">
+    <summary>👤 顧問資訊（選填，未填會帶賞哥粉專導流）</summary>
+    <div class="body">
+      <div class="hint-tip">
+        填寫後會出現在試算結果與 LINE 分享文字底部，並自動存入瀏覽器下次帶入。<br>
+        三欄全空白 → 自動帶「亞灣賞哥」全套（電話、粉專、LINE）；只要任一欄有填，就只顯示你填的內容。
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>顧問姓名</label>
+          <input type="text" id="agent-name" placeholder="例：王小明">
+        </div>
+        <div class="field">
+          <label>聯絡電話</label>
+          <input type="tel" id="agent-phone" inputmode="tel" placeholder="例：0912-345-678">
+        </div>
+      </div>
+      <div class="field">
+        <label>LINE ID 或連結</label>
+        <input type="text" id="agent-line" placeholder="例：@xiaoming 或 https://line.me/ti/p/xxx">
+      </div>
+    </div>
+  </details>
+
   <div class="layout">
 
     <!-- 左：輸入區 -->
@@ -693,6 +810,7 @@
     <!-- 右：試算結果（桌機 sticky / 手機在下方） -->
     <div class="result-panel">
       <div class="card">
+        <button type="button" class="cta cta-edit" id="ctaEdit">✏️ 修改試算</button>
         <h2>試算結果</h2>
 
         <div id="rrSummary" style="margin-bottom: 12px"></div>
@@ -751,10 +869,30 @@
         </div>
 
         <div id="warnings"></div>
+
+        <!-- 顧問落款（report mode 顯示）-->
+        <div id="agentSig" style="display:none; margin-top:16px; padding:12px; background:var(--yc-pale); border-radius:8px; border:1px solid var(--border); font-size:13px; line-height:1.7;">
+          <div style="color:var(--muted); font-size:11px; margin-bottom:4px;">您的房產顧問</div>
+          <div id="sigName" style="font-weight:700; color:var(--yc-deep); font-size:15px;"></div>
+          <div id="sigPhone"></div>
+          <div id="sigLine"></div>
+          <div id="sigPage" style="font-size:12px;"></div>
+        </div>
+
+        <button type="button" class="cta cta-share" id="ctaShare">
+          📱 用 LINE 傳給客戶
+          <span class="small">會開啟 LINE 並帶入文字摘要</span>
+        </button>
       </div>
     </div>
 
   </div>
+
+  <!-- 完成試算大按鈕（report mode 收掉）-->
+  <button type="button" class="cta cta-finish" id="ctaFinish">
+    ☑️ 完成試算（看純結果頁）
+    <span class="small">填表區會收起來，方便給客戶看 / 截圖</span>
+  </button>
 
   <div class="footer-note">
     本試算結果僅供買賣雙方議價參考，實際應納稅額以國稅局核定為準。<br>
@@ -1352,6 +1490,135 @@ function calc() {
 }
 
 calc();
+
+// ===== 顧問資訊 + 報告模式 + LINE 分享 =====
+const DEFAULT_AGENT = {
+  name: '亞灣賞哥（江炳賞）',
+  phone: '0971-115207',
+  line: 'https://www.facebook.com/BingShangHouse',  // TODO 賞哥 LINE 連結待補，先用粉專導流
+  page: 'https://www.facebook.com/BingShangHouse',
+};
+const TOOL_URL = 'https://bingshang-house.github.io/shang-claude/tax-calc-prototype.html';
+
+// localStorage（沿用房貸專案 key 命名習慣）
+['agent-name', 'agent-phone', 'agent-line'].forEach(id => {
+  const el = $(id);
+  const v = localStorage.getItem('tax_' + id);
+  if (v) el.value = v;
+  el.addEventListener('input', () => {
+    localStorage.setItem('tax_' + id, el.value);
+    updateAgentSig();
+  });
+});
+
+function getAgent() {
+  const name  = $('agent-name').value.trim();
+  const phone = $('agent-phone').value.trim();
+  const line  = $('agent-line').value.trim();
+  const isCustom = !!(name || phone || line);
+  if (isCustom) {
+    return { name, phone, line, page: '', isCustom: true };
+  }
+  return { ...DEFAULT_AGENT, isCustom: false };
+}
+
+function updateAgentSig() {
+  const a = getAgent();
+  $('sigName').textContent  = a.name || '';
+  $('sigPhone').textContent = a.phone ? '📞 ' + a.phone : '';
+  $('sigLine').textContent  = a.line  ? '💬 LINE：' + a.line : '';
+  $('sigPage').innerHTML    = a.page  ? '🌐 <a href="' + a.page + '" target="_blank" style="color:var(--yc-dark);">' + a.page + '</a>' : '';
+}
+updateAgentSig();
+
+// 進入 / 離開 報告模式
+$('ctaFinish').addEventListener('click', () => {
+  document.body.classList.add('report-mode');
+  $('agentSig').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+$('ctaEdit').addEventListener('click', () => {
+  document.body.classList.remove('report-mode');
+  $('agentSig').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// LINE 分享：純文字
+function generateShareText() {
+  const a = getAgent();
+  const lines = [];
+  lines.push('🏠 房地合一稅 2.0 試算');
+  lines.push('━━━━━━━━━━━━━━');
+
+  // 標的物資料
+  const owner = $('owner').value.trim();
+  const reasonText = $('acquireReason').selectedOptions[0]?.text || '';
+  const acqDate = $('acquireDate').value;
+  const txnDate = $('txnDate').value;
+  if (owner)   lines.push('👤 所有權人：' + owner);
+  if (acqDate) lines.push('📅 取得日期：' + acqDate.replace(/-/g, '/') + (reasonText ? '（' + reasonText + '）' : ''));
+  if (txnDate) lines.push('📆 交易日期：' + txnDate.replace(/-/g, '/'));
+  const rrText = ($('rrSummary').textContent || '').replace(/\s+/g, ' ').trim();
+  if (rrText) lines.push('⏳ 持有期間：' + rrText);
+  lines.push('━━━━━━━━━━━━━━');
+
+  // 金額
+  lines.push('💰 成交價額　　 ' + $('rAA').textContent);
+  lines.push('－ 可減除成本　 ' + $('rZA').textContent);
+  lines.push('－ 可減除費用　 ' + $('rZB').textContent);
+  lines.push('＝ 交易所得　　 ' + $('rGI').textContent);
+  if ($('rZC').textContent !== '0') lines.push('－ 前 3 年損失　 ' + $('rZC').textContent);
+  lines.push('－ 漲價總數額　 ' + $('rLG').textContent);
+  lines.push('＝ 課稅所得　　 ' + $('rGL').textContent);
+  lines.push('━━━━━━━━━━━━━━');
+
+  // 稅額
+  lines.push('📊 適用稅率：' + $('rRate').textContent);
+  lines.push('💸 應納稅額：' + $('rAF').textContent);
+  if ($('rZdRow').style.display !== 'none') {
+    lines.push('－ 重購扣抵：' + $('rZD').textContent);
+  }
+  lines.push('🔴 本次應繳：' + $('rAH').textContent);
+
+  // 土增稅參考
+  const lt1 = $('landTaxSelfUse').textContent;
+  const lt2 = $('landTaxGeneral').textContent;
+  if ((lt1 && lt1 !== '0') || (lt2 && lt2 !== '0')) {
+    lines.push('━━━━━━━━━━━━━━');
+    lines.push('🏞️ 土地增值稅參考');
+    lines.push('　自用 10%：' + lt1 + ' 元');
+    lines.push('　一般稅率：' + lt2 + ' 元');
+  }
+
+  lines.push('━━━━━━━━━━━━━━');
+  lines.push('⚠️ 本試算僅供議價參考，實際以國稅局核定為準。');
+  lines.push('🔗 試算工具：' + TOOL_URL);
+  lines.push('━━━━━━━━━━━━━━');
+
+  // 顧問落款
+  if (a.name)  lines.push('您的房產顧問：' + a.name);
+  if (a.phone) lines.push('📞 ' + a.phone);
+  if (a.line)  lines.push('💬 LINE：' + a.line);
+  if (a.page && a.page !== a.line) lines.push('🌐 ' + a.page);
+
+  return lines.join('\n');
+}
+
+$('ctaShare').addEventListener('click', () => {
+  const text = generateShareText();
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    window.location.href = 'line://msg/text/' + encodeURIComponent(text);
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('📋 試算結果已複製到剪貼簿！\n請開啟 LINE 貼上傳送給客戶。');
+    }).catch(() => {
+      prompt('請複製以下內容傳送到 LINE：', text);
+    });
+  } else {
+    prompt('請複製以下內容傳送到 LINE：', text);
+  }
+});
 </script>
 </body>
 </html>
