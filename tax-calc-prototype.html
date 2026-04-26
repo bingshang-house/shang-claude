@@ -514,6 +514,7 @@
             <label>取得日期 <span class="auto">謄本</span></label>
             <input type="date" id="acquireDate">
             <div class="hint" id="acquireDateHint">登記日期</div>
+            <div id="dateAlert"></div>
           </div>
           <div class="field">
             <label>交易日期（移轉登記日）<span class="req">*</span></label>
@@ -834,6 +835,48 @@ $('zaOrigin').addEventListener('input', () => {
 });
 $('fee_lvyue').addEventListener('input', () => { _zaLvyueUserEdited = true; });
 
+// ===== 房地合一稅 vs 舊制（綜所稅財產交易所得）判定 =====
+// 主規則：取得日 < 民國 105/01/01（2016/01/01）→ 走舊制
+// 次規則：繼承/受遺贈/贈與/都更危老 → 取得日認定可能要回溯，提醒留意
+const HLA_CUTOFF = new Date(2016, 0, 1); // 民國 105 年 1 月 1 日
+
+function updateOldRegimeAlert() {
+  const alertEl = $('dateAlert');
+  if (!alertEl) return;
+  const date = $('acquireDate').value;
+  const reason = $('acquireReason').value;
+  const ur = $('urbanRenewal').checked;
+  alertEl.innerHTML = '';
+
+  // 主判定：取得日早於 105/01/01 → 不適用房地合一
+  if (date) {
+    const acquired = new Date(date);
+    if (!isNaN(acquired) && acquired < HLA_CUTOFF) {
+      alertEl.innerHTML = `<div class="alert alert-warn" style="margin-top:6px;">
+        ⚠️ <strong>取得日 ${date} 早於民國 105/01/01（2016/01/01）</strong>，不適用房地合一稅。<br>
+        應改依舊制申報「綜所稅・財產交易所得稅」，本表試算結果僅供參考、不可直接申報。
+      </div>`;
+      return;
+    }
+  }
+
+  // 次判定：繼承/贈與/都更危老 → 取得日須回溯，提醒留意
+  const notes = [];
+  if (['c','d'].includes(reason)) notes.push('繼承/受遺贈：取得日應回溯到被繼承人原始取得日');
+  if (['e','f'].includes(reason)) notes.push((reason === 'f' ? '配偶贈與' : '一般贈與') + '：受贈方取得日依規定可能要回溯');
+  if (ur) notes.push('都更/危老：原房地取得日可能在 105/01/01 前');
+  if (notes.length) {
+    alertEl.innerHTML = `<div class="alert alert-warn" style="margin-top:6px;">
+      ⚠️ 留意取得日認定：${notes.join('；')}。<br>
+      若回溯後 < 民國 105/01/01，應走舊制財產交易所得稅，不適用房地合一稅。
+    </div>`;
+  }
+}
+
+$('acquireDate').addEventListener('input', updateOldRegimeAlert);
+$('urbanRenewal').addEventListener('change', updateOldRegimeAlert);
+// acquireReason 已有 change listener，從那邊也呼叫一次（見下方）
+
 // 使用者手動改 landGain → 鎖定不被謄本自動值覆寫
 $('landGain').addEventListener('input', () => { _landGainUserEdited = true; });
 
@@ -1118,6 +1161,8 @@ $('acquireReason').addEventListener('change', () => {
     }
     calc();
   }
+  // 舊制 vs 房地合一稅判定（也要連動取得原因）
+  updateOldRegimeAlert();
 });
 
 // 重購勾選 → 顯示 ZD 區
