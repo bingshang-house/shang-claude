@@ -480,7 +480,13 @@
 
       <!-- 3. 從謄本帶入（自動） -->
       <div class="card">
-        <h2>③ 標的物資料 <span class="badge">謄本自動帶入</span></h2>
+        <h2>③ 標的物資料 <span class="badge">謄本自動帶入或手填</span></h2>
+        <div class="field">
+          <label>📎 從建物謄本自動帶入（可選）</label>
+          <input type="file" id="buildingDeedInput" accept="application/pdf" style="font-size:13px;">
+          <button type="button" id="buildingDeedClear" style="margin-left:8px;font-size:12px;padding:3px 10px;cursor:pointer;">清空</button>
+          <div class="hint" id="buildingDeedHint">不上傳也可以，下面欄位都可手動填</div>
+        </div>
         <div class="grid-2">
           <div class="field">
             <label>所有權人 <span class="auto">自動</span></label>
@@ -844,6 +850,95 @@ $('landDeedClear').addEventListener('click', () => {
   _landGainUserEdited = false;
   renderDeedList();
 });
+
+// ===== 建物謄本上傳 → 自動帶所有權人 / 登記原因 / 取得日期 =====
+$('buildingDeedInput').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  $('buildingDeedHint').textContent = '解析中…';
+  try {
+    const r = await parseBuildingDeed(file);
+    if (!r) {
+      $('buildingDeedHint').textContent = '⚠ 解析失敗，請手動填寫';
+      $('buildingDeedHint').style.color = '#b91c1c';
+      return;
+    }
+    if (r.owner) $('owner').value = r.owner;
+    if (r.acquireDate) $('acquireDate').value = r.acquireDate;
+    if (r.reasonCode) {
+      $('acquireReason').value = r.reasonCode;
+      $('acquireReason').dispatchEvent(new Event('change'));
+    }
+    const parts = [];
+    if (r.owner) parts.push(`所有權人：${r.owner}`);
+    if (r.reasonText) parts.push(`登記原因：${r.reasonText}`);
+    if (r.acquireDate) parts.push(`取得日期：${r.acquireDate}`);
+    $('buildingDeedHint').innerHTML = `✓ 已帶入 ${parts.join('、')}`;
+    $('buildingDeedHint').style.color = '#2F855A';
+    calc();
+  } catch (err) {
+    console.error('parseBuildingDeed failed', err);
+    $('buildingDeedHint').textContent = '⚠ 解析錯誤：' + err.message;
+    $('buildingDeedHint').style.color = '#b91c1c';
+  }
+  e.target.value = '';
+});
+$('buildingDeedClear').addEventListener('click', () => {
+  $('owner').value = '';
+  $('acquireDate').value = '';
+  $('acquireReason').value = '';
+  $('acquireReason').dispatchEvent(new Event('change'));
+  $('buildingDeedHint').textContent = '不上傳也可以，下面欄位都可手動填';
+  $('buildingDeedHint').style.color = '';
+  calc();
+});
+
+async function parseBuildingDeed(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let raw = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const pg = await pdf.getPage(i);
+    raw += (await pg.getTextContent()).items.map(it => it.str).join(' ') + '\n';
+  }
+  const t = fw(raw);
+
+  // 「(建物|土地)所有權部」section（兩種謄本欄位類似，土地謄本也能用）
+  const ownIdx = t.search(/(?:建物|土地)?\s*所\s*有\s*權\s*部/);
+  if (ownIdx < 0) return null;
+  const ownerSec = t.slice(ownIdx, ownIdx + 800).replace(/\s+/g, '');
+
+  // 所有權人（中文姓名 1-4 字，可能含「＊」）
+  const ownerM = ownerSec.match(/所有權人([一-龥＊\*]{1,6})統一編號/);
+  const owner = ownerM ? ownerM[1] : null;
+
+  // 登記日期：民國XX年XX月XX日
+  const dateM = ownerSec.match(/登記日期民國(\d{2,3})年(\d{1,2})月(\d{1,2})日/);
+  let acquireDate = null;
+  if (dateM) {
+    const yy = parseInt(dateM[1], 10) + 1911;
+    const mm = String(parseInt(dateM[2], 10)).padStart(2, '0');
+    const dd = String(parseInt(dateM[3], 10)).padStart(2, '0');
+    acquireDate = `${yy}-${mm}-${dd}`;
+  }
+
+  // 登記原因（「登記原因 XX」到「原因發生日期」之間的中文）
+  const reasonM = ownerSec.match(/登記原因([一-龥]{2,8})原因發生/);
+  let reasonText = reasonM ? reasonM[1] : null;
+  let reasonCode = null;
+  if (reasonText) {
+    if (/買賣/.test(reasonText)) reasonCode = 'a';
+    else if (/拍賣/.test(reasonText)) reasonCode = 'b';
+    else if (/繼承/.test(reasonText)) reasonCode = 'c';
+    else if (/受遺贈|遺贈/.test(reasonText)) reasonCode = 'd';
+    else if (/配偶.*贈|夫妻.*贈/.test(reasonText)) reasonCode = 'f';
+    else if (/贈與/.test(reasonText)) reasonCode = 'e';
+    else if (/廢止徵收/.test(reasonText)) reasonCode = 'h';
+    else reasonCode = 'z';
+  }
+
+  return { owner, acquireDate, reasonText, reasonCode };
+}
 
 async function parseLandDeed(file) {
   const buf = await file.arrayBuffer();
