@@ -860,15 +860,14 @@ function updateOldRegimeAlert() {
     }
   }
 
-  // 次判定：繼承/贈與/都更危老 → 取得日須回溯，提醒留意
-  const notes = [];
-  if (['c','d'].includes(reason)) notes.push('繼承/受遺贈：取得日應回溯到被繼承人原始取得日');
-  if (['e','f'].includes(reason)) notes.push((reason === 'f' ? '配偶贈與' : '一般贈與') + '：受贈方取得日依規定可能要回溯');
-  if (ur) notes.push('都更/危老：原房地取得日可能在 105/01/01 前');
-  if (notes.length) {
+  // 次判定：都更/危老 → 持有期間特殊規則
+  if (ur) {
     alertEl.innerHTML = `<div class="alert alert-warn" style="margin-top:6px;">
-      ⚠️ 留意取得日認定：${notes.join('；')}。<br>
-      若回溯後 < 民國 105/01/01，應走舊制財產交易所得稅，不適用房地合一稅。
+      ⚠️ <strong>都更/危老</strong>取得日認定：<br>
+      ・<strong>分配地</strong>：用原土地取得日（更新前）<br>
+      ・<strong>分配房</strong>：用新房屋登記日（更新後）<br>
+      ・自地自建 / 合建分屋：稅率用<strong>土地持有期間</strong>算（不是房屋）<br>
+      ・若原房地取得日 &lt; 105/01/01，分配地可能走舊制
     </div>`;
   }
 }
@@ -1132,12 +1131,24 @@ $('acquireReason').addEventListener('change', () => {
   const alert = $('reasonAlert');
   const zaHint = $('zaOriginHint');
   alert.innerHTML = '';
-  if (r === 'f') {
-    hint.textContent = '⚠️ 配偶贈與 → 填配偶第 1 次相互贈與前的原始取得日';
-    alert.innerHTML = '<div class="alert alert-warn">⚠️ 配偶贈與 (f)：取得日期要追溯到配偶當年原始取得日，不是這次登記日</div>';
-  } else if (['c','d','h'].includes(r)) {
-    hint.textContent = '⚠️ ' + ({c:'繼承',d:'受遺贈',h:'廢止徵收'}[r]) + ' → 取得日請參閱說明八';
-    alert.innerHTML = '<div class="alert alert-warn">⚠️ ' + ({c:'繼承',d:'受遺贈',h:'廢止徵收'}[r]) + '：取得日期可能不等於登記日，請確認</div>';
+  // 依登記原因 → 取得日認定提示（房地合一稅 2.0 規則）
+  const REASON_HINT = {
+    b: { hint: '⚠️ 拍賣 → 領得權利移轉證書日',
+         alert: '⚠️ <strong>拍賣 (b)</strong>：取得日 = <strong>領得權利移轉證書日</strong>（通常早於登記日 1-2 個月，交易日也是同一天）' },
+    c: { hint: '⚠️ 繼承 → 被繼承人死亡日',
+         alert: '⚠️ <strong>繼承 (c)</strong>：取得日 = <strong>被繼承人死亡日</strong>；持有期間可<strong>併計被繼承人</strong>；連續繼承可累計各次被繼承人持有期' },
+    d: { hint: '⚠️ 受遺贈 → 被遺贈人死亡日',
+         alert: '⚠️ <strong>受遺贈 (d)</strong>：取得日 = <strong>被遺贈人死亡日</strong>（同繼承邏輯）' },
+    e: { hint: '一般贈與 → 贈與登記日',
+         alert: '⚠️ <strong>一般贈與 (e)</strong>：取得日 = 這次贈與登記日；原始成本要填「當時申報現值總額」' },
+    f: { hint: '⚠️ 配偶贈與 → 自原配偶取得日起算',
+         alert: '⚠️ <strong>配偶贈與 (f)</strong>：取得日要<strong>追溯到配偶當年原始取得日</strong>，不是這次登記日' },
+    h: { hint: '⚠️ 廢止徵收 → 請參閱說明八',
+         alert: '⚠️ <strong>廢止徵收 (h)</strong>：取得日認定請參閱財政部說明八' },
+  };
+  if (REASON_HINT[r]) {
+    hint.textContent = REASON_HINT[r].hint;
+    alert.innerHTML = `<div class="alert alert-warn">${REASON_HINT[r].alert}</div>`;
   } else {
     hint.textContent = '登記日期';
   }
