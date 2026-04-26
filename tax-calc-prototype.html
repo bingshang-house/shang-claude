@@ -9,6 +9,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <title>房地合一稅 2.0 試算（prototype）</title>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="tax-lib.js"></script>
   <style>
     :root {
       --yc-gold: #FFB700;
@@ -616,9 +618,28 @@
       <!-- 7. 土地漲價總數額 -->
       <div class="card">
         <h2>⑦ 土地漲價總數額</h2>
+
+        <!-- 7a. 上傳土地謄本自動算（推薦）-->
         <div class="field">
+          <label>📎 從土地謄本自動帶入（可多份）</label>
+          <input type="file" id="landDeedInput" accept="application/pdf" multiple style="font-size:13px;">
+          <button type="button" id="landDeedClear" style="margin-left:8px;font-size:12px;padding:3px 10px;cursor:pointer;">清空</button>
+          <div class="hint">支援同時上傳多份土地謄本；自動算出每筆地的漲價總數額並累加</div>
+        </div>
+        <div id="landDeedList" style="margin: 8px 0; font-size: 12px;"></div>
+        <div id="landTaxRefBox" style="display:none; padding:10px 12px; background:#FFF8E0; border:1px solid var(--yc-dark); border-radius:6px; margin: 8px 0;">
+          <div style="font-size: 12px; color: var(--yc-deep); margin-bottom: 4px;">📊 土地增值稅參考（賣方議價用，本表不直接套用）：</div>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div>自用住宅 10%：<strong style="color:#b91c1c;font-size:16px;" id="landTaxSelfUse">0</strong> 元</div>
+            <div>一般稅率：<strong style="color:#b91c1c;font-size:16px;" id="landTaxGeneral">0</strong> 元</div>
+          </div>
+        </div>
+
+        <!-- 7b. 漲價總數額（自動帶入，可手動改）-->
+        <div class="field">
+          <label>土地漲價總數額（可手動修改）</label>
           <input type="text" id="landGain" inputmode="numeric" placeholder="0">
-          <div class="hint">直接從土地增值稅繳款書「土地漲價總數額」欄抄</div>
+          <div class="hint" id="landGainHint">尚未上傳謄本；可手動填入或上傳謄本自動帶</div>
         </div>
       </div>
 
@@ -730,12 +751,32 @@
 </div>
 
 <script>
+// PDF.js worker
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+}
+
 const $ = id => document.getElementById(id);
 const fmt = n => Number(n||0).toLocaleString('en-US');
 const num = v => {
   if (typeof v === 'string') v = v.replace(/[^0-9.-]/g,'');
   return Number(v) || 0;
 };
+const escH = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const fw = s => s.replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0));
+
+// CPI 物價指數對照表（GHA cron 每月更新）
+let _cpiData = null;
+fetch('data/cpi-tax-index.json').then(r => r.ok ? r.json() : null).then(d => { _cpiData = d; }).catch(() => {});
+
+// 已解析土地謄本資料
+let _landDeeds = []; // [{ fileName, loNo, fullArea, numerator, denominator, prevYearROC, prevMonth, prevValue, currentValue }]
+
+// 使用者是否手動改過 landGain（不自動覆寫）
+let _landGainUserEdited = false;
+// 使用者是否手動改過 zb_zhongjie 仲介費（不自動覆寫）
+let _zbZhongjieUserEdited = false;
 
 // 千分位輸入即時格式化
 function attachNumFormat(el) {
@@ -746,6 +787,173 @@ function attachNumFormat(el) {
   });
 }
 document.querySelectorAll('input[inputmode="numeric"]').forEach(attachNumFormat);
+
+// AA 變動 → 自動帶仲介費 ZB1 = AA × 4%（除非使用者手動改過）
+$('aa').addEventListener('input', () => {
+  if (_zbZhongjieUserEdited) return;
+  const AA = num($('aa').value);
+  const fee = Math.round(AA * 0.04);
+  $('zb_zhongjie').value = fee ? fee.toLocaleString('en-US') : '';
+  calc();
+});
+// 使用者改 zb_zhongjie 後鎖定（避免 AA 變動洗掉）
+$('zb_zhongjie').addEventListener('input', () => { _zbZhongjieUserEdited = true; });
+
+// 使用者手動改 landGain → 鎖定不被謄本自動值覆寫
+$('landGain').addEventListener('input', () => { _landGainUserEdited = true; });
+
+// ===== 土地謄本上傳 → 自動算漲價總數額 =====
+$('landDeedInput').addEventListener('change', async (e) => {
+  const files = [...(e.target.files || [])];
+  if (!files.length) return;
+  for (const file of files) {
+    try {
+      const deed = await parseLandDeed(file);
+      if (deed) _landDeeds.push(deed);
+    } catch (err) {
+      console.error('parseLandDeed failed', file.name, err);
+    }
+  }
+  e.target.value = ''; // 允許重複上傳同檔
+  renderDeedList();
+});
+$('landDeedClear').addEventListener('click', () => {
+  _landDeeds = [];
+  _landGainUserEdited = false;
+  renderDeedList();
+});
+
+async function parseLandDeed(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let raw = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const pg = await pdf.getPage(i);
+    raw += (await pg.getTextContent()).items.map(it => it.str).join(' ') + '\n';
+  }
+  const t = fw(raw);
+
+  // 地號（標題）
+  const loNoM = t.match(/([^\s]{2,6}段(?:[^\s]{1,6}小段)?\s*[\d\-]+)\s*地號/);
+  const loNo = loNoM ? loNoM[1].replace(/\s/g, '') : file.name;
+
+  // 面積
+  const areaM = t.match(/面\s*積\s*([\d]+(?:\.[\d]+)?)\s*平\s*方\s*公\s*尺/);
+
+  // 持分
+  const ratioM = t.match(/[権權]\s*利\s*[範]\s*[囲圍]\s*(?:全部|共有)?\s*(\d+)\s*分之\s*(\d+)/);
+
+  // 公告土地現值（標示部，元/㎡）— 表格逐字拆，section compact
+  let currentValue = null;
+  const pubIdx = t.search(/公\s*告\s*土\s*地\s*現\s*值/);
+  if (pubIdx >= 0) {
+    const compact = t.slice(pubIdx, pubIdx + 200).replace(/\s+/g, '');
+    const pm = compact.match(/公告土地現值民國\d+年\d+月(\d[\d,]*)元/);
+    if (pm) currentValue = parseFloat(pm[1].replace(/,/g, ''));
+  }
+
+  // 前次移轉現值（所有權部）— 表格逐字拆，section compact + 序號 \d{4}
+  let prevYearROC = null, prevMonth = null, prevValue = null;
+  const prevSecIdx = t.search(/前\s*次\s*移\s*轉\s*現\s*值\s*或\s*原\s*規\s*定\s*地\s*價/);
+  if (prevSecIdx >= 0) {
+    const compact = t.slice(prevSecIdx, prevSecIdx + 800).replace(/\s+/g, '');
+    const pm = compact.match(/(\d{2,3})年(\d{1,2})月\d{4}(\d[\d,]*(?:\.\d+)?)元/);
+    if (pm) {
+      prevYearROC = parseInt(pm[1], 10);
+      prevMonth = parseInt(pm[2], 10);
+      prevValue = parseFloat(pm[3].replace(/,/g, ''));
+    }
+  }
+
+  if (!areaM || !ratioM || prevValue == null || currentValue == null) {
+    return {
+      fileName: file.name, loNo,
+      error: !areaM ? '面積' : !ratioM ? '持分' : prevValue == null ? '前次現值' : '公告現值',
+    };
+  }
+
+  return {
+    fileName: file.name,
+    loNo,
+    fullArea: parseFloat(areaM[1]),
+    denominator: parseInt(ratioM[1], 10),
+    numerator: parseInt(ratioM[2], 10),
+    prevYearROC, prevMonth, prevValue,
+    currentValue,
+  };
+}
+
+function renderDeedList() {
+  const list = $('landDeedList');
+  const refBox = $('landTaxRefBox');
+  if (!_landDeeds.length) {
+    list.innerHTML = '';
+    refBox.style.display = 'none';
+    if (!_landGainUserEdited) {
+      $('landGain').value = '';
+      $('landGainHint').textContent = '尚未上傳謄本；可手動填入或上傳謄本自動帶';
+    }
+    calc();
+    return;
+  }
+  if (!_cpiData || !window.taxLib) {
+    list.innerHTML = '<div style="color:#b91c1c;">⚠ 物價指數資料尚未載入，請稍候重整</div>';
+    return;
+  }
+
+  const results = [];
+  let totalGain = 0, totalSelfUse = 0, totalGeneral = 0;
+  for (const d of _landDeeds) {
+    if (d.error) {
+      results.push({ ...d, _failed: true });
+      continue;
+    }
+    const cpiIndex = window.taxLib.cpiLookup(_cpiData, d.prevYearROC, d.prevMonth);
+    if (cpiIndex == null) {
+      results.push({ ...d, _failed: true, error: `CPI ${d.prevYearROC}/${d.prevMonth} 查無` });
+      continue;
+    }
+    const r = window.taxLib.calcLandFull({
+      currentValue: d.currentValue,
+      previousValue: d.prevValue,
+      cpiIndex,
+      area: d.fullArea,
+      numerator: d.numerator,
+      denominator: d.denominator,
+      prevYearROC: d.prevYearROC,
+      prevMonth: d.prevMonth,
+    });
+    results.push({ ...d, ...r, cpiIndex });
+    totalGain += r.landGain;
+    totalSelfUse += r.selfUseTax;
+    totalGeneral += r.generalTax;
+  }
+
+  list.innerHTML = results.map(r => r._failed
+    ? `<div style="padding:4px 8px;color:#b91c1c;">⚠ ${escH(r.fileName)}：解析失敗（缺 ${escH(r.error || '?')}）</div>`
+    : `<div style="padding:4px 8px;border-bottom:1px dashed #E8E0CC;">
+        <strong>${escH(r.loNo)}</strong>
+        <span style="color:#888;">${r.fullArea}㎡ × ${r.numerator}/${r.denominator}　前次 ${fmt(r.prevValue)}/㎡ (${r.prevYearROC}/${r.prevMonth})　CPI ${r.cpiIndex}</span><br>
+        <span style="color:#666;">漲價總數額 <strong style="color:#b91c1c;">${fmt(r.landGain)}</strong> 元　倍數 ${r.gainRatio.toFixed(2)}　${r.gainBracket} 級</span>
+        ${r.exemption ? `<br><span style="color:#b91c1c;font-size:11px;">⚠ ${escH(r.exemption.hint)}（${escH(r.exemption.lawRef)}）</span>` : ''}
+      </div>`
+  ).join('') + `
+    <div style="padding:6px 8px;margin-top:4px;border-top:2px solid var(--yc-dark);">
+      <strong>合計漲價總數額：<span style="color:#b91c1c;font-size:18px;">${fmt(totalGain)}</span> 元</strong>
+    </div>
+  `;
+
+  refBox.style.display = '';
+  $('landTaxSelfUse').textContent = fmt(totalSelfUse);
+  $('landTaxGeneral').textContent = fmt(totalGeneral);
+
+  // 自動填 landGain（但若使用者已手動改過，不蓋）
+  if (!_landGainUserEdited) {
+    $('landGain').value = totalGain ? totalGain.toLocaleString('en-US') : '';
+    $('landGainHint').textContent = `自動帶入：${_landDeeds.length} 筆地累加 = ${fmt(totalGain)} 元（可手動修改，改後不再自動覆寫）`;
+  }
+  calc();
+}
 document.querySelectorAll('input[type="checkbox"], input[type="radio"], select, input[type="date"]').forEach(el => {
   el.addEventListener('change', calc);
 });
