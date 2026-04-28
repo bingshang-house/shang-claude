@@ -527,7 +527,10 @@
     .hz-page-item .d { color: #666; }
     .hz-page-note { font-size: 10px; color: #888; padding: 6px 14px 10px; border-top: 1px dashed #E8E0CC; background: #FFFBF0; }
     @media print {
-      .hazard-page.show { page-break-before: always; display: block !important; }
+      /* 嫌惡頁不強制分頁（不然短內容會浪費前一頁底部）；改成內容不被切到中間即可 */
+      .hazard-page.show { display: block !important; break-inside: avoid; page-break-inside: avoid; }
+      /* 周遭機能 cell 不被切到中間（重要發展 / 商圈特色 內容長時） */
+      .surr-item { break-inside: avoid; page-break-inside: avoid; }
     }
 
     /* 環境注意（A4 最底部，螢幕命中即顯示，列印預設隱藏，勾 checkbox 才列印） */
