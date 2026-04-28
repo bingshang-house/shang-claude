@@ -546,6 +546,10 @@
       /* 周遭機能整塊：勾 toggle 才印（用 .print-skip 反向控制 default 印 / 不勾才不印） */
       .surr-box.print-skip { display: none !important; }
       .section-bar.amenity-bar .amenity-print-toggle { display: none !important; }
+      /* section banner（如「建築能效標章」、「物件資料」）/ 表格 row 不被切到中間 */
+      .section-bar { break-inside: avoid; page-break-inside: avoid; break-after: avoid-page; page-break-after: avoid; }
+      .info-table tr { break-inside: avoid; page-break-inside: avoid; }
+      .surr-label, .hz-page-cat-title, .env-risk-header, .hz-page-header { break-after: avoid-page; page-break-after: avoid; }
     }
     /* 周遭機能 section-bar 同列右側放 toggle */
     .section-bar.amenity-bar { display: flex; align-items: center; justify-content: space-between; }
@@ -4810,7 +4814,7 @@ ${clone.outerHTML}
       document.body.removeChild(wrap);
     }
 
-    // jsPDF 多頁切割
+    // jsPDF 多頁切割（page-aware：找 canvas 上 row 邊界切，避免文字/banner 被切到中間）
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
     const pageW = pdf.internal.pageSize.getWidth();   // 210
@@ -4819,15 +4823,62 @@ ${clone.outerHTML}
     const imgH = (canvas.height / canvas.width) * imgW;
     const imgData = canvas.toDataURL('image/jpeg', 0.92);
 
-    let position = 0;
-    let heightLeft = imgH;
-    pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
-    heightLeft -= pageH;
-    while (heightLeft > 0) {
-      position -= pageH;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
-      heightLeft -= pageH;
+    // 一頁高度對應 canvas 多少像素
+    const pageHpx = pageH * canvas.height / imgH;
+
+    // 在 targetY 往上掃 scanUpPx 像素，找「row 內左右無大對比」的 y
+    // 策略：sample 多個 x 點（左/中/右），全部接近同色 = row gap / banner 之外的純色帶
+    // 為什麼不掃整 row max delta：.a4-card 每行都跨「金黃 label 區 + 白 value 區」恆有大 delta
+    function _findSafeBreak(ctx, targetY, scanUpPx, w) {
+      const yTop = Math.max(0, Math.floor(targetY - scanUpPx));
+      const sliceH = Math.floor(targetY) - yTop;
+      if (sliceH < 2) return targetY;
+      const data = ctx.getImageData(0, yTop, w, sliceH).data;
+      const THRESHOLD = 25;
+      // 取 5 個 sample x：10% / 30% / 50% / 70% / 90%
+      const xs = [0.1, 0.3, 0.5, 0.7, 0.9].map(p => Math.floor(w * p));
+      for (let y = sliceH - 1; y >= 0; y--) {
+        // 取這一 row 所有 sample 點的 RGB
+        const px = xs.map(x => {
+          const i = (y * w + x) * 4;
+          return [data[i], data[i+1], data[i+2]];
+        });
+        // 算所有 sample pair 的最大 delta
+        let maxD = 0;
+        for (let i = 0; i < px.length; i++) {
+          for (let j = i + 1; j < px.length; j++) {
+            const dr = Math.abs(px[i][0] - px[j][0]);
+            const dg = Math.abs(px[i][1] - px[j][1]);
+            const db = Math.abs(px[i][2] - px[j][2]);
+            const d = Math.max(dr, dg, db);
+            if (d > maxD) maxD = d;
+          }
+        }
+        if (maxD < THRESHOLD) return yTop + y;
+      }
+      return targetY;
+    }
+
+    const ctx2 = canvas.getContext('2d');
+    let yStart = 0;
+    let pageIdx = 0;
+    const SCAN_UP = Math.min(120, Math.floor(pageHpx * 0.15)); // 掃 15% 一頁高度找邊界，最多 120px
+    while (yStart < canvas.height - 1) {
+      let yEnd = yStart + pageHpx;
+      if (yEnd < canvas.height) {
+        yEnd = _findSafeBreak(ctx2, yEnd, SCAN_UP, canvas.width);
+        // 如果 safe break 退太多（< 一半 page），fallback 用原位置（避免一頁太空）
+        if (yEnd - yStart < pageHpx * 0.5) yEnd = yStart + pageHpx;
+      } else {
+        yEnd = canvas.height;
+      }
+      if (pageIdx > 0) pdf.addPage();
+      // 用 negative offset 把整張長圖位移，PDF page 自然 clip 出 yStart..yEnd 這段
+      const yOffsetMm = -yStart * imgH / canvas.height;
+      pdf.addImage(imgData, 'JPEG', 0, yOffsetMm, imgW, imgH);
+      yStart = yEnd;
+      pageIdx++;
+      if (pageIdx > 30) break; // 防呆：最多 30 頁
     }
 
     // 檔名（safeName / buildBaseName / timestampForFilename 在 cloud IIFE 內，這邊 fallback 實作）
