@@ -502,6 +502,15 @@
     /* 嫌惡設施查核（左欄 + A4） */
     .hazard-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #fff; margin-left: 8px; cursor: pointer; user-select: none; }
     .hazard-toggle input { accent-color: #FFB700; }
+    /* form-sep 同列右側放 toggle（左欄白底，深色字） */
+    .form-sep.form-sep-row { display: flex; align-items: center; justify-content: space-between; }
+    .form-sep.form-sep-row .sep-print-toggle { font-size: 11px; color: #7A5500; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; padding-right: 6px; }
+    .form-sep.form-sep-row .sep-print-toggle input { accent-color: #CC8F00; }
+    /* 環境注意 header 同列右側放 toggle（深棕底，白字） */
+    .env-risk-header { display: flex; align-items: center; justify-content: space-between; }
+    .env-risk-header .env-print-toggle { font-size: 11px; font-weight: 500; color: #fff; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+    .env-risk-header .env-print-toggle input { accent-color: #FFB700; }
+    @media print { .env-risk-header .env-print-toggle { display: none !important; } }
     .hz-panel-empty { color: #999; font-size: 11.5px; padding: 6px; }
     .hz-cat { margin-bottom: 8px; }
     .hz-cat-head { font-weight: 700; color: #7A5500; font-size: 12px; margin-bottom: 3px; padding-left: 2px; }
@@ -776,15 +785,13 @@
 
 <!-- Top Bar -->
 <div class="top-bar">
-  <span class="top-title">🏠 房屋銷售介紹產生器</span>
+  <span class="top-title">🏠 亞灣 AI 產調器</span>
   <button class="btn btn-mobile-toggle" id="btnMobileToggle" onclick="handleMobileToggle()" title="手機版：切換看左欄表單 / 右欄 A4 預覽">📄 看 A4 預覽</button>
-  <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載永慶制式 CASE STUDY Excel">📊 下載 Excel</button>
-  <button class="btn btn-a4-xlsx" onclick="downloadA4Xlsx()" id="btnA4Xlsx" title="下載 A4 銷售資料表 Excel（即右側預覽版面）">📄 下載 A4 銷售表 Excel</button>
-  <button class="btn btn-mobile-html" onclick="exportMobileHtmlBoth()" id="btnMobileHtml" title="一鍵產出專員版 + 無名版手機友善 HTML（離線可看）">📱 儲存成手機版（2 份）</button>
-  <button class="btn btn-cloud-save" onclick="handleCloudSaveClick()" id="btnCloudSave" title="把目前資料存進你 Google Drive 的「賞好賞銷售資料」資料夾">💾 存到雲端</button>
+  <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載永慶制式 CASE STUDY Excel（橫式版型）">📊 CS 橫</button>
+  <button class="btn btn-a4-xlsx" onclick="downloadA4Xlsx()" id="btnA4Xlsx" title="下載 A4 銷售資料表 Excel（直式，即右側預覽版面）">📄 CS 直</button>
+  <button class="btn btn-mobile-html" onclick="exportMobileHtmlBoth()" id="btnMobileHtml" title="一鍵產出專員版 + 無名版手機友善 HTML（離線可看）">📱 CS 手機版 ×2</button>
+  <button class="btn btn-cloud-save" onclick="handleCloudSaveClick()" id="btnCloudSave" title="把目前資料存進你 Google Drive 的「賞好賞銷售資料」資料夾">💾 存雲端</button>
   <button class="btn btn-cloud-load" onclick="handleCloudListClick()" id="btnCloudLoad" title="從 Google Drive 叫回先前存過的案件">📂 我的案件 ▼</button>
-  <label class="hazard-toggle" title="勾選時列印會包含 300m 內嫌惡設施清單（自動分頁）"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含嫌惡設施</label>
-  <label class="hazard-toggle" title="勾選時列印會包含 A4 底部「環境注意」清單（土壤液化、淹水、斷層等風險圖層）"><input type="checkbox" id="s-print-env-risks" oninput="toggleEnvRiskPrint()">列印含環境注意</label>
   <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
   <button class="btn btn-reset" onclick="resetAll()">重置</button>
 </div>
@@ -1070,10 +1077,13 @@
         <textarea id="s-school" rows="2" oninput="updateCard()" placeholder="查詢後自動填入，或手動輸入"></textarea>
       </div>
 
-      <!-- 嫌惡設施查核（300m 內，Google Maps） -->
-      <div class="form-sep">嫌惡設施查核</div>
+      <!-- 重要設施提醒（300m 內，Google Maps；id/變數名仍沿用 hazard 不動） -->
+      <div class="form-sep form-sep-row">
+        <span>重要設施提醒</span>
+        <label class="sep-print-toggle" title="勾選時列印會包含 300m 內重要設施清單（自動分頁）"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含此清單</label>
+      </div>
       <div class="fg">
-        <button id="btnHazard" onclick="doHazardSearch()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">🔍 重新查詢 300m 內嫌惡設施</button>
+        <button id="btnHazard" onclick="doHazardSearch()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">🔍 重新查詢 300m 內重要設施</button>
         <div id="hazard-status" style="font-size:11px;color:#666;margin-bottom:6px;min-height:0;"></div>
         <div id="hazard-panel"><div class="hz-panel-empty">（尚未查詢）</div></div>
         <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">上傳謄本後自動查；誤判項可按 ✕ 手動移除</div>
@@ -1394,14 +1404,17 @@
 
         <!-- 環境注意（NonUrban MapServer 查風險圖層；螢幕命中即顯示，列印預設不勾需手動開） -->
         <section class="env-risk-page" id="out-env-risk-page">
-          <div class="env-risk-header">📍 環境注意</div>
+          <div class="env-risk-header">
+            <span>📍 環境注意</span>
+            <label class="env-print-toggle" title="勾選時列印會包含此清單（土壤液化、淹水、斷層等風險圖層）"><input type="checkbox" id="s-print-env-risks" oninput="toggleEnvRiskPrint()">列印含此清單</label>
+          </div>
           <div class="env-risk-body" id="env-risk-body"></div>
           <div class="env-risk-note">查詢自高雄市政府 ArcGIS 公開圖層；僅供揭露參考，實際應以主管機關認定為準。</div>
         </section>
 
         <!-- 嫌惡設施查核（列印自動分第 2 頁；未勾選「列印含嫌惡設施」時整塊隱藏） -->
         <section class="hazard-page" id="out-hazard-page">
-          <div class="hz-page-header">300m 內嫌惡設施查核</div>
+          <div class="hz-page-header">300m 內重要設施提醒</div>
           <div class="hz-page-body" id="out-hazard-body"></div>
           <div class="hz-page-note">本清單依 Google Maps 300 公尺內查詢結果；距離為直線距離；實地請現場查核。</div>
         </section>
@@ -5171,7 +5184,7 @@ ${clone.outerHTML}
       if (hazardInclude && hasHazard) {
         // 強制分頁：在當前 row 之前加分頁符
         ws.getRow(row).addPageBreak();
-        groupTitle('300m 內嫌惡設施查核');
+        groupTitle('300m 內重要設施提醒');
         for (const cat of _hazardResults) {
           // 類別 sub-title
           ws.mergeCells(row, 1, row, 20);
@@ -6844,7 +6857,7 @@ ${factsText}
       if (statusEl) {
         const total = results.reduce((s, r) => s + r.items.length, 0);
         statusEl.innerHTML = total === 0
-          ? '<span style="color:#16a34a;">✓ 300m 內無顯著嫌惡設施</span>'
+          ? '<span style="color:#16a34a;">✓ 300m 內無顯著重要設施</span>'
           : `<span style="color:#16a34a;">✓ 300m 內找到 ${total} 項</span>`;
       }
     } catch (e) {
@@ -7711,7 +7724,7 @@ ${factsText}
       btn.textContent = '💾 更新「' + display + '」';
       btn.title = '更新此案到 Drive（原檔覆蓋）';
     } else {
-      btn.textContent = '💾 存到雲端';
+      btn.textContent = '💾 存雲端';
       btn.title = '把目前資料存進你 Google Drive 的「賞好賞銷售資料」資料夾';
     }
   }
