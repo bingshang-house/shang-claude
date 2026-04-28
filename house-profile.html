@@ -4568,6 +4568,18 @@
       e.removeAttribute('onmouseover'); e.removeAttribute('onmouseenter'); e.removeAttribute('oncontextmenu');
     });
 
+    // 尊重列印 toggle（跟 PDF ×2 一致，不勾選的欄位整塊 remove）
+    const tHazard = document.getElementById('s-print-hazard')?.checked;
+    const tEnv = document.getElementById('s-print-env-risks')?.checked;
+    const tAmenity = document.getElementById('s-print-amenity')?.checked;
+    const tLandTax = document.getElementById('land-tax-print-toggle')?.checked;
+    if (!tHazard) clone.querySelector('.hazard-page')?.remove();
+    if (!tEnv) clone.querySelector('.env-risk-page')?.remove();
+    if (!tAmenity) clone.querySelector('.surr-box')?.remove();
+    if (!tLandTax) clone.querySelector('#land-tax-section')?.remove();
+    // toggle 本身（label + checkbox）在輸出檔不顯示
+    clone.querySelectorAll('.hz-print-toggle, .env-print-toggle, .amenity-print-toggle, .land-tax-print-toggle').forEach(e => e.remove());
+
     // 位置圖：iframe → Static Maps base64，外層包 <a> 可點開 Google Maps
     const mapDiv = clone.querySelector('#out-map');
     if (mapDiv) {
