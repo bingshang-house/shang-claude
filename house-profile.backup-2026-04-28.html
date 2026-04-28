@@ -15,8 +15,6 @@
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="window.__gisLoaded = true; if (window.initAuthGate) window.initAuthGate();"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -500,12 +498,6 @@
       font-weight: 700;
     }
     .btn-mobile-html:hover { background: linear-gradient(135deg, #4a1c58 0%, #2e0f38 100%); }
-    .btn-pdf-both {
-      background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%);
-      color: #fff;
-      font-weight: 700;
-    }
-    .btn-pdf-both:hover { background: linear-gradient(135deg, #7f1d1d 0%, #5a1414 100%); }
 
     /* 嫌惡設施查核（左欄 + A4） */
     .hazard-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #fff; margin-left: 8px; cursor: pointer; user-select: none; }
@@ -526,10 +518,8 @@
     .hz-item .d { color: #666; font-size: 11px; }
     .hz-item .rm { background: none; border: none; color: #c00; cursor: pointer; font-size: 13px; padding: 0 4px; line-height: 1; }
     .hazard-page { display: none; margin-top: 10px; border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; background: #fff; }
-    .hazard-page.has-items { display: block; }
-    .hz-page-header { background: #A87500; color: #fff; padding: 8px 14px; font-size: 14px; font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; justify-content: space-between; }
-    .hz-page-header .hz-print-toggle { font-size: 11px; font-weight: 500; color: #fff; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
-    .hz-page-header .hz-print-toggle input { accent-color: #FFB700; }
+    .hazard-page.show { display: block; }
+    .hz-page-header { background: #A87500; color: #fff; padding: 8px 14px; font-size: 14px; font-weight: 700; letter-spacing: 1px; }
     .hz-page-body { padding: 10px 14px; }
     .hz-page-cat { margin-bottom: 8px; }
     .hz-page-cat-title { font-weight: 700; color: #7A5500; font-size: 12.5px; border-left: 3px solid #FFB700; padding-left: 6px; margin-bottom: 4px; }
@@ -537,20 +527,11 @@
     .hz-page-item .d { color: #666; }
     .hz-page-note { font-size: 10px; color: #888; padding: 6px 14px 10px; border-top: 1px dashed #E8E0CC; background: #FFFBF0; }
     @media print {
-      /* 列印 default 不印，勾選 toggle 才印（跟環境注意一致） */
-      .hazard-page.has-items { display: none !important; }
-      .hazard-page.has-items.print-include { display: block !important; break-inside: avoid; page-break-inside: avoid; }
-      .hz-page-header .hz-print-toggle { display: none !important; }
+      /* 嫌惡頁不強制分頁（不然短內容會浪費前一頁底部）；改成內容不被切到中間即可 */
+      .hazard-page.show { display: block !important; break-inside: avoid; page-break-inside: avoid; }
       /* 周遭機能 cell 不被切到中間（重要發展 / 商圈特色 內容長時） */
       .surr-item { break-inside: avoid; page-break-inside: avoid; }
-      /* 周遭機能整塊：勾 toggle 才印（用 .print-skip 反向控制 default 印 / 不勾才不印） */
-      .surr-box.print-skip { display: none !important; }
-      .section-bar.amenity-bar .amenity-print-toggle { display: none !important; }
     }
-    /* 周遭機能 section-bar 同列右側放 toggle */
-    .section-bar.amenity-bar { display: flex; align-items: center; justify-content: space-between; }
-    .section-bar.amenity-bar .amenity-print-toggle { font-size: 11px; font-weight: 500; color: #fff; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
-    .section-bar.amenity-bar .amenity-print-toggle input { accent-color: #FFB700; }
 
     /* 環境注意（A4 最底部，螢幕命中即顯示，列印預設隱藏，勾 checkbox 才列印） */
     .env-risk-page { display: none; margin: 10px 0 0; border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; background: #fff; }
@@ -812,7 +793,6 @@
   <button class="btn btn-cs-xlsx" onclick="downloadCaseStudyXlsx()" id="btnCsXlsx" title="下載永慶制式 CASE STUDY Excel（橫式版型）">📊 CS 橫</button>
   <button class="btn btn-a4-xlsx" onclick="downloadA4Xlsx()" id="btnA4Xlsx" title="下載 A4 銷售資料表 Excel（直式，即右側預覽版面）">📄 CS 直</button>
   <button class="btn btn-mobile-html" onclick="exportMobileHtmlBoth()" id="btnMobileHtml" title="一鍵產出專員版 + 無名版手機友善 HTML（離線可看）">📱 CS 手機版 ×2</button>
-  <button class="btn btn-pdf-both" onclick="exportPdfBoth()" id="btnPdfBoth" title="一鍵產出專員版 + 無名版 PDF（×2，尊重 toggle 勾選狀態）">📕 PDF ×2</button>
   <button class="btn btn-cloud-save" onclick="handleCloudSaveClick()" id="btnCloudSave" title="把目前資料存進你 Google Drive 的「賞好賞銷售資料」資料夾">💾 存雲端</button>
   <button class="btn btn-cloud-load" onclick="handleCloudListClick()" id="btnCloudLoad" title="從 Google Drive 叫回先前存過的案件">📂 我的案件 ▼</button>
   <button class="btn btn-print" onclick="window.print()">🖨️ 列印 / PDF</button>
@@ -1101,7 +1081,10 @@
       </div>
 
       <!-- 重要設施提醒（300m 內，Google Maps；id/變數名仍沿用 hazard 不動） -->
-      <div class="form-sep">重要設施提醒</div>
+      <div class="form-sep form-sep-row">
+        <span>重要設施提醒</span>
+        <label class="sep-print-toggle" title="勾選時列印會包含 300m 內重要設施清單（自動分頁）"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含此清單</label>
+      </div>
       <div class="fg">
         <button id="btnHazard" onclick="doHazardSearch()" style="width:100%;margin-bottom:6px;padding:8px;background:linear-gradient(135deg,#CC8F00 0%,#7A5500 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;">🔍 重新查詢 300m 內重要設施</button>
         <div id="hazard-status" style="font-size:11px;color:#666;margin-bottom:6px;min-height:0;"></div>
@@ -1401,10 +1384,7 @@
         </div>
 
         <div class="surr-box">
-          <div class="section-bar bar-green amenity-bar">
-            <span>▌ 周遭機能分析</span>
-            <label class="amenity-print-toggle" title="勾選時列印會包含周遭機能分析（節省版面可不印）"><input type="checkbox" id="s-print-amenity" checked oninput="toggleAmenityPrint()">列印含此清單</label>
-          </div>
+          <div class="section-bar bar-green">▌ 周遭機能分析</div>
           <div class="surr-grid">
             <div class="surr-item">
               <div class="surr-label">🚌 交通機能</div>
@@ -1437,10 +1417,7 @@
 
         <!-- 嫌惡設施查核（列印自動分第 2 頁；未勾選「列印含嫌惡設施」時整塊隱藏） -->
         <section class="hazard-page" id="out-hazard-page">
-          <div class="hz-page-header">
-            <span>300m 內重要設施提醒</span>
-            <label class="hz-print-toggle" title="勾選時列印會包含 300m 內重要設施清單"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含此清單</label>
-          </div>
+          <div class="hz-page-header">300m 內重要設施提醒</div>
           <div class="hz-page-body" id="out-hazard-body"></div>
           <div class="hz-page-note">本清單依 Google Maps 300 公尺內查詢結果；距離為直線距離；實地請現場查核。</div>
         </section>
@@ -4715,156 +4692,6 @@ ${clone.outerHTML}
     }
   }
 
-  // ====== PDF ×2 匯出（仿手機版 prep + html2canvas + jsPDF 多頁切割）======
-  async function exportPdf(mode) {
-    if (typeof html2canvas === 'undefined') throw new Error('html2canvas 尚未載入');
-    if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF 尚未載入');
-
-    const card = document.querySelector('.a4-card');
-    if (!card) throw new Error('找不到 A4 區塊');
-    const clone = card.cloneNode(true);
-
-    // 聯絡列：anon 移除
-    if (mode === 'anon') {
-      const contact = clone.querySelector('#out-contact');
-      if (contact) contact.remove();
-    }
-
-    // 移除按鈕、onclick
-    clone.querySelectorAll('button').forEach(b => b.remove());
-    clone.querySelectorAll('[onclick]').forEach(e => e.removeAttribute('onclick'));
-    clone.querySelectorAll('[onmouseover],[onmouseenter],[oncontextmenu]').forEach(e => {
-      e.removeAttribute('onmouseover'); e.removeAttribute('onmouseenter'); e.removeAttribute('oncontextmenu');
-    });
-
-    // 尊重列印 toggle（與 window.print() 邏輯一致）
-    const tHazard = document.getElementById('s-print-hazard')?.checked;
-    const tEnv = document.getElementById('s-print-env-risks')?.checked;
-    const tAmenity = document.getElementById('s-print-amenity')?.checked;
-    const tLandTax = document.getElementById('land-tax-print-toggle')?.checked;
-    if (!tHazard) clone.querySelector('.hazard-page')?.remove();
-    if (!tEnv) clone.querySelector('.env-risk-page')?.remove();
-    if (!tAmenity) clone.querySelector('.surr-box')?.remove();
-    if (!tLandTax) clone.querySelector('#land-tax-section')?.remove();
-    // toggle 本身在 PDF 不顯示
-    clone.querySelectorAll('.hz-print-toggle, .env-print-toggle, .amenity-print-toggle, .land-tax-print-toggle').forEach(e => e.remove());
-
-    // 位置圖 iframe → Static Maps base64 img
-    const mapDiv = clone.querySelector('#out-map');
-    if (mapDiv) {
-      const iframe = mapDiv.querySelector('iframe');
-      if (iframe) {
-        iframe.remove();
-        try {
-          const dAddr = String((window.deed && window.deed.address) || '');
-          const street = dAddr.replace(/[一二三四五六七八九十]+樓.*$/, '').replace(/\d+樓.*$/, '').trim();
-          const addr = ((window.deed && window.deed.district) || '') + street;
-          const jpg = await fetchStaticMapJpegBytes(addr);
-          const img = document.createElement('img');
-          img.src = 'data:image/jpeg;base64,' + _arrayToBase64(jpg);
-          img.alt = '位置圖';
-          img.style.cssText = 'width:100%;height:auto;display:block;';
-          mapDiv.appendChild(img);
-        } catch (e) { console.warn('PDF 位置圖失敗', e); }
-      }
-    }
-
-    // 地籍圖 SVG → PNG
-    const cadaDiv = clone.querySelector('#out-cadastral');
-    const liveSvg = document.querySelector('#out-cadastral svg');
-    if (cadaDiv && liveSvg) {
-      try {
-        const png = await _svgToPngDataUrl(liveSvg);
-        if (png) {
-          cadaDiv.innerHTML = '';
-          const img = document.createElement('img');
-          img.src = png;
-          img.alt = '地籍圖';
-          img.style.cssText = 'width:100%;height:auto;display:block;';
-          cadaDiv.appendChild(img);
-        }
-      } catch (e) { console.warn('PDF 地籍圖失敗', e); }
-    }
-
-    // 暫掛 offscreen 給 html2canvas render（A4 寬 210mm @ 96dpi ≈ 794px）
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;left:-99999px;top:0;width:794px;background:#fff;';
-    clone.style.cssText = 'width:794px !important;min-height:auto !important;display:block !important;box-shadow:none !important;margin:0 !important;';
-    wrap.appendChild(clone);
-    document.body.appendChild(wrap);
-
-    // 等圖載入
-    await new Promise(r => setTimeout(r, 250));
-
-    let canvas;
-    try {
-      canvas = await html2canvas(clone, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: 794,
-        windowWidth: 794
-      });
-    } finally {
-      document.body.removeChild(wrap);
-    }
-
-    // jsPDF 多頁切割
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    const pageW = pdf.internal.pageSize.getWidth();   // 210
-    const pageH = pdf.internal.pageSize.getHeight();  // 297
-    const imgW = pageW;
-    const imgH = (canvas.height / canvas.width) * imgW;
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-
-    let position = 0;
-    let heightLeft = imgH;
-    pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
-    heightLeft -= pageH;
-    while (heightLeft > 0) {
-      position -= pageH;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
-      heightLeft -= pageH;
-    }
-
-    // 檔名（safeName / buildBaseName / timestampForFilename 在 cloud IIFE 內，這邊 fallback 實作）
-    const _safe = s => (s || '').replace(/[\/\\:*?"<>|\r\n\t]/g, '').slice(0, 80);
-    const _baseParts = [
-      (document.getElementById('cs-s-case-name')?.value || '').trim(),
-      ((window.deed && window.deed.address) || '').trim(),
-      (document.getElementById('cs-s-partner-name')?.value || '').trim()
-    ].filter(Boolean);
-    const _base = _baseParts.length ? _baseParts.join('-') : '銷售資料表';
-    const _d = new Date();
-    const _pad = n => String(n).padStart(2, '0');
-    const _ts = _d.getFullYear() + _pad(_d.getMonth()+1) + _pad(_d.getDate()) + '_' + _pad(_d.getHours()) + _pad(_d.getMinutes());
-    const filename = `${_safe(_base)}_${_ts}_${mode === 'agent' ? '專員版' : '無名版'}.pdf`;
-    pdf.save(filename);
-  }
-
-  async function exportPdfBoth() {
-    const btn = document.getElementById('btnPdfBoth');
-    const orig = btn.textContent;
-    btn.textContent = '⏳ 產生中...';
-    btn.disabled = true;
-    try {
-      await exportPdf('agent');
-      await new Promise(r => setTimeout(r, 600));
-      await exportPdf('anon');
-    } catch (e) {
-      console.error('exportPdf failed', e);
-      alert('產生 PDF 失敗：' + (e.message || e));
-    } finally {
-      btn.textContent = orig;
-      btn.disabled = false;
-    }
-  }
-  window.exportPdf = exportPdf;
-  window.exportPdfBoth = exportPdfBoth;
-
   async function downloadA4Xlsx() {
     const btn = document.getElementById('btnA4Xlsx');
     const origText = btn.textContent;
@@ -7075,17 +6902,7 @@ ${factsText}
   }
 
   function toggleHazardPrint() {
-    const page = document.getElementById('out-hazard-page');
-    const chk  = document.getElementById('s-print-hazard');
-    if (!page || !chk) return;
-    page.classList.toggle('print-include', chk.checked);
-  }
-
-  function toggleAmenityPrint() {
-    const box = document.querySelector('.surr-box');
-    const chk = document.getElementById('s-print-amenity');
-    if (!box || !chk) return;
-    box.classList.toggle('print-skip', !chk.checked);
+    renderHazardA4();
   }
 
   function renderHazardA4() {
@@ -7093,10 +6910,13 @@ ${factsText}
     const body = document.getElementById('out-hazard-body');
     const chk  = document.getElementById('s-print-hazard');
     if (!page || !body) return;
+    const include  = !chk || chk.checked;
     const hasItems = _hazardResults.reduce((s, r) => s + r.items.length, 0) > 0;
-    page.classList.toggle('has-items', hasItems);
-    page.classList.toggle('print-include', !chk || chk.checked);
-    if (!hasItems) return;
+    if (!include || !hasItems) {
+      page.classList.remove('show');
+      return;
+    }
+    page.classList.add('show');
     body.innerHTML = _hazardResults.map(cat => `
       <div class="hz-page-cat">
         <div class="hz-page-cat-title">${escH(cat.label)}</div>
