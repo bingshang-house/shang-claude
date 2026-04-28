@@ -453,8 +453,9 @@
     @media print {
       body { background: white; }
       .top-bar, .left-panel { display: none !important; }
-      .right-panel { padding: 0; overflow: visible; }
-      .a4-card { box-shadow: none; width: 100%; min-height: auto; }
+      /* ⚠️ flex container 跨頁列印 Chromium/Edge 長年 bug（整頁空白），改 block 流走 */
+      .right-panel { display: block !important; padding: 0; overflow: visible; }
+      .a4-card { display: block !important; box-shadow: none; width: 100%; min-height: auto; }
       /* 印刷：標題 + 聯絡資訊強制同一行，自動縮字避免 wrap */
       .header-title-row {
         flex-wrap: nowrap !important;
