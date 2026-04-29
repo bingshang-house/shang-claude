@@ -132,14 +132,17 @@ function parseListPage() {
     const mainArea = parseFloat((t.match(/主建\s*([\d.]+)\s*坪/) || [])[1] || 0);
     const age = parseFloat((t.match(/坪\s+(\d+)\s*年\s+\d+F/) || [])[1] || 0);
     const floor = (t.match(/(\d+(?:~\d+)?F\/\d+F)/) || [])[1] || '';
-    const community = (t.match(/F\/\d+F\s+([^前]+?)\s+前鎮區/) || [])[1] || '';
-    const road = (t.match(/前鎮區[\-\s]*(.+?)\s+仲介/) || [])[1] || '';
+    // 動態抓區名（不寫死「前鎮區」）：一次抓 (社區)(區)(路)
+    const m3 = t.match(/\d+(?:~\d+)?F\/\d+F\s+(\S+?)\s+([一-鿿]{1,3}區)[\-\s]+(\S+?)\s+仲介/);
+    const community = m3 ? m3[1] : '';
+    const district = m3 ? m3[2] : '';
+    const road = m3 ? m3[3] : '';
     const agent = (t.match(/仲介\s*(.+?)\s+\d+人瀏覽/) || [])[1] || '';
     const hasPark = /含車位/.test(t);
     const totalPriceMatch = t.match(/([\d,]+)\s*萬\s*(?:\(\s*含車位價\s*\))?\s+[\d.]+\s*萬\/坪/);
     const totalPrice = totalPriceMatch ? parseFloat(totalPriceMatch[1].replace(/,/g, '')) : 0;
     const unitPrice = parseFloat((t.match(/([\d.]+)\s*萬\/坪/) || [])[1] || 0);
-    out.push({ title, community, road, rooms: rooms ? `${rooms[1]}房${rooms[2]}廳${rooms[3]}衛` : '', totalArea, mainArea, age, floor, agent, hasPark, totalPrice, unitPrice, href, imgSrc });
+    out.push({ title, community, road, district, rooms: rooms ? `${rooms[1]}房${rooms[2]}廳${rooms[3]}衛` : '', totalArea, mainArea, age, floor, agent, hasPark, totalPrice, unitPrice, href, imgSrc });
   });
   return out;
 }
@@ -157,6 +160,8 @@ function mergeItems(all) {
       if (!x.sources.includes(item.source)) x.sources.push(item.source);
       if (item.href && !x.links[item.source]) x.links[item.source] = item.href;
       if (!x.imgSrc && item.imgSrc) x.imgSrc = item.imgSrc;
+      // 保留首個非空的 district
+      if (item.district && !x.district) x.district = item.district;
     } else {
       map.set(k, {
         ...item,
@@ -229,12 +234,17 @@ export default {
       const merged = mergeItems(all);
 
       // 4. Geocode 每筆獨立物件（並行批次，但限速避免撞 Google QPS）
+      // 用 item 自己抓到的 district（591 列表標的真實所在區）；fallback subject 地址抽出的區
+      const fallbackDistrict = extractDistrict(subject.address) || '前鎮區';
       const geocodeBatch = async (items, batchSize = 10) => {
         for (let i = 0; i < items.length; i += batchSize) {
           await Promise.all(items.slice(i, i + batchSize).map(async (item) => {
+            const dist = item.district || fallbackDistrict;
             const queries = [];
-            if (item.community) queries.push(`${item.community} 高雄市${extractDistrict(subject.address) || '前鎮區'}`);
-            if (item.road) queries.push(`高雄市${extractDistrict(subject.address) || '前鎮區'}${item.road}`);
+            if (item.community) queries.push(`${item.community} 高雄市${dist}`);
+            if (item.road) queries.push(`高雄市${dist}${item.road}`);
+            // 最後 fallback：只用區
+            if (!queries.length && dist) queries.push(`高雄市${dist}`);
             for (const q of queries) {
               const loc = await geocode(env, q);
               if (loc) { item.lat = loc.lat; item.lon = loc.lon; break; }
