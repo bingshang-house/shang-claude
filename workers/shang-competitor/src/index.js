@@ -80,7 +80,6 @@ async function scrape591(env, params, subject) {
     adjacentList = ['前鎮區', '苓雅區', '小港區', '鳳山區'];
     adjacentSectionIds = [249, 245, 252, 268];
   }
-  const adjacentSectionParam = adjacentSectionIds.join(',');
 
   // echo 給前端 debug 用（看 worker 真實收到 / 算出的內容）
   const _debugInfo = {
@@ -118,49 +117,55 @@ async function scrape591(env, params, subject) {
   }
 
   const browser = await puppeteer.launch(env.MYBROWSER);
-  const page = await browser.newPage();
-  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36');
 
-  // 阻擋圖片/CSS/字型/媒體/廣告，避免撞 CF Workers 1000 subrequest 上限
-  await page.setRequestInterception(true);
-  page.on('request', req => {
-    const type = req.resourceType();
-    const u = req.url();
-    if (type === 'image' || type === 'media' || type === 'font' || type === 'stylesheet') return req.abort();
-    if (/google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|criteo|googlesyndication|adservice|tiktok|line-scdn|tagcommander|matomo|sentry/.test(u)) return req.abort();
-    req.continue();
-  });
+  // 每個 page 共用設定（UA + abort 重型資源）
+  async function newConfiguredPage() {
+    const p = await browser.newPage();
+    await p.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36');
+    await p.setRequestInterception(true);
+    p.on('request', req => {
+      const type = req.resourceType();
+      const u = req.url();
+      if (type === 'image' || type === 'media' || type === 'font' || type === 'stylesheet') return req.abort();
+      if (/google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|criteo|googlesyndication|adservice|tiktok|line-scdn|tagcommander|matomo|sentry/.test(u)) return req.abort();
+      req.continue();
+    });
+    return p;
+  }
 
-  // 每個階段限 25 秒 wall clock，超時提前 break，避免 worker 整體 hang 爆 timeout
-  async function scrapePages(url, maxPages, matchType) {
+  // 單一 URL 抓取（每個 page 獨立 instance，並行不衝突）
+  async function scrapeOneUrl(url, maxPages, matchType) {
     const items = [];
     let pageDebug = null;
-    const stageStart = Date.now();
-    const STAGE_TIMEOUT_MS = 25000;
+    const page = await newConfiguredPage();
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
-      // retry wait .ware-item 渲染（591 SPA hydrate 可能需要 2-3 秒）
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
+      } catch (gotoErr) {
+        // navigation timeout 不一定是死的：591 廣告永遠不結束、但 .ware-item 可能已就緒
+        console.warn(`[${matchType}] goto timeout, fallback to selector wait:`, gotoErr.message);
+      }
+      // race waitForSelector vs timeout，看到卡片就動手（591 有些頁 navigation 永遠不 done）
+      try {
+        await page.waitForSelector('.ware-item, .no-result', { timeout: 15000 });
+      } catch (_) { /* 沒等到也不放棄，evaluate 看實況 */ }
+      // 補一波 retry（591 SPA hydrate 偶爾再慢一點）
       let cardCount = 0;
-      for (let retry = 0; retry < 6; retry++) {
-        await new Promise(r => setTimeout(r, 1200));
-        cardCount = await page.evaluate(() => document.querySelectorAll('.ware-item').length);
+      for (let retry = 0; retry < 4; retry++) {
+        cardCount = await page.evaluate(() => document.querySelectorAll('.ware-item').length).catch(() => 0);
         if (cardCount > 0) break;
+        await new Promise(r => setTimeout(r, 1000));
       }
       for (let p = 0; p < maxPages; p++) {
-        if (Date.now() - stageStart > STAGE_TIMEOUT_MS) {
-          console.warn(`[${matchType}] stage timeout at page ${p}, returning ${items.length} items`);
-          break;
-        }
-        const pageItems = await page.evaluate(parseListPage);
+        const pageItems = await page.evaluate(parseListPage).catch(() => []);
         if (!pageItems.length) {
-          // 0 筆 → 抓 page debug 樣本（看 591 對 worker 環境回什麼）
-          if (p === 0 && !pageDebug) {
+          if (p === 0) {
             pageDebug = await page.evaluate(() => ({
               cardCount: document.querySelectorAll('.ware-item').length,
-              bodyTextStart: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 800),
+              bodyTextStart: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 600),
               title: document.title,
               url: location.href,
-            }));
+            })).catch(e => ({ error: String(e), cardCount: 0 }));
           }
           break;
         }
@@ -172,40 +177,53 @@ async function scrape591(env, params, subject) {
           if (!next || next.classList.contains('disabled')) return false;
           next.click();
           return true;
-        });
+        }).catch(() => false);
         if (!hasNext) break;
         await new Promise(r => setTimeout(r, 1500));
       }
     } catch (e) {
       console.error(`scrape stage failed (${matchType})`, e);
-      pageDebug = { error: String(e) };
+      pageDebug = { error: String(e), cardCount: 0 };
+    } finally {
+      await page.close().catch(() => {});
     }
     return { items, pageDebug };
   }
 
-  const allItems = [];
-  const stages = [];
+  // === 並行：階段 1 keyword + 階段 2 每相鄰區獨立 page ===
+  const tasks = [];
 
-  // 階段 1：同社區（keyword 不限區，社區名搜全市，1 頁就夠）
+  // 階段 1：同社區 keyword（不限區）
   if (subject.community) {
-    const url1 = buildUrl({ keywords: subject.community, useFilter: false, sectionOverride: '' });
-    const r1 = await scrapePages(url1, 1, 'same_community');
-    stages.push({ name: '同社區', url: url1, count: r1.items.length, pageDebug: r1.pageDebug });
-    allItems.push(...r1.items);
+    const u = buildUrl({ keywords: subject.community, useFilter: false, sectionOverride: '' });
+    tasks.push(
+      scrapeOneUrl(u, 1, 'same_community').then(r => ({
+        name: '同社區', url: u, count: r.items.length, pageDebug: r.pageDebug, items: r.items,
+      }))
+    );
   }
 
-  // 階段 2：本區 + 相鄰區條件搜（最多 5 區一起 ±10 坪 / ±5 年，3 頁）
-  const url2 = buildUrl({ useFilter: true, sectionOverride: adjacentSectionParam });
-  const r2 = await scrapePages(url2, 3, 'nearby');
-  stages.push({
-    name: `本區+相鄰（${adjacentList.length} 區）`,
-    url: url2,
-    count: r2.items.length,
-    pageDebug: r2.pageDebug,
+  // 階段 2：本區 + 相鄰區，每區一個 page 並行（591 單區搜尋比 multi-section 穩很多）
+  adjacentSectionIds.forEach((sid, idx) => {
+    const dn = adjacentList[idx] || `區${sid}`;
+    const u = buildUrl({ useFilter: true, sectionOverride: String(sid) });
+    tasks.push(
+      scrapeOneUrl(u, 2, 'nearby').then(r => ({
+        name: dn, url: u, count: r.items.length, pageDebug: r.pageDebug, items: r.items,
+      }))
+    );
   });
-  allItems.push(...r2.items);
 
-  await browser.close();
+  const results = await Promise.all(tasks);
+
+  const allItems = [];
+  const stages = [];
+  results.forEach(r => {
+    stages.push({ name: r.name, url: r.url, count: r.count, pageDebug: r.pageDebug });
+    allItems.push(...r.items);
+  });
+
+  await browser.close().catch(() => {});
   return { items: allItems.map(x => ({ ...x, source: '591' })), stages, _debugInfo };
 }
 
