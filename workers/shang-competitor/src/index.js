@@ -270,6 +270,10 @@ async function scrape591(env, params, subject, opts = {}) {
       if (params.priceMin || params.priceMax) {
         u += `&price=${params.priceMin || 0}_${params.priceMax || 999999}`;
       }
+      // 591 主建坪 filter（Playwright 實測 URL 參數叫 mainarea，2026-04-29）
+      if (params.mainAreaMin != null || params.mainAreaMax != null) {
+        u += `&mainarea=${Math.floor(params.mainAreaMin || 0)}_${Math.ceil(params.mainAreaMax || 999)}`;
+      }
     } else if (sectionToUse) {
       u += `&section=${sectionToUse}`;
     }
