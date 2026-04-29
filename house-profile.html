@@ -2512,8 +2512,16 @@
     const orphans = entry.orphanObligors || [];
     const lines = [];
 
+    // 區分所有大樓判斷：土地分母 >= 100 + 有建物 → 賣方=該戶，土地應有部分 < 100% 是常態
+    // 鄉村純土地共有分母通常 < 50（1/2、1/3、5/12 等）；區分所有 162/20000 這種一定 >= 100
+    const isApartmentLand = type === 'land'
+      && entry.denominator >= 100
+      && Object.keys(_buildingData || {}).length > 0;
+
     if (ok) {
       lines.push(`<span style="color:#16a34a;font-weight:600;">✅ 持分加總 100%（${owners.length} 人）</span>`);
+    } else if (isApartmentLand) {
+      lines.push(`<span style="color:#16a34a;font-weight:600;">✅ 區分所有大樓應有部分 ${ss.num}/${ss.denom}（${(pct*100).toFixed(2)}%，賣方為該戶）</span>`);
     } else if (pct > 1.0001) {
       lines.push(`<span style="color:#dc2626;font-weight:600;">⚠️ 持分加總 ${(pct*100).toFixed(2)}% 超過 100%（${owners.length} 人，請檢查重複）</span>`);
     } else if (pct > 0) {
@@ -2534,7 +2542,7 @@
 
     let bg = '#f0fdf4', border = '#86efac';
     if (orphans.length || pct > 1.0001) { bg = '#fef2f2'; border = '#fca5a5'; }
-    else if (!ok) { bg = '#fefce8'; border = '#fde047'; }
+    else if (!ok && !isApartmentLand) { bg = '#fefce8'; border = '#fde047'; }
 
     el.style.display = 'block';
     el.style.background = bg;
