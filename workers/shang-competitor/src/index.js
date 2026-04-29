@@ -84,6 +84,16 @@ async function scrape591(env, params, subject) {
   const page = await browser.newPage();
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36');
 
+  // 阻擋圖片/CSS/字型/媒體/廣告，避免撞 CF Workers 1000 subrequest 上限
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    const type = req.resourceType();
+    const u = req.url();
+    if (type === 'image' || type === 'media' || type === 'font' || type === 'stylesheet') return req.abort();
+    if (/google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|criteo|googlesyndication|adservice|tiktok|line-scdn|tagcommander|matomo|sentry/.test(u)) return req.abort();
+    req.continue();
+  });
+
   const allItems = [];
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
