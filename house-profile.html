@@ -3881,14 +3881,14 @@
       const sect4 = sectInfo.sectcode;
       const parts = landNo.split('-');
       const landno8 = parts[0].padStart(4, '0') + (parts[1] || '0').padStart(4, '0');
-      // NLSC 測量類別（屏東部分段碼 GetLandSecInfoNlsc 會 404，僅 retry 5xx）
+      // NLSC 測量類別（GetLandSecInfoNlsc 必須帶 Referer=maps.nlsc.gov.tw，跨域走 worker proxy）
       const surveyP = (async () => {
         const apiUrl = `https://api.nlsc.gov.tw/other/GetLandSecInfoNlsc/T/${sect4}`;
+        const target = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
         for (let i = 0; i < 3; i++) {
           if (i) await new Promise(r => setTimeout(r, 600));
           try {
-            const r = await fetch(apiUrl);
-            if (r.status === 404) return null; // 該段碼無資料，不 retry
+            const r = await fetch(target);
             if (!r.ok) continue;
             const xml = await r.text();
             const get = tag => xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`))?.[1]?.trim() || '';
