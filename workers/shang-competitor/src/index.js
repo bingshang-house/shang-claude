@@ -451,11 +451,18 @@ function parseListPage() {
     const totalArea = parseFloat((t.match(/權狀\s*([\d.]+)\s*坪/) || [])[1] || 0);
     const mainArea = parseFloat((t.match(/主建\s*([\d.]+)\s*坪/) || [])[1] || 0);
     const floor = (t.match(/(\d+(?:~\d+)?F\/\d+F)/) || [])[1] || '';
-    const agent = (t.match(/仲介\s*(.+?)\s+\d+人瀏覽/) || [])[1] || '';
+    // 591 黏字格式「仲介張庭瑜62人瀏覽」中間沒空白，後面用 \s* 不能 \s+
+    const agent = (t.match(/仲介\s*(.+?)\s*\d+\s*人瀏覽/) || [])[1] || '';
     const hasPark = /含車位/.test(t);
     const totalPriceMatch = t.match(/([\d,]+)\s*萬\s*(?:\(\s*含車位價\s*\))?\s+[\d.]+\s*萬\/坪/);
     const totalPrice = totalPriceMatch ? parseFloat(totalPriceMatch[1].replace(/,/g, '')) : 0;
     const unitPrice = parseFloat((t.match(/([\d.]+)\s*萬\/坪/) || [])[1] || 0);
+
+    // sanity check：591 列表有「廣告/精選位」用 .ware-item 殼但內容空 → 過濾掉
+    // 條件：總坪 0、總價 0、或無連結 = 異常 / 廣告卡片
+    if (!totalArea || totalArea < 5) return;
+    if (!totalPrice || totalPrice < 50) return;
+    if (!href) return;
 
     const item = {
       title, community, road, district,
