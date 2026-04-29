@@ -8520,18 +8520,8 @@ ${factsText}
     sessionStorage.removeItem('auth_access_token');
     sessionStorage.removeItem('auth_token_at');
     sessionStorage.removeItem('auth_drive_folder_id');
-    authState.email = null;
-    authState.name = null;
-    authState.picture = null;
-    authState.accessToken = null;
-    authState.driveFolderId = null;
-    document.body.classList.remove('authed');
-    const badge = $('user-badge');
-    if (badge) badge.remove();
-    setStatus('');
-    setBtnText('使用 Google 登入');
-    const btn = $('btnGoogleLogin');
-    if (btn) btn.disabled = false;
+    // 登出後 reload 頁面 → 案件資料 / input 全清，回到乾淨的未登入畫面
+    location.reload();
   };
 
   // ===== Drive API helpers =====
