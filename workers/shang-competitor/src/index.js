@@ -191,10 +191,25 @@ function extractDistrict(addr) {
   return m ? m[1] : null;
 }
 
+// community 名標準化（合併 591 仲介間變體：「美國第五街综合大樓」「美國第五街」「美國第五街3棟」都歸一）
+function normCommunityForMerge(s) {
+  if (!s) return '';
+  return s.toString()
+    .replace(/\s+/g, '')
+    .replace(/[综楼区园号塆厦]/g, c => ({ '综': '綜', '楼': '樓', '区': '區', '园': '園', '号': '號', '塆': '灣', '厦': '廈' }[c] || c))
+    .replace(/(綜合大樓|綜合大廈|綜合|大樓|大廈|公寓|別墅|社區|華廈|大廳)$/g, '')
+    .replace(/[\d\-之第A-Za-z]+(棟|號|樓|F)?$/, '') // 去尾 「3棟」「A棟」「2號」「14F」
+    .slice(0, 8); // 取前 8 字當 key（避免極端長社區名）
+}
+
 function mergeKey(item) {
   const fl = livingFloor(item.floor);
-  const area = item.mainArea || item.totalArea;
-  return `${item.road || '?'}|${fl}|${Math.round(area * 2) / 2}|${Math.round((item.totalPrice || 0) / 10) * 10}`;
+  // 用 totalArea 不 fallback mainArea（591 列表 totalArea 100% 有值，mainArea 偶爾為 0）
+  const area = Math.round((item.totalArea || 0) * 2) / 2;
+  const price = Math.round((item.totalPrice || 0) / 10) * 10;
+  const road = (item.road || '').replace(/\s+/g, '');
+  const comm = normCommunityForMerge(item.community);
+  return `${comm}|${road}|${fl}|${area}|${price}`;
 }
 
 // ============ 591 爬蟲（雙階段 + Browser Rendering）============
