@@ -7885,7 +7885,9 @@ ${factsText}
       { type: 'hospital' },
     ]},
     { key: 'religion', label: '宗教設施', queries: [
-      { type: 'place_of_worship' }, { keyword: '宮廟 寺廟' },
+      // Google Places API v1 已移除 place_of_worship type（2026-04 改版），改用 keyword
+      // 賞哥指定關鍵字：宮、廟、堂、寺、舍
+      { keyword: '宮' }, { keyword: '廟' }, { keyword: '堂' }, { keyword: '寺' }, { keyword: '舍' },
     ]},
     { key: 'noise',    label: '噪音設施', queries: [
       { keyword: '夜市' }, { keyword: '傳統市場' }, { keyword: 'KTV' }, { keyword: '酒家 酒店小姐' },
@@ -7894,8 +7896,10 @@ ${factsText}
 
   // 類別層名稱黑名單：Google textQuery 語意擴散時用
   // noise：「酒店」會被 Google 當 hotel → 排除所有飯店/旅店/商旅
+  // religion：keyword 「堂」「舍」會擴散到教堂 / 宿舍 / 農舍 / 課堂 → 排除非台式宗教場所
   const HAZARD_NAME_BLACKLIST = {
     noise: /飯店|Hotel|Inn\b|商旅|旅店|旅館|旅居|Hostel/i,
+    religion: /教堂|天主堂|禮拜堂|福音堂|長老教會|基督|Church|Chapel|宿舍|農舍|校舍|宿|課堂|演講堂|集會堂|議事堂|社區活動中心|(?:幼兒|安親|補習|才藝|美語)班|(?:學校|大學|國小|國中|高中)/i,
   };
   // 類別層名稱白名單：Google type 過鬆時用
   // medical：hospital type 台灣覆蓋含診所/牙醫 → 要求名稱必須含「醫院」
