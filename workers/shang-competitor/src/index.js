@@ -979,32 +979,44 @@ async function getNluzToken(env, forceRefresh = false) {
     const cached = await env.GEOCACHE.get(KEY);
     if (cached) return cached;
   }
-  const browser = await puppeteer.launch(env.MYBROWSER);
-  try {
-    const page = await browser.newPage();
-    await page.goto('https://nluz.nlma.gov.tw/ex3smap/default.aspx?CN=屏東縣&version=報部版', {
-      waitUntil: 'networkidle0', timeout: 30000,
-    });
-    // 等 ArcGIS IdentityManager 註冊 token
-    const token = await page.evaluate(() => new Promise((resolve) => {
-      const start = Date.now();
-      const tryGet = () => {
-        if (Date.now() - start > 15000) return resolve(null);
-        if (!window.require) return setTimeout(tryGet, 500);
-        window.require(['esri/identity/IdentityManager'], (IM) => {
-          const cred = IM.credentials.find(c => c.server.includes('nluzmap'));
-          if (cred?.token) resolve(cred.token);
-          else setTimeout(tryGet, 500);
+  // 重試處理 Browser Rendering 429 rate limit（concurrent browser 達上限時會回 429）
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise(r => setTimeout(r, 5000 * attempt)); // 0, 5s, 10s
+    try {
+      const browser = await puppeteer.launch(env.MYBROWSER);
+      try {
+        const page = await browser.newPage();
+        await page.goto('https://nluz.nlma.gov.tw/ex3smap/default.aspx?CN=屏東縣&version=報部版', {
+          waitUntil: 'networkidle0', timeout: 30000,
         });
-      };
-      tryGet();
-    }));
-    if (!token) throw new Error('no token from nluz IdentityManager');
-    await env.GEOCACHE.put(KEY, token, { expirationTtl: 23 * 3600 });
-    return token;
-  } finally {
-    await browser.close();
+        const token = await page.evaluate(() => new Promise((resolve) => {
+          const start = Date.now();
+          const tryGet = () => {
+            if (Date.now() - start > 15000) return resolve(null);
+            if (!window.require) return setTimeout(tryGet, 500);
+            window.require(['esri/identity/IdentityManager'], (IM) => {
+              const cred = IM.credentials.find(c => c.server.includes('nluzmap'));
+              if (cred?.token) resolve(cred.token);
+              else setTimeout(tryGet, 500);
+            });
+          };
+          tryGet();
+        }));
+        if (!token) throw new Error('no token from nluz IdentityManager');
+        await env.GEOCACHE.put(KEY, token, { expirationTtl: 23 * 3600 });
+        return token;
+      } finally {
+        try { await browser.close(); } catch {}
+      }
+    } catch (e) {
+      lastErr = e;
+      const msg = String(e?.message || e);
+      // 非 rate limit 錯誤直接 throw 不 retry
+      if (!msg.includes('429') && !msg.includes('Rate limit') && !msg.includes('Unable to create')) throw e;
+    }
   }
+  throw lastErr || new Error('getNluzToken exhausted retries');
 }
 
 async function postNluzSearchcada(token, sect6, landno8) {
