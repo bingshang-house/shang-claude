@@ -1897,8 +1897,9 @@
     const startRe = type === 'building'
       ? /建\s*物\s*所\s*有\s*權\s*部/
       : /土\s*地\s*所\s*有\s*權\s*部/;
+    // 建物所有權部 → 建物他項權利部之間就是 owner 列表（既有 parseDeed 也是這樣切）
     const endRe = type === 'building'
-      ? /建\s*物\s*他\s*項\s*權\s*利\s*部|共\s*有\s*部\s*分|土\s*地\s*標\s*示\s*部|土\s*地\s*所\s*有\s*權\s*部|本\s*謄\s*本\s*查\s*詢\s*資\s*料|備\s*註/
+      ? /建\s*物\s*他\s*項\s*權\s*利\s*部|本\s*謄\s*本\s*查\s*詢\s*資\s*料/
       : /土\s*地\s*他\s*項\s*權\s*利\s*部|本\s*謄\s*本\s*查\s*詢\s*資\s*料|備\s*註/;
     const sIdx = t.search(startRe);
     if (sIdx < 0) return '';
@@ -2290,10 +2291,20 @@
       }
     }
     const owners = Object.values(ownersByKey);
-    const mortgages = Object.values(mortByKey);
-    const ss = computeShareSum(owners);
     const ownerNamesSet = new Set(owners.map(o => o.name));
-    const orphanObligors = mortgages.map(m => m.obligor).filter(n => n && !ownerNamesSet.has(n));
+    // 用合併後的 owners 重新對應 obligorNames（單份 PDF 內 owners 不全，targetOrders 對不到）
+    const mortgages = Object.values(mortByKey).map(m => {
+      const obligorNames = (m.targetOrders || []).map(ord => {
+        const found = owners.find(o => o.regOrder === ord);
+        return found ? found.name : `?次序${ord}`;
+      });
+      return { ...m, obligorNames, obligor: obligorNames[0] || m.obligor || '' };
+    });
+    const ss = computeShareSum(owners);
+    // orphan = 義務人不在 owners（含「?次序XXXX」對不到的 = 漏謄本）
+    const orphanObligors = mortgages
+      .flatMap(m => m.obligorNames || [])
+      .filter(n => n && !ownerNamesSet.has(n));
 
     const myArea = ss.pct > 0 ? basic.fullArea * ss.pct : 0;
     const ping = myArea > 0 ? p2(sqm2ping(myArea)) : 0;
@@ -2401,13 +2412,50 @@
     try { syncDeedAlias(); } catch (e) {}
     const priorParsed = Object.entries(_buildingData)
       .filter(([k, v]) => +k !== idx && v && v.address).length;
-    if (priorParsed === 0 && entry.address) {
+    const isFirst = priorParsed === 0;
+    if (isFirst && entry.address) {
       try { showParsedSummary(deed); } catch (e) { console.warn('showParsedSummary', e); }
       try { _pointsTouched = false; } catch (e) {}
+      try { setStatus('ok', `✓ 解析完成（批次 ${group.length} 份合併）`); } catch (e) {}
     }
     updateCard();
     updateValidationBanner();
     updateShareBanner('building', idx);
+
+    // 第 1 筆建物觸發外部查詢（里鄰、學區、周邊機能、嫌惡）— 對齊 parseBuildingPDF 的 isFirst pipeline
+    if (isFirst) {
+      const vEl = document.getElementById('s-village');
+      const dEl = document.getElementById('s-district');
+      if (dEl && !dEl.value) dEl.value = normDist(entry.district || '');
+      if (vEl && !vEl.value.trim()) {
+        const fullAddr = (entry.district || '') + (entry.address || '');
+        if (fullAddr) {
+          try { setStatus('loading', '🔍 正在查詢里鄰資訊…'); } catch (e) {}
+          try {
+            const geo = await nlscGeocode(fullAddr);
+            if (geo && geo.village) {
+              if (geo.district && dEl) dEl.value = normDist(geo.district);
+              vEl.value = geo.village;
+              document.getElementById('s-neighbor').value = geo.neighbor || '';
+              doLookupSchool();
+              setStatus('ok', `✓ 批次解析完成，學區已自動查詢（${geo.village}${geo.neighbor ? ' ' + geo.neighbor + '鄰' : ''}）`);
+            } else if (entry.village) {
+              vEl.value = entry.village;
+              doLookupSchool();
+              setStatus('ok', `✓ 批次解析完成（學區以謄本里名查詢）`);
+            }
+          } catch (e) {
+            if (entry.village) { vEl.value = entry.village; doLookupSchool(); }
+            setStatus('ok', `✓ 批次解析完成（里鄰查詢失敗，已用謄本里名）`);
+          }
+        } else if (entry.village) {
+          vEl.value = entry.village;
+          doLookupSchool();
+        }
+      }
+      try { doNearbySearch(true); } catch (e) { console.warn('doNearbySearch', e); }
+      try { doHazardSearch(true); } catch (e) { console.warn('doHazardSearch', e); }
+    }
   }
 
   // 持分加總 banner（土地 + 建物共用）
@@ -2436,7 +2484,8 @@
       lines.push(`<span style="color:#a16207;font-weight:600;">⚠️ 持分加總 ${(pct*100).toFixed(2)}%（缺 ${missing}%，可能漏件或不賣）</span>`);
     }
     if (orphans.length) {
-      lines.push(`<span style="color:#dc2626;">⚠️ 抵押義務人「${orphans.join('、')}」不在所有權人名單，可能漏帶謄本</span>`);
+      const display = orphans.map(n => n.startsWith('?次序') ? `次序 ${n.slice(3)}` : `「${n}」`).join('、');
+      lines.push(`<span style="color:#dc2626;">⚠️ 抵押義務人 ${display} 不在所有權人名單，可能漏帶謄本</span>`);
     }
     if (entry._batchCount && entry._batchCount > 1) {
       let s = `（${entry._batchCount} 份謄本合併`;
