@@ -1819,19 +1819,34 @@
         const numer = parseInt(ratioM[2]);
         const ping  = p2(sqm2ping(total * numer / denom));
         const loNo  = loNoM ? loNoM[1].replace(/\s/g,'') : '';
-        // 縣市 + 鄉鎮市區廣義抽取（南台灣 5 縣市白名單，避免誤抓「台北市」這類）
-        const distM2 = t.match(/(高雄市|屏東縣|台南市|臺南市|台東縣|臺東縣|嘉義市|嘉義縣)([^\s]{1,4}(?:區|鄉|鎮|市))/);
+        // 縣市 + 鄉鎮市區廣義抽取（南台灣 5 縣市白名單；\s* 容忍 PDF.js 拆字）
         const NLSC_COUNTY_CODE = {
           '高雄市':'E', '屏東縣':'T',
           '台南市':'D', '臺南市':'D',
           '台東縣':'V', '臺東縣':'V',
           '嘉義市':'I', '嘉義縣':'Q',
         };
-        const countyName = distM2 ? distM2[1] : '';
+        // 屏東 33 鄉鎮（PDF 沒寫「屏東縣」前綴或被拆字時的 fallback）
+        const PINGDONG_TOWNS_HARDCODE = ['屏東市','潮州鎮','東港鎮','恆春鎮','萬丹鄉','長治鄉','麟洛鄉','九如鄉','里港鄉','鹽埔鄉','高樹鄉','萬巒鄉','內埔鄉','竹田鄉','新埤鄉','枋寮鄉','新園鄉','崁頂鄉','林邊鄉','南州鄉','佳冬鄉','琉球鄉','車城鄉','滿州鄉','枋山鄉','三地門鄉','霧臺鄉','霧台鄉','瑪家鄉','泰武鄉','來義鄉','春日鄉','獅子鄉','牡丹鄉'];
+        // 試 1：縣市 + 鄉鎮 完整 match（容忍中間空白）
+        let distM2 = t.match(/(高\s*雄\s*市|屏\s*東\s*縣|[台臺]\s*南\s*市|[台臺]\s*東\s*縣|嘉\s*義\s*[市縣])\s*(\S{1,4}\s*(?:區|鄉|鎮|市))/);
+        let countyName = '';
+        let distName = '';
+        if (distM2) {
+          countyName = distM2[1].replace(/\s/g, '');
+          distName = distM2[2].replace(/\s/g, '');
+        } else {
+          // 試 2：屏東鄉鎮 fallback（hardcode）— 找到鄉鎮就推縣市
+          const compact = t.replace(/\s/g, '');
+          const hit = PINGDONG_TOWNS_HARDCODE.find(tn => compact.includes(tn));
+          if (hit) { countyName = '屏東縣'; distName = hit === '霧台鄉' ? '霧臺鄉' : hit; }
+          else {
+            // 試 3：deed 全域 fallback（同 session 已解過建物時）
+            distName = (typeof deed !== 'undefined' && deed?.district || '')
+              .replace(/^(高雄市|屏東縣|臺?南市|臺?東縣|嘉義[市縣])/, '');
+          }
+        }
         const county = NLSC_COUNTY_CODE[countyName] || '';
-        const distName = distM2
-          ? distM2[2]
-          : (deed?.district || '').replace(/^(高雄市|屏東縣|臺?南市|臺?東縣|嘉義[市縣])/, '');
         const expected = extractExpectedParcels(raw, 'land');
 
         // 前次移轉現值（土增稅起算點）
