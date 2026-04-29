@@ -593,9 +593,35 @@ export default {
       const platformStages = allByPlatform.flatMap(x => x.stages || []);
       const platformDebug = allByPlatform.find(x => x._debugInfo)?._debugInfo || null;
 
+      // 1.2 client-side params 過濾（591 URL filter 對 mainArea / keyword 不全支援，worker 補強）
+      // 同社區保留不過濾（信任 keyword + 同社區常會超出條件範圍正常，例如同社區大小坪都有）
+      const passParamsFilter = (item) => {
+        if (p.mainAreaMin != null && (item.mainArea || 0) < p.mainAreaMin) return false;
+        if (p.mainAreaMax != null && (item.mainArea || 9999) > p.mainAreaMax) return false;
+        if (p.totalAreaMin != null && (item.totalArea || 0) < p.totalAreaMin) return false;
+        if (p.totalAreaMax != null && (item.totalArea || 9999) > p.totalAreaMax) return false;
+        if (p.priceMin != null && (item.totalPrice || 0) < p.priceMin) return false;
+        if (p.priceMax != null && (item.totalPrice || 9999999) > p.priceMax) return false;
+        if (p.ageMin != null && (item.age || 0) < p.ageMin) return false;
+        if (p.ageMax != null && (item.age || 9999) > p.ageMax) return false;
+        if (p.keyword) {
+          const blob = `${item.community || ''} ${item.title || ''} ${item.road || ''}`;
+          if (!blob.includes(p.keyword)) return false;
+        }
+        return true;
+      };
+      // in-place mutate all：filter 後同社區留、其他要過 params filter
+      const filtered = all.filter(item => item.matchType === 'same_community' || passParamsFilter(item));
+      const droppedByParams = all.length - filtered.length;
+      all.length = 0;
+      all.push(...filtered);
+
       // 1.5 距離過濾：每筆 nearby 物件 geocode + haversine
       // 同社區（same_community）保留所有，不算距離（信任 591 keyword + isSameCommunity）
-      let geoStats = { subjectLoc, total: 0, kept: 0, dropped: 0, ungeocoded: 0, hitL1: 0, hitL2: 0, hitL3: 0, nearbyDistricts };
+      let geoStats = {
+        subjectLoc, total: 0, kept: 0, dropped: 0, ungeocoded: 0, hitL1: 0, hitL2: 0, hitL3: 0,
+        nearbyDistricts, userPicked: !!userPickedDistricts, droppedByParams,
+      };
       if (subjectLoc) {
         // 並行 geocode 每筆 nearby item（same_community 不算）
         const nearbyItems = all.filter(x => x.matchType !== 'same_community');
@@ -609,15 +635,19 @@ export default {
           return haversineKm(subjectLoc, loc);
         }));
         // mark item with distance + filter
-        // 改激進：geocode 失敗（三段 fallback 都不行）= 直接排除，不再保守保留
-        // 賞哥反饋：ungeocoded 保守保留會讓超遠物件混在結果裡
+        // auto 模式（1km 圓）：ungeocoded 直接排除（避免超遠物件混入）
+        // custom 模式（手選區）：ungeocoded 保留（用戶明確要看這幾區所有結果，距離不重要）
         const survivors = [];
         for (let i = 0; i < nearbyItems.length; i++) {
           const item = nearbyItems[i];
           const d = distances[i];
           if (d == null) {
             geoStats.ungeocoded++;
-            // 不 push survivors → 直接排除
+            if (userPickedDistricts) {
+              item._distanceKm = null;
+              survivors.push(item); // 手選區 → 保留
+            }
+            // auto 模式不 push → 排除
           } else {
             item._distanceKm = Math.round(d * 100) / 100;
             if (d <= maxDistanceKm) { survivors.push(item); geoStats.kept++; }

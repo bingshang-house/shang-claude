@@ -8580,13 +8580,22 @@ function renderCompetitorResults(data) {
     📈 原始 ${s.rawCount} 筆 → 歸併 ${s.mergedCount} 筆<br>
     🏠 同社區 <strong>${s.sameCommunity}</strong> 筆 ｜ 📍 鄰近條件 <strong>${s.nearby}</strong> 筆 ｜ ⏱ ${(s.elapsedMs/1000).toFixed(1)}s
   `;
-  // 距離過濾統計（worker 端 geocode + haversine 過濾 1km 外）
+  // 距離過濾統計（worker 端 geocode + haversine 過濾）
   if (s.geoStats && s.geoStats.subjectLoc) {
     const g = s.geoStats;
-    if (g.nearbyDistricts && g.nearbyDistricts.length) {
+    if (g.userPicked && g.nearbyDistricts && g.nearbyDistricts.length) {
+      // 手選區模式：不顯示 km、不做距離過濾
+      statsHtml += `<br>🗺️ 手選搜尋區：<strong>${g.nearbyDistricts.join('、')}</strong>（${g.nearbyDistricts.length} 區，未做距離過濾）`;
+    } else if (g.nearbyDistricts && g.nearbyDistricts.length) {
       statsHtml += `<br>🗺️ 實際搜尋區（${s.maxDistanceKm} km 圓內）：<strong>${g.nearbyDistricts.join('、')}</strong>`;
     }
-    statsHtml += `<br>📐 ${s.maxDistanceKm} km 內過濾：保留 <strong>${g.kept}</strong> 筆 ｜ 太遠排除 <strong>${g.dropped}</strong> 筆${g.ungeocoded ? ` ｜ 無法定位排除 ${g.ungeocoded} 筆` : ''}`;
+    if (g.userPicked) {
+      // 手選區：不顯示距離過濾統計（沒意義），只顯示參數過濾統計
+      if (g.droppedByParams) statsHtml += `<br>📐 條件不符排除：<strong>${g.droppedByParams}</strong> 筆`;
+    } else {
+      statsHtml += `<br>📐 ${s.maxDistanceKm} km 內過濾：保留 <strong>${g.kept}</strong> 筆 ｜ 太遠排除 <strong>${g.dropped}</strong> 筆${g.ungeocoded ? ` ｜ 無法定位排除 ${g.ungeocoded} 筆` : ''}`;
+      if (g.droppedByParams) statsHtml += ` ｜ 條件不符 ${g.droppedByParams} 筆`;
+    }
     if (g.hitL1 != null) {
       statsHtml += `<br><span style="font-size:11px;color:#888;">　geocode 命中：精確 ${g.hitL1||0} ｜ 路名 fallback ${g.hitL2||0} ｜ 社區+區 fallback ${g.hitL3||0}</span>`;
     }
