@@ -121,36 +121,81 @@ async function scrape591(env, params, subject) {
 }
 
 // 在頁面 context 跑的 parser
+// v2.1: 591 SPA layout 變動 → community/age/district 加多重 fallback + DOM selector
 function parseListPage() {
   const cards = document.querySelectorAll('.ware-item');
   const out = [];
-  cards.forEach(c => {
+  cards.forEach((c, idx) => {
     const t = (c.innerText || '').replace(/\s+/g, ' ').trim();
     if (!t || !/電梯大樓|公寓|透天厝|別墅/.test(t)) return;
     const link = c.querySelector('a[href*="/home/house/detail/"]');
     const href = link ? link.href.split('#')[0].split('?')[0] : '';
     const img = c.querySelector('img');
     const imgSrc = img ? (img.dataset.src || img.src || '') : '';
+
+    // === 標題 ===
     let title = '';
-    const tm = t.match(/(?:精選|置頂|NEW)\s+(.+?)(?:NEW)?\s+(?:電梯大樓|公寓|透天厝|別墅)/);
-    if (tm) title = tm[1].trim().replace(/NEW$/, '').trim();
-    else { const m2 = t.match(/^[\d\s]*(.+?)\s+(?:電梯大樓|公寓|透天厝|別墅)/); title = m2 ? m2[1].trim() : ''; }
+    for (const sel of ['.ware-item-title', '.title', '.name', 'h3', 'h4']) {
+      const el = c.querySelector(sel);
+      if (el && el.textContent.trim()) { title = el.textContent.trim(); break; }
+    }
+    if (!title) {
+      const tm = t.match(/(?:精選|置頂|NEW)\s+(.+?)(?:NEW)?\s+(?:電梯大樓|公寓|透天厝|別墅)/);
+      if (tm) title = tm[1].trim().replace(/NEW$/, '').trim();
+      else { const m2 = t.match(/^[\d\s]*(.+?)\s+(?:電梯大樓|公寓|透天厝|別墅)/); title = m2 ? m2[1].trim() : ''; }
+    }
+
+    // === community / district / road 多重 fallback ===
+    let community = '', district = '', road = '';
+    // 第一試：原 regex（樓層 → 社區 → 區 → 路 → 仲介）
+    const m3 = t.match(/\d+(?:~\d+)?F\/\d+F\s+(\S+?)\s+([一-鿿]{1,3}區)[\-\s]+(\S+?)\s+仲介/);
+    if (m3) { community = m3[1]; district = m3[2]; road = m3[3]; }
+    // 第二試：DOM selector 抓 community（591 常見 class）
+    if (!community) {
+      for (const sel of ['.community', '.community-name', '.community-title', '[class*="community"]', '[class*="Community"]']) {
+        const el = c.querySelector(sel);
+        if (el && el.textContent.trim()) { community = el.textContent.trim(); break; }
+      }
+    }
+    // 第三試：純粹從文字抓「XX區-YY路」或「XX區 YY路」
+    if (!district) {
+      const m4 = t.match(/([一-鿿]{1,3}區)[\-\s]+([一-鿿\d]{1,15})/);
+      if (m4) { district = m4[1]; if (!road) road = m4[2]; }
+    }
+
+    // === age 多重 fallback（591 樓層後接屋齡的格式不固定）===
+    let age = 0;
+    const ageRegexes = [
+      /(?:屋齡|齡)\s*[:：]?\s*(\d+)\s*年/,
+      /(\d+)\s*年屋齡/,
+      /(\d+)\s*年(?:中古|新成屋)/,
+      /坪\s+(\d+)\s*年\s+\d+F/,        // 原 regex
+      /\d+(?:~\d+)?F\/\d+F\s+(?:.*?)?(\d+)\s*年/,  // 樓層後接屋齡
+      /(\d+)\s*年\s+\d+(?:~\d+)?F\/\d+F/,           // 屋齡接樓層
+    ];
+    for (const re of ageRegexes) {
+      const m = t.match(re);
+      if (m && parseInt(m[1]) > 0 && parseInt(m[1]) < 100) { age = parseFloat(m[1]); break; }
+    }
+
     const rooms = t.match(/(\d+)房(\d+)廳(\d+)衛/);
     const totalArea = parseFloat((t.match(/權狀\s*([\d.]+)\s*坪/) || [])[1] || 0);
     const mainArea = parseFloat((t.match(/主建\s*([\d.]+)\s*坪/) || [])[1] || 0);
-    const age = parseFloat((t.match(/坪\s+(\d+)\s*年\s+\d+F/) || [])[1] || 0);
     const floor = (t.match(/(\d+(?:~\d+)?F\/\d+F)/) || [])[1] || '';
-    // 動態抓區名（不寫死「前鎮區」）：一次抓 (社區)(區)(路)
-    const m3 = t.match(/\d+(?:~\d+)?F\/\d+F\s+(\S+?)\s+([一-鿿]{1,3}區)[\-\s]+(\S+?)\s+仲介/);
-    const community = m3 ? m3[1] : '';
-    const district = m3 ? m3[2] : '';
-    const road = m3 ? m3[3] : '';
     const agent = (t.match(/仲介\s*(.+?)\s+\d+人瀏覽/) || [])[1] || '';
     const hasPark = /含車位/.test(t);
     const totalPriceMatch = t.match(/([\d,]+)\s*萬\s*(?:\(\s*含車位價\s*\))?\s+[\d.]+\s*萬\/坪/);
     const totalPrice = totalPriceMatch ? parseFloat(totalPriceMatch[1].replace(/,/g, '')) : 0;
     const unitPrice = parseFloat((t.match(/([\d.]+)\s*萬\/坪/) || [])[1] || 0);
-    out.push({ title, community, road, district, rooms: rooms ? `${rooms[1]}房${rooms[2]}廳${rooms[3]}衛` : '', totalArea, mainArea, age, floor, agent, hasPark, totalPrice, unitPrice, href, imgSrc });
+
+    const item = {
+      title, community, road, district,
+      rooms: rooms ? `${rooms[1]}房${rooms[2]}廳${rooms[3]}衛` : '',
+      totalArea, mainArea, age, floor, agent, hasPark, totalPrice, unitPrice, href, imgSrc,
+    };
+    // 只在前 2 筆塞 raw debug 樣本（讓 worker response 帶回前端，賞哥可截圖回報）
+    if (idx < 2) item._raw = t.slice(0, 350);
+    out.push(item);
   });
   return out;
 }
@@ -275,6 +320,11 @@ export default {
         return (a.unitPrice || 9999) - (b.unitPrice || 9999);
       });
 
+      // 抓第一筆的 _raw 作為 debug 樣本（parser 對不準時可看實際 591 innerText）
+      const debugSample = all.find(x => x._raw)?._raw || '';
+      // 清掉 _raw 不傳到前端（每筆都有會吃流量）
+      const cleanItem = x => { const { _raw, ...rest } = x; return rest; };
+
       return Response.json({
         ok: true,
         subject: {
@@ -289,9 +339,10 @@ export default {
           sameCommunity: sameCommunity.length,
           nearby: nearby.length,
           elapsedMs: Date.now() - start,
+          debugSample,  // 591 第一筆 innerText 樣本（前 350 字）
         },
-        sameCommunity,
-        nearby: nearby.slice(0, 30),  // 鄰近最多顯示 30 筆
+        sameCommunity: sameCommunity.map(cleanItem),
+        nearby: nearby.slice(0, 30).map(cleanItem),  // 鄰近最多顯示 30 筆
       }, { headers: CORS });
     } catch (e) {
       console.error('Worker error', e);

@@ -8514,10 +8514,23 @@ function renderCompetitorResults(data) {
     banner.innerHTML = `⚙️ 自訂條件｜${parts.join(' ｜ ') || '(無)'}`;
   }
   const s = data.stats;
-  document.getElementById('cmStats').innerHTML = `
+  let statsHtml = `
     📈 原始 ${s.rawCount} 筆 → 歸併 ${s.mergedCount} 筆<br>
     🏠 同社區 <strong>${s.sameCommunity}</strong> 筆 ｜ 📍 鄰近條件 <strong>${s.nearby}</strong> 筆 ｜ ⏱ ${(s.elapsedMs/1000).toFixed(1)}s
   `;
+  // debug：parser 抓不到關鍵欄位時顯示 591 raw text 樣本
+  if (s.debugSample) {
+    const anyMissing = (data.sameCommunity || []).concat(data.nearby || []).some(x => !x.community || !x.age);
+    if (anyMissing) {
+      statsHtml += `
+        <details style="margin-top:8px;font-size:11px;color:#666;">
+          <summary style="cursor:pointer;color:#b45309;">🔍 591 parser 樣本（給工程師 debug 用）</summary>
+          <pre style="white-space:pre-wrap;background:#fffbeb;padding:8px;border-radius:6px;margin-top:6px;font-size:10px;line-height:1.4;max-height:120px;overflow:auto;">${s.debugSample.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</pre>
+        </details>
+      `;
+    }
+  }
+  document.getElementById('cmStats').innerHTML = statsHtml;
   const renderCard = (x, i) => {
     const multi = x.agentCount > 1 ? `<span class="cm-tag multi">🤝 ${x.agentCount} 家掛牌</span>` : '';
     const warn = (x.warningTags || []).map(t => `<span class="cm-tag danger">⚠ ${t}</span>`).join('');
