@@ -107,6 +107,37 @@ function itemGeocodeQuery(item) {
   return parts.join(' ');
 }
 
+// 591 簡體字 normalize（591 列表常見「综合」「楼」等簡體混用）
+function normalizeForGeocode(s) {
+  if (!s) return s;
+  const map = { '综': '綜', '楼': '樓', '区': '區', '园': '園', '塆': '灣', '号': '號' };
+  return s.replace(/[综楼区园塆号]/g, c => map[c] || c);
+}
+
+// 三段 fallback geocode：community+district+road → district+road → community+district
+async function geocodeItemMultiTry(env, item) {
+  const tryItem = { ...item };
+  // 嘗試 1：原 query（含 community）+ 簡轉繁
+  const q1 = normalizeForGeocode(itemGeocodeQuery(tryItem));
+  let loc = await geocodeWithCache(env, q1);
+  if (loc) return { loc, hitLevel: 1 };
+  // 嘗試 2：district + road（不含 community，路名 Google 100% 認得）
+  if (tryItem.district && tryItem.road) {
+    const district = tryItem.district.replace(/^高雄市/, '');
+    const q2 = `高雄市${district} ${normalizeForGeocode(tryItem.road)}`;
+    loc = await geocodeWithCache(env, q2);
+    if (loc) return { loc, hitLevel: 2 };
+  }
+  // 嘗試 3：community + district（不接 road，社區名單獨命中）
+  if (tryItem.community && tryItem.district) {
+    const district = tryItem.district.replace(/^高雄市/, '');
+    const q3 = `${normalizeForGeocode(tryItem.community)} 高雄市${district}`;
+    loc = await geocodeWithCache(env, q3);
+    if (loc) return { loc, hitLevel: 3 };
+  }
+  return { loc: null, hitLevel: 0 };
+}
+
 function extractDistrict(addr) {
   const m = (addr || '').match(/([一-龥]+(?:區|鄉|鎮|市))/);
   return m ? m[1] : null;
@@ -461,15 +492,17 @@ export default {
       const subjectQuery = subject.community
         ? `${subject.community} ${(subject.address || '').replace(/^.+市/, '高雄市')}`.trim()
         : (subject.address || '');
-      const subjectLoc = await geocodeWithCache(env, subjectQuery);
-      let geoStats = { subjectLoc, total: 0, kept: 0, dropped: 0, ungeocoded: 0 };
+      const subjectLoc = await geocodeWithCache(env, normalizeForGeocode(subjectQuery));
+      let geoStats = { subjectLoc, total: 0, kept: 0, dropped: 0, ungeocoded: 0, hitL1: 0, hitL2: 0, hitL3: 0 };
       if (subjectLoc) {
         // 並行 geocode 每筆 nearby item（same_community 不算）
         const nearbyItems = all.filter(x => x.matchType !== 'same_community');
         geoStats.total = nearbyItems.length;
         const distances = await Promise.all(nearbyItems.map(async (item) => {
-          const q = itemGeocodeQuery(item);
-          const loc = await geocodeWithCache(env, q);
+          const { loc, hitLevel } = await geocodeItemMultiTry(env, item);
+          if (hitLevel === 1) geoStats.hitL1++;
+          else if (hitLevel === 2) geoStats.hitL2++;
+          else if (hitLevel === 3) geoStats.hitL3++;
           if (!loc) return null;
           return haversineKm(subjectLoc, loc);
         }));
