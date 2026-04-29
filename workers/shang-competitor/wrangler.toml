@@ -1,0 +1,19 @@
+name = "shang-competitor"
+main = "src/index.js"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Browser Rendering binding（爬 591/樂屋）
+browser = { binding = "MYBROWSER" }
+
+# KV：geocode cache（30 天 TTL，避免重複 query Google Maps）
+[[kv_namespaces]]
+binding = "GEOCACHE"
+id = "REPLACE_WITH_KV_ID_AFTER_CREATE"
+
+# 環境變數（部署後 wrangler secret put）
+# - GOOGLE_MAPS_API_KEY：Google Maps Geocoding API key
+# - WHITELIST_WORKER_URL：shang-whitelist worker 的網址（驗證夥伴 email）
+[vars]
+DEFAULT_REGION = "17"  # 17 = 高雄市
+DEFAULT_PAGES = "5"     # 抓前 5 頁
