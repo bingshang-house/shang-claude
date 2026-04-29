@@ -537,6 +537,12 @@
     .cm-range .unit { font-size: 12px; color: #7A5500; min-width: 18px; }
     .cm-radius { display: flex; gap: 12px; flex: 1; }
     .cm-radius label { font-size: 13px; cursor: pointer; }
+    .cm-row-block { display: block; }
+    .cm-row-block > label { display: block; width: auto; margin-bottom: 6px; }
+    .cm-district-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+    .cm-district-pill { display: inline-block; padding: 4px 10px; background: #fff; border: 1px solid #d4c5a0; border-radius: 14px; font-size: 12px; color: #7A5500; cursor: pointer; user-select: none; transition: all .15s; }
+    .cm-district-pill:hover { background: #FFF8E0; border-color: #CC8F00; }
+    .cm-district-pill.selected { background: #CC8F00; color: #fff; border-color: #CC8F00; font-weight: 700; }
     .cm-submit { display: block; width: 100%; padding: 12px; margin-top: 16px; background: #CC8F00; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 700; }
     .cm-submit:hover { background: #7A5500; }
     .cm-submit:disabled { background: #ccc; cursor: not-allowed; }
@@ -8376,6 +8382,55 @@ ${factsText}
       <div class="cm-row"><label>總坪數</label><div class="cm-range"><input type="number" id="cmTotalAreaMin" placeholder="低" step="0.1"><span class="sep">~</span><input type="number" id="cmTotalAreaMax" placeholder="高" step="0.1"><span class="unit">坪</span></div></div>
       <div class="cm-row"><label>主建坪</label><div class="cm-range"><input type="number" id="cmMainAreaMin" placeholder="低" step="0.1"><span class="sep">~</span><input type="number" id="cmMainAreaMax" placeholder="高" step="0.1"><span class="unit">坪</span></div></div>
       <div class="cm-row"><label>屋齡</label><div class="cm-range"><input type="number" id="cmAgeMin" placeholder="低"><span class="sep">~</span><input type="number" id="cmAgeMax" placeholder="高"><span class="unit">年</span></div></div>
+      <div class="cm-row cm-row-block">
+        <label>搜尋區域<span style="font-weight:400;color:#888;font-size:11px;margin-left:6px;">最多 3 個，留空 = 自動 1 km 圓判斷</span></label>
+        <div class="cm-district-grid" id="cmDistrictGrid">
+          <!-- 主要市區 12 -->
+          <span class="cm-district-pill" data-d="前鎮區">前鎮</span>
+          <span class="cm-district-pill" data-d="苓雅區">苓雅</span>
+          <span class="cm-district-pill" data-d="鳳山區">鳳山</span>
+          <span class="cm-district-pill" data-d="小港區">小港</span>
+          <span class="cm-district-pill" data-d="三民區">三民</span>
+          <span class="cm-district-pill" data-d="左營區">左營</span>
+          <span class="cm-district-pill" data-d="楠梓區">楠梓</span>
+          <span class="cm-district-pill" data-d="鼓山區">鼓山</span>
+          <span class="cm-district-pill" data-d="新興區">新興</span>
+          <span class="cm-district-pill" data-d="前金區">前金</span>
+          <span class="cm-district-pill" data-d="鹽埕區">鹽埕</span>
+          <span class="cm-district-pill" data-d="旗津區">旗津</span>
+        </div>
+        <details style="margin-top:6px;">
+          <summary style="cursor:pointer;color:#b45309;font-size:12px;">🌾 縣合併區（市郊 / 山區）</summary>
+          <div class="cm-district-grid" id="cmDistrictGridExt" style="margin-top:6px;">
+            <span class="cm-district-pill" data-d="大寮區">大寮</span>
+            <span class="cm-district-pill" data-d="仁武區">仁武</span>
+            <span class="cm-district-pill" data-d="岡山區">岡山</span>
+            <span class="cm-district-pill" data-d="林園區">林園</span>
+            <span class="cm-district-pill" data-d="路竹區">路竹</span>
+            <span class="cm-district-pill" data-d="鳥松區">鳥松</span>
+            <span class="cm-district-pill" data-d="橋頭區">橋頭</span>
+            <span class="cm-district-pill" data-d="大樹區">大樹</span>
+            <span class="cm-district-pill" data-d="梓官區">梓官</span>
+            <span class="cm-district-pill" data-d="大社區">大社</span>
+            <span class="cm-district-pill" data-d="湖內區">湖內</span>
+            <span class="cm-district-pill" data-d="茄萣區">茄萣</span>
+            <span class="cm-district-pill" data-d="燕巢區">燕巢</span>
+            <span class="cm-district-pill" data-d="阿蓮區">阿蓮</span>
+            <span class="cm-district-pill" data-d="彌陀區">彌陀</span>
+            <span class="cm-district-pill" data-d="永安區">永安</span>
+            <span class="cm-district-pill" data-d="美濃區">美濃</span>
+            <span class="cm-district-pill" data-d="旗山區">旗山</span>
+            <span class="cm-district-pill" data-d="內門區">內門</span>
+            <span class="cm-district-pill" data-d="六龜區">六龜</span>
+            <span class="cm-district-pill" data-d="杉林區">杉林</span>
+            <span class="cm-district-pill" data-d="田寮區">田寮</span>
+            <span class="cm-district-pill" data-d="甲仙區">甲仙</span>
+            <span class="cm-district-pill" data-d="桃源區">桃源</span>
+            <span class="cm-district-pill" data-d="那瑪夏區">那瑪夏</span>
+            <span class="cm-district-pill" data-d="茂林區">茂林</span>
+          </div>
+        </details>
+      </div>
       <button class="cm-submit" onclick="runCompetitorSearch('custom')">🔍 開始分析</button>
     </div>
     <div id="cmStepLoading" style="display:none;">
@@ -8461,8 +8516,11 @@ function runCompetitorSearch(mode) {
       mainAreaMin: v('cmMainAreaMin'), mainAreaMax: v('cmMainAreaMax'),
       ageMin: v('cmAgeMin'), ageMax: v('cmAgeMax'),
     };
-    const hasAny = params.keyword || params.priceMin != null || params.priceMax != null || params.totalAreaMin != null || params.totalAreaMax != null || params.mainAreaMin != null || params.mainAreaMax != null || params.ageMin != null || params.ageMax != null;
-    if (!hasAny) { alert('自訂模式至少要填 1 個條件'); return; }
+    // 收集手選的區域
+    const selectedDistricts = [...document.querySelectorAll('.cm-district-pill.selected')].map(el => el.dataset.d);
+    if (selectedDistricts.length) params.customDistricts = selectedDistricts;
+    const hasAny = params.keyword || params.priceMin != null || params.priceMax != null || params.totalAreaMin != null || params.totalAreaMax != null || params.mainAreaMin != null || params.mainAreaMax != null || params.ageMin != null || params.ageMax != null || (params.customDistricts && params.customDistricts.length);
+    if (!hasAny) { alert('自訂模式至少要填 1 個條件（或選 1 個區域）'); return; }
   }
   // 進 loading
   showCmStep('loading');
@@ -8625,6 +8683,18 @@ window.openCompetitorModal = openCompetitorModal;
 window.closeCompetitorModal = closeCompetitorModal;
 window.runCompetitorSearch = runCompetitorSearch;
 window.backToForm = backToForm;
+
+// 區域 pill 點選邏輯（最多 3 個）
+document.addEventListener('click', e => {
+  const pill = e.target.closest('.cm-district-pill');
+  if (!pill) return;
+  const isSelected = pill.classList.contains('selected');
+  if (!isSelected) {
+    const selCount = document.querySelectorAll('.cm-district-pill.selected').length;
+    if (selCount >= 3) { alert('最多選 3 個區'); return; }
+  }
+  pill.classList.toggle('selected');
+});
 </script>
 
 </body>

@@ -553,8 +553,14 @@ export default {
     }
 
     const start = Date.now();
-    // 距離過濾半徑（km），預設 1km；同社區（matchType=same_community）不受此限制
-    const maxDistanceKm = typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 1;
+    // 用戶手選的區（custom 模式下拉選單，最多 3 個）
+    const userPickedDistricts = (p.customDistricts && Array.isArray(p.customDistricts) && p.customDistricts.length)
+      ? p.customDistricts.slice(0, 3).filter(d => KAOHSIUNG_SECTIONS[d])
+      : null;
+    // 距離過濾半徑（km）：手選區時關掉（讓選的區結果都看到），預設 1km
+    const maxDistanceKm = userPickedDistricts
+      ? (typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 9999)
+      : (typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 1);
 
     try {
       // 0. 先 geocode subject 拿到本案座標
@@ -563,11 +569,13 @@ export default {
         : (subject.address || '');
       const subjectLoc = await geocodeWithCache(env, normalizeForGeocode(subjectQuery));
 
-      // 0.5 用本案座標 + 1km 圓周 8 點 reverse geocode → 算出真正涵蓋的區
-      // 例：文橫三路三多商圈 1km 圓 → 通常只有前鎮 + 苓雅，不會碰到小港
-      let nearbyDistricts = null;
-      if (subjectLoc) {
-        const points = [{ lat: subjectLoc.lat, lng: subjectLoc.lng }, ...getCirclePoints(subjectLoc, maxDistanceKm)];
+      // 0.5 決定實際搜尋區：
+      // (A) 用戶手選了 → 用手選的（custom 下拉）
+      // (B) 沒手選 → 用 1km 圓 + reverse geocode 8 點動態算
+      let nearbyDistricts = userPickedDistricts;
+      if (!nearbyDistricts && subjectLoc) {
+        const radius = typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 1;
+        const points = [{ lat: subjectLoc.lat, lng: subjectLoc.lng }, ...getCirclePoints(subjectLoc, radius)];
         const districtList = await Promise.all(points.map(p => reverseGeocodeDistrict(env, p.lat, p.lng)));
         const set = new Set(districtList.filter(Boolean).filter(d => KAOHSIUNG_SECTIONS[d]));
         if (set.size) nearbyDistricts = [...set];
