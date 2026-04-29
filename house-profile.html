@@ -8329,7 +8329,7 @@ ${factsText}
       <h3>🔍 競品分析</h3>
       <div class="cm-auto-card" onclick="runCompetitorSearch('auto')">
         <div class="cm-auto-title">🤖 自動分析</div>
-        <div class="cm-auto-sub">用本案資料 ±10 坪 / ±5 年 / 1km 內</div>
+        <div class="cm-auto-sub">用本案社區名 + ±10 坪 / ±5 年｜同社區 + 鄰近條件</div>
       </div>
       <div class="cm-divider">或自訂條件</div>
       <div class="cm-row"><label>關鍵字</label><input type="text" id="cmKeyword" placeholder="例：翻新、明星學區（選填）"></div>
@@ -8337,7 +8337,6 @@ ${factsText}
       <div class="cm-row"><label>總坪數</label><div class="cm-range"><input type="number" id="cmTotalAreaMin" placeholder="低" step="0.1"><span class="sep">~</span><input type="number" id="cmTotalAreaMax" placeholder="高" step="0.1"><span class="unit">坪</span></div></div>
       <div class="cm-row"><label>主建坪</label><div class="cm-range"><input type="number" id="cmMainAreaMin" placeholder="低" step="0.1"><span class="sep">~</span><input type="number" id="cmMainAreaMax" placeholder="高" step="0.1"><span class="unit">坪</span></div></div>
       <div class="cm-row"><label>屋齡</label><div class="cm-range"><input type="number" id="cmAgeMin" placeholder="低"><span class="sep">~</span><input type="number" id="cmAgeMax" placeholder="高"><span class="unit">年</span></div></div>
-      <div class="cm-row"><label>距離</label><div class="cm-radius"><label><input type="radio" name="cmRadius" value="500"> 500m</label><label><input type="radio" name="cmRadius" value="1000" checked> 1000m</label></div></div>
       <button class="cm-submit" onclick="runCompetitorSearch('custom')">🔍 開始分析</button>
     </div>
     <div id="cmStepLoading" style="display:none;">
@@ -8413,7 +8412,6 @@ function runCompetitorSearch(mode) {
       totalAreaMin: subject.totalArea - 10, totalAreaMax: subject.totalArea + 10,
       mainAreaMin: null, mainAreaMax: null,
       ageMin: subject.age ? subject.age - 5 : null, ageMax: subject.age ? subject.age + 5 : null,
-      radiusM: 1000,
     };
   } else {
     const v = id => { const x = document.getElementById(id)?.value; return x === '' || x == null ? null : (isNaN(+x) ? x : +x); };
@@ -8423,15 +8421,13 @@ function runCompetitorSearch(mode) {
       totalAreaMin: v('cmTotalAreaMin'), totalAreaMax: v('cmTotalAreaMax'),
       mainAreaMin: v('cmMainAreaMin'), mainAreaMax: v('cmMainAreaMax'),
       ageMin: v('cmAgeMin'), ageMax: v('cmAgeMax'),
-      radiusM: parseInt(document.querySelector('input[name="cmRadius"]:checked')?.value || 1000, 10),
     };
-    // 至少要填一個欄位（除距離外）
     const hasAny = params.keyword || params.priceMin != null || params.priceMax != null || params.totalAreaMin != null || params.totalAreaMax != null || params.mainAreaMin != null || params.mainAreaMax != null || params.ageMin != null || params.ageMax != null;
     if (!hasAny) { alert('自訂模式至少要填 1 個條件'); return; }
   }
   // 進 loading
   showCmStep('loading');
-  const texts = ['啟動爬蟲中...', '開瀏覽器抓 591 列表...', '翻頁中...', '計算距離 + 歸併同物件...', '快好了，等下...'];
+  const texts = ['啟動爬蟲中...', '搜同社區掛賣...', '搜鄰近條件物件...', '歸併同物件...', '快好了，等下...'];
   let ti = 0;
   const txtEl = document.getElementById('cmLoadingText');
   txtEl.textContent = texts[0];
@@ -8448,14 +8444,12 @@ function runCompetitorSearch(mode) {
   .then(data => {
     clearInterval(itv);
     if (data.ok) {
-      // 合併 client subject (含 totalArea/age) + worker subject (含 lat/lon)
       renderCompetitorResults({
         mode, params,
         subject: { ...subject, ...(data.subject || {}) },
         stats: data.stats,
-        items: data.items || [],
-        beyond: data.beyond || [],
-        failed: data.failed || [],
+        sameCommunity: data.sameCommunity || [],
+        nearby: data.nearby || [],
       });
     } else {
       showCmStep('form');
@@ -8471,10 +8465,9 @@ function runCompetitorSearch(mode) {
 }
 function renderCompetitorResults(data) {
   showCmStep('result');
-  // mode banner
   const banner = document.getElementById('cmModeBanner');
   if (data.mode === 'auto') {
-    banner.innerHTML = `🤖 自動分析｜本案 ${data.subject.totalArea}坪 ${data.subject.age || '?'}年｜±10 坪 ±5 年 1km 內`;
+    banner.innerHTML = `🤖 自動分析｜本案 <strong>${data.subject.community || '(無社區名)'}</strong>｜${data.subject.totalArea}坪 ${data.subject.age || '?'}年｜±10 坪 ±5 年`;
   } else {
     const p = data.params;
     const parts = [];
@@ -8483,38 +8476,43 @@ function renderCompetitorResults(data) {
     if (p.totalAreaMin || p.totalAreaMax) parts.push(`總坪 ${p.totalAreaMin||'-'}~${p.totalAreaMax||'-'}`);
     if (p.mainAreaMin || p.mainAreaMax) parts.push(`主建 ${p.mainAreaMin||'-'}~${p.mainAreaMax||'-'}`);
     if (p.ageMin || p.ageMax) parts.push(`屋齡 ${p.ageMin||'-'}~${p.ageMax||'-'}年`);
-    parts.push(`距離 ${p.radiusM}m`);
-    banner.innerHTML = `⚙️ 自訂條件｜${parts.join(' ｜ ')}`;
+    banner.innerHTML = `⚙️ 自訂條件｜${parts.join(' ｜ ') || '(無)'}`;
   }
-  // stats
   const s = data.stats;
   document.getElementById('cmStats').innerHTML = `
-    📈 原始 ${s.rawCount} 筆 → 歸併 ${s.mergedCount} 筆 → ${data.params.radiusM || 1000}m 內 <strong>${s.withinRadius}</strong> 筆<br>
-    ⏱ 耗時 ${(s.elapsedMs/1000).toFixed(1)}s ｜ 超出範圍 ${s.beyondRadius} 筆 ｜ Geocode 失敗 ${s.geocodeFailed} 筆
+    📈 原始 ${s.rawCount} 筆 → 歸併 ${s.mergedCount} 筆<br>
+    🏠 同社區 <strong>${s.sameCommunity}</strong> 筆 ｜ 📍 鄰近條件 <strong>${s.nearby}</strong> 筆 ｜ ⏱ ${(s.elapsedMs/1000).toFixed(1)}s
   `;
-  // cards
-  const wrap = document.getElementById('cmCards');
-  wrap.innerHTML = data.items.map((x, i) => {
-    const distBadge = x.distance <= 300 ? `<span class="cm-tag dist" style="background:#fee2e2;color:#b91c1c">📍 ${x.distance}m</span>` :
-                      x.distance <= 700 ? `<span class="cm-tag dist" style="background:#fed7aa;color:#9a3412">📍 ${x.distance}m</span>` :
-                      `<span class="cm-tag dist">📍 ${x.distance}m</span>`;
+  const renderCard = (x, i) => {
     const multi = x.agentCount > 1 ? `<span class="cm-tag multi">🤝 ${x.agentCount} 家掛牌</span>` : '';
-    const warn = x.warningTags.map(t => `<span class="cm-tag danger">⚠ ${t}</span>`).join('');
-    const src = x.sources.map(s => `<span class="cm-tag">${s === '591' ? '🅰 591' : '🅱 樂屋'}</span>`).join('');
+    const warn = (x.warningTags || []).map(t => `<span class="cm-tag danger">⚠ ${t}</span>`).join('');
+    const src = (x.sources || []).map(s => `<span class="cm-tag">${s === '591' ? '🅰 591' : '🅱 樂屋'}</span>`).join('');
     const links = Object.entries(x.links || {}).filter(([_,v])=>v).map(([k,v]) => `<a href="${v}" target="_blank" class="cm-card-link">看 ${k} →</a>`).join('');
     return `
       <div class="cm-card">
         <div class="cm-card-img">${x.imgSrc ? `<img src="${x.imgSrc}" alt="" loading="lazy">` : ''}</div>
         <div class="cm-card-info">
-          <div class="cm-card-title">#${i+1} ${x.community}（${x.road}）</div>
-          <div class="cm-card-meta">${x.rooms} ｜ 權狀 ${x.totalArea} / 主建 ${x.mainArea}坪 ｜ ${x.age}年 ｜ ${x.floor}</div>
-          <div class="cm-card-price">💰 ${x.totalPrice.toLocaleString()} 萬<span class="unit">${x.unitPrice} 萬/坪${x.hasPark ? ' ｜ ✓ 含車位' : ''}</span></div>
-          <div class="cm-card-tags">${distBadge}${multi}${warn}${src}</div>
+          <div class="cm-card-title">#${i+1} ${x.community || '(無社區名)'}${x.road ? `（${x.road}）` : ''}</div>
+          <div class="cm-card-meta">${x.rooms || ''} ｜ 權狀 ${x.totalArea} / 主建 ${x.mainArea}坪 ｜ ${x.age}年 ｜ ${x.floor}</div>
+          <div class="cm-card-price">💰 ${(x.totalPrice||0).toLocaleString()} 萬<span class="unit">${x.unitPrice} 萬/坪${x.hasPark ? ' ｜ ✓ 含車位' : ''}</span></div>
+          <div class="cm-card-tags">${multi}${warn}${src}</div>
           <div style="margin-top:6px;">${links}</div>
         </div>
       </div>
     `;
-  }).join('');
+  };
+  const wrap = document.getElementById('cmCards');
+  let html = '';
+  if ((data.sameCommunity || []).length) {
+    html += `<div style="margin:16px 0 8px;color:#7c3aed;font-weight:700;font-size:15px;">🏠 同社區（${data.sameCommunity.length}）</div>`;
+    html += data.sameCommunity.map((x,i)=>renderCard(x,i)).join('');
+  }
+  if ((data.nearby || []).length) {
+    html += `<div style="margin:16px 0 8px;color:#b45309;font-weight:700;font-size:15px;">📍 鄰近條件（${data.nearby.length}）</div>`;
+    html += data.nearby.map((x,i)=>renderCard(x,i)).join('');
+  }
+  if (!html) html = '<div style="padding:24px;text-align:center;color:#888;">沒抓到結果。可能本案社區名空白或 591 上沒掛賣，試自訂條件看看。</div>';
+  wrap.innerHTML = html;
 }
 window.openCompetitorModal = openCompetitorModal;
 window.closeCompetitorModal = closeCompetitorModal;

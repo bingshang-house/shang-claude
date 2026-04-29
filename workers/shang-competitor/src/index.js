@@ -1,5 +1,6 @@
-// shang-competitor Worker — 競品搜尋 Agent
-// 流程：591 (Browser Rendering) → 跨來源 dedup → Geocode (Google Maps) → 1km 距離過濾 → JSON 回傳
+// shang-competitor Worker — 競品搜尋 Agent (v2: 社區關鍵字模式)
+// 流程：591 keyword search (Browser Rendering) → 兩階段（同社區 / 鄰近條件）→ 跨來源歸併 → JSON 回傳
+// 不再做 geocode + 1km 距離過濾（591 內建關鍵字搜尋已足夠）
 
 import puppeteer from '@cloudflare/puppeteer';
 
@@ -11,7 +12,6 @@ const CORS = {
 };
 
 // ============ 高雄市區 sectionid 對照（591）============
-// 完整列表待補，先列前鎮 + 常見幾個。漏的會 fallback 用整個高雄搜
 const KAOHSIUNG_SECTIONS = {
   '前鎮區': 249, '苓雅區': 248, '三民區': 246, '左營區': 247, '楠梓區': 245,
   '鼓山區': 244, '鳳山區': 250, '小港區': 251, '新興區': 243, '前金區': 242,
@@ -24,45 +24,18 @@ const SHAPE_MAP = { '公寓': 1, '電梯大樓': 2, '大樓': 2, '透天厝': 3,
 // ============ Helper ============
 function livingFloor(f) { return ((f || '').match(/^(\d+(?:~\d+)?)F/) || [])[1] || (f || ''); }
 
+function extractDistrict(addr) {
+  const m = (addr || '').match(/([一-龥]+(?:區|鄉|鎮|市))/);
+  return m ? m[1] : null;
+}
+
 function mergeKey(item) {
   const fl = livingFloor(item.floor);
   const area = item.mainArea || item.totalArea;
   return `${item.road || '?'}|${fl}|${Math.round(area * 2) / 2}|${Math.round((item.totalPrice || 0) / 10) * 10}`;
 }
 
-function haversine(a, b) {
-  const R = 6371000;
-  const toRad = d => d * Math.PI / 180;
-  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
-  const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-}
-
-function extractDistrict(addr) {
-  const m = addr.match(/([一-龥]+(?:區|鄉|鎮|市))/);
-  return m ? m[1] : null;
-}
-
-// ============ Geocode（Google Maps + KV cache）============
-async function geocode(env, query) {
-  const cacheKey = `g:${query}`;
-  const cached = await env.GEOCACHE.get(cacheKey, 'json');
-  if (cached) return cached;
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&language=zh-TW&region=tw&key=${env.GOOGLE_MAPS_API_KEY}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (data.status !== 'OK' || !data.results.length) {
-    await env.GEOCACHE.put(cacheKey, JSON.stringify(null), { expirationTtl: 86400 }); // 1 day for failure
-    return null;
-  }
-  const loc = data.results[0].geometry.location;
-  const result = { lat: loc.lat, lon: loc.lng, display: data.results[0].formatted_address };
-  await env.GEOCACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 2592000 }); // 30 days
-  return result;
-}
-
-// ============ 591 爬蟲（Browser Rendering）============
+// ============ 591 爬蟲（雙階段 + Browser Rendering）============
 async function scrape591(env, params, subject) {
   const district = extractDistrict(subject.address) || '前鎮區';
   const section = KAOHSIUNG_SECTIONS[district] || 0;
@@ -73,11 +46,19 @@ async function scrape591(env, params, subject) {
   const areaMin = params.totalAreaMin ?? 0;
   const areaMax = params.totalAreaMax ?? 999;
 
-  let url = `https://sale.591.com.tw/?regionid=17&shape=${shape}&houseage=${ageMin}_${ageMax}&area=${Math.floor(areaMin)}_${Math.ceil(areaMax)}&firstRow=0&shType=list`;
-  if (section) url += `&section=${section}`;
-  if (params.keyword) url += `&keywords=${encodeURIComponent(params.keyword)}`;
-  if (params.priceMin || params.priceMax) {
-    url += `&price=${params.priceMin || 0}_${params.priceMax || 999999}`;
+  function buildUrl({ keywords, useFilter, firstRow = 0 }) {
+    let u = `https://sale.591.com.tw/?regionid=17&shape=${shape}&firstRow=${firstRow}&shType=list`;
+    if (useFilter) {
+      u += `&houseage=${ageMin}_${ageMax}&area=${Math.floor(areaMin)}_${Math.ceil(areaMax)}`;
+      if (section) u += `&section=${section}`;
+      if (params.priceMin || params.priceMax) {
+        u += `&price=${params.priceMin || 0}_${params.priceMax || 999999}`;
+      }
+    } else if (section) {
+      u += `&section=${section}`;
+    }
+    if (keywords) u += `&keywords=${encodeURIComponent(keywords)}`;
+    return u;
   }
 
   const browser = await puppeteer.launch(env.MYBROWSER);
@@ -94,35 +75,52 @@ async function scrape591(env, params, subject) {
     req.continue();
   });
 
-  const allItems = [];
-  try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForSelector('.ware-item, .no-result', { timeout: 10000 }).catch(() => null);
-
-    const maxPages = parseInt(env.DEFAULT_PAGES || '5', 10);
-    for (let p = 0; p < maxPages; p++) {
-      // wait for cards render
-      await new Promise(r => setTimeout(r, 600));
-      const items = await page.evaluate(parseListPage);
-      if (!items.length) break;
-      allItems.push(...items);
-      // click next page
-      const hasNext = await page.evaluate(() => {
-        const next = [...document.querySelectorAll('span,a,button')].find(e => e.textContent.trim() === '下一頁');
-        if (!next || next.classList.contains('disabled')) return false;
-        next.click();
-        return true;
-      });
-      if (!hasNext) break;
-      await new Promise(r => setTimeout(r, 1500));
+  async function scrapePages(url, maxPages, matchType) {
+    const items = [];
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForSelector('.ware-item, .no-result', { timeout: 10000 }).catch(() => null);
+      for (let p = 0; p < maxPages; p++) {
+        await new Promise(r => setTimeout(r, 600));
+        const pageItems = await page.evaluate(parseListPage);
+        if (!pageItems.length) break;
+        pageItems.forEach(x => x.matchType = matchType);
+        items.push(...pageItems);
+        if (p === maxPages - 1) break;
+        const hasNext = await page.evaluate(() => {
+          const next = [...document.querySelectorAll('span,a,button')].find(e => e.textContent.trim() === '下一頁');
+          if (!next || next.classList.contains('disabled')) return false;
+          next.click();
+          return true;
+        });
+        if (!hasNext) break;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    } catch (e) {
+      console.error(`scrape stage failed (${matchType})`, e);
     }
-  } finally {
-    await browser.close();
+    return items;
   }
+
+  const allItems = [];
+
+  // 階段 1：同社區（用 community 名搜尋，1 頁就夠 — 一個社區掛賣通常 < 30 筆）
+  if (subject.community) {
+    const url1 = buildUrl({ keywords: subject.community, useFilter: false });
+    const stage1 = await scrapePages(url1, 1, 'same_community');
+    allItems.push(...stage1);
+  }
+
+  // 階段 2：鄰近條件（同區 + ±10 坪 / ±5 年）
+  const url2 = buildUrl({ useFilter: true });
+  const stage2 = await scrapePages(url2, 3, 'nearby');
+  allItems.push(...stage2);
+
+  await browser.close();
   return allItems.map(x => ({ ...x, source: '591' }));
 }
 
-// 在頁面 context 跑的 parser（會 serialize 到 browser 內執行）
+// 在頁面 context 跑的 parser
 function parseListPage() {
   const cards = document.querySelectorAll('.ware-item');
   const out = [];
@@ -157,7 +155,7 @@ function parseListPage() {
   return out;
 }
 
-// ============ 跨平台歸併 ============
+// ============ 跨平台歸併（保留 matchType 優先級：same_community > nearby）============
 function mergeItems(all) {
   const map = new Map();
   for (const item of all) {
@@ -170,8 +168,9 @@ function mergeItems(all) {
       if (!x.sources.includes(item.source)) x.sources.push(item.source);
       if (item.href && !x.links[item.source]) x.links[item.source] = item.href;
       if (!x.imgSrc && item.imgSrc) x.imgSrc = item.imgSrc;
-      // 保留首個非空的 district
       if (item.district && !x.district) x.district = item.district;
+      // matchType 優先級：same_community 蓋過 nearby
+      if (item.matchType === 'same_community') x.matchType = 'same_community';
     } else {
       map.set(k, {
         ...item,
@@ -190,10 +189,18 @@ function mergeItems(all) {
   }));
 }
 
-// ============ 認證（簡化版，先放過，正式版接 shang-whitelist）============
+// ============ 同社區判定（fuzzy match）============
+// 591 列表抓到的 community 可能跟 subject.community 有變體（多/少字、空白）
+function isSameCommunity(itemCommunity, subjectCommunity) {
+  if (!itemCommunity || !subjectCommunity) return false;
+  const norm = s => s.replace(/\s+/g, '').replace(/大樓$/, '');
+  const a = norm(itemCommunity);
+  const b = norm(subjectCommunity);
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+// ============ 認證（先放，正式版接 shang-whitelist）============
 async function checkAuth(env, request, body) {
-  // TODO: 整合 shang-whitelist 驗證 idToken
-  // 目前測試階段先全放
   return { ok: true };
 }
 
@@ -220,11 +227,9 @@ export default {
     if (mode === 'auto') {
       p.totalAreaMin = subject.totalArea ? subject.totalArea - 10 : null;
       p.totalAreaMax = subject.totalArea ? subject.totalArea + 10 : null;
-      p.ageMin = subject.age ? subject.age - 5 : null;
+      p.ageMin = subject.age ? Math.max(0, subject.age - 5) : null;
       p.ageMax = subject.age ? subject.age + 5 : null;
-      p.radiusM = 1000;
     }
-    p.radiusM = p.radiusM || 1000;
 
     const start = Date.now();
 
@@ -232,65 +237,61 @@ export default {
       // 1. 爬資料（並行多來源）
       const promises = [];
       if (sources.includes('591')) promises.push(scrape591(env, p, subject).catch(e => { console.error('591 fail', e); return []; }));
-      // TODO: rakuya
+      // TODO Phase 1B: rakuya
       const allByPlatform = await Promise.all(promises);
       const all = allByPlatform.flat();
 
-      // 2. Geocode 本案
-      const subjQuery = subject.community ? `${subject.community} ${subject.address}` : subject.address;
-      const subjLoc = await geocode(env, subjQuery) || (subject.address ? await geocode(env, subject.address) : null);
-
-      // 3. 歸併
+      // 2. 歸併
       const merged = mergeItems(all);
 
-      // 4. Geocode 每筆獨立物件（並行批次，但限速避免撞 Google QPS）
-      // 用 item 自己抓到的 district（591 列表標的真實所在區）；fallback subject 地址抽出的區
-      const fallbackDistrict = extractDistrict(subject.address) || '前鎮區';
-      const geocodeBatch = async (items, batchSize = 10) => {
-        for (let i = 0; i < items.length; i += batchSize) {
-          await Promise.all(items.slice(i, i + batchSize).map(async (item) => {
-            const dist = item.district || fallbackDistrict;
-            const queries = [];
-            if (item.community) queries.push(`${item.community} 高雄市${dist}`);
-            if (item.road) queries.push(`高雄市${dist}${item.road}`);
-            // 最後 fallback：只用區
-            if (!queries.length && dist) queries.push(`高雄市${dist}`);
-            for (const q of queries) {
-              const loc = await geocode(env, q);
-              if (loc) { item.lat = loc.lat; item.lon = loc.lon; break; }
-            }
-          }));
-        }
-      };
-      await geocodeBatch(merged);
+      // 3. 分組：同社區 / 鄰近條件
+      // - 階段 1（keywords=社區名）抓到的 → matchType='same_community'
+      // - 但 591 keyword 搜尋可能模糊匹配到別社區，再用 community 名做二次驗證
+      // - 自我比對排除（mergeKey 跟本案太像的，可能是案件本人）
+      const subjectKey = subject.community && subject.totalArea ? `${subject.community}|${subject.totalArea}` : null;
 
-      // 5. 距離計算 + 過濾
+      const sameCommunity = [];
+      const nearby = [];
       for (const item of merged) {
-        if (item.lat && subjLoc) item.distance = Math.round(haversine(subjLoc, { lat: item.lat, lon: item.lon }));
-        else item.distance = null;
+        // 確認真的同社區（用 community 名 fuzzy match）
+        const reallySame = isSameCommunity(item.community, subject.community);
+        if (item.matchType === 'same_community' && reallySame) {
+          sameCommunity.push(item);
+        } else if (item.matchType === 'same_community' && !reallySame) {
+          // keyword 搜到但社區名對不上 → 歸到鄰近
+          nearby.push({ ...item, matchType: 'nearby' });
+        } else {
+          nearby.push(item);
+        }
       }
 
-      const within = merged.filter(x => x.distance != null && x.distance <= p.radiusM).sort((a, b) => a.distance - b.distance || a.unitPrice - b.unitPrice);
-      const beyond = merged.filter(x => x.distance != null && x.distance > p.radiusM).sort((a, b) => a.distance - b.distance);
-      const failed = merged.filter(x => x.distance == null);
-
-      // 6. 排名
-      within.forEach((x, i) => x.rank = i + 1);
+      // 排序：同社區依單價、鄰近依屋齡接近度 + 單價
+      sameCommunity.sort((a, b) => (a.unitPrice || 9999) - (b.unitPrice || 9999));
+      nearby.sort((a, b) => {
+        const ageDiff = (subject.age || 0);
+        const da = Math.abs((a.age || 0) - ageDiff);
+        const db = Math.abs((b.age || 0) - ageDiff);
+        if (da !== db) return da - db;
+        return (a.unitPrice || 9999) - (b.unitPrice || 9999);
+      });
 
       return Response.json({
         ok: true,
-        subject: subjLoc ? { ...subjLoc, address: subject.address } : { address: subject.address },
+        subject: {
+          address: subject.address,
+          community: subject.community,
+          totalArea: subject.totalArea,
+          age: subject.age,
+        },
         stats: {
           rawCount: all.length,
           mergedCount: merged.length,
-          withinRadius: within.length,
-          beyondRadius: beyond.length,
-          geocodeFailed: failed.length,
+          sameCommunity: sameCommunity.length,
+          nearby: nearby.length,
           elapsedMs: Date.now() - start,
         },
-        items: within,
-        beyond: beyond.slice(0, 50),
-        failed: failed.slice(0, 30),
+        sameCommunity,
+        nearby: nearby.slice(0, 30),  // 鄰近最多顯示 30 筆
       }, { headers: CORS });
     } catch (e) {
       console.error('Worker error', e);
