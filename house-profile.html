@@ -1819,34 +1819,16 @@
         const numer = parseInt(ratioM[2]);
         const ping  = p2(sqm2ping(total * numer / denom));
         const loNo  = loNoM ? loNoM[1].replace(/\s/g,'') : '';
-        // 縣市 + 鄉鎮市區廣義抽取（南台灣 5 縣市白名單；\s* 容忍 PDF.js 拆字）
-        const NLSC_COUNTY_CODE = {
-          '高雄市':'E', '屏東縣':'T',
-          '台南市':'D', '臺南市':'D',
-          '台東縣':'V', '臺東縣':'V',
-          '嘉義市':'I', '嘉義縣':'Q',
-        };
-        // 屏東 33 鄉鎮（PDF 沒寫「屏東縣」前綴或被拆字時的 fallback）
-        const PINGDONG_TOWNS_HARDCODE = ['屏東市','潮州鎮','東港鎮','恆春鎮','萬丹鄉','長治鄉','麟洛鄉','九如鄉','里港鄉','鹽埔鄉','高樹鄉','萬巒鄉','內埔鄉','竹田鄉','新埤鄉','枋寮鄉','新園鄉','崁頂鄉','林邊鄉','南州鄉','佳冬鄉','琉球鄉','車城鄉','滿州鄉','枋山鄉','三地門鄉','霧臺鄉','霧台鄉','瑪家鄉','泰武鄉','來義鄉','春日鄉','獅子鄉','牡丹鄉'];
-        // 試 1：縣市 + 鄉鎮 完整 match（容忍中間空白）
-        let distM2 = t.match(/(高\s*雄\s*市|屏\s*東\s*縣|[台臺]\s*南\s*市|[台臺]\s*東\s*縣|嘉\s*義\s*[市縣])\s*(\S{1,4}\s*(?:區|鄉|鎮|市))/);
-        let countyName = '';
-        let distName = '';
-        if (distM2) {
-          countyName = distM2[1].replace(/\s/g, '');
-          distName = distM2[2].replace(/\s/g, '');
-        } else {
-          // 試 2：屏東鄉鎮 fallback（hardcode）— 找到鄉鎮就推縣市
-          const compact = t.replace(/\s/g, '');
-          const hit = PINGDONG_TOWNS_HARDCODE.find(tn => compact.includes(tn));
-          if (hit) { countyName = '屏東縣'; distName = hit === '霧台鄉' ? '霧臺鄉' : hit; }
-          else {
-            // 試 3：deed 全域 fallback（同 session 已解過建物時）
-            distName = (typeof deed !== 'undefined' && deed?.district || '')
-              .replace(/^(高雄市|屏東縣|臺?南市|臺?東縣|嘉義[市縣])/, '');
-          }
+        // 縣市 + 鄉鎮：用 extractCountyDist helper（屏東 hardcode fallback）
+        const _cd = extractCountyDist(t);
+        let countyName = _cd.countyName;
+        let distName = _cd.distName;
+        const county = _cd.county;
+        if (!distName) {
+          // 最後 fallback：deed 全域（同 session 已解過建物時）
+          distName = (typeof deed !== 'undefined' && deed?.district || '')
+            .replace(/^(高雄市|屏東縣|臺?南市|臺?東縣|嘉義[市縣])/, '');
         }
-        const county = NLSC_COUNTY_CODE[countyName] || '';
         const expected = extractExpectedParcels(raw, 'land');
 
         // 前次移轉現值（土增稅起算點）
@@ -2065,6 +2047,30 @@
     return { num: sum.num, denom: sum.denom, pct, ok: Math.abs(pct - 1) < 0.0001 };
   }
 
+  // 縣市 + 鄉鎮市區廣義抽取（南台灣 5 縣市 + 屏東鄉鎮 hardcode fallback）
+  // parseLandPDF 跟 parseLandDeedFull 共用
+  const NLSC_COUNTY_CODE_TABLE = {
+    '高雄市':'E', '屏東縣':'T',
+    '台南市':'D', '臺南市':'D',
+    '台東縣':'V', '臺東縣':'V',
+    '嘉義市':'I', '嘉義縣':'Q',
+  };
+  const PINGDONG_TOWNS_LIST = ['屏東市','潮州鎮','東港鎮','恆春鎮','萬丹鄉','長治鄉','麟洛鄉','九如鄉','里港鄉','鹽埔鄉','高樹鄉','萬巒鄉','內埔鄉','竹田鄉','新埤鄉','枋寮鄉','新園鄉','崁頂鄉','林邊鄉','南州鄉','佳冬鄉','琉球鄉','車城鄉','滿州鄉','枋山鄉','三地門鄉','霧臺鄉','霧台鄉','瑪家鄉','泰武鄉','來義鄉','春日鄉','獅子鄉','牡丹鄉'];
+  function extractCountyDist(t) {
+    const m = t.match(/(高\s*雄\s*市|屏\s*東\s*縣|[台臺]\s*南\s*市|[台臺]\s*東\s*縣|嘉\s*義\s*[市縣])\s*(\S{1,4}\s*(?:區|鄉|鎮|市))/);
+    if (m) {
+      const countyName = m[1].replace(/\s/g, '');
+      const distName = m[2].replace(/\s/g, '');
+      return { countyName, distName, county: NLSC_COUNTY_CODE_TABLE[countyName] || '' };
+    }
+    const compact = t.replace(/\s/g, '');
+    const hit = PINGDONG_TOWNS_LIST.find(tn => compact.includes(tn));
+    if (hit) {
+      return { countyName: '屏東縣', distName: hit === '霧台鄉' ? '霧臺鄉' : hit, county: 'T' };
+    }
+    return { countyName: '', distName: '', county: '' };
+  }
+
   // 主函式：raw text → 結構化
   function parseLandDeedFull(raw) {
     const t = fw(raw);
@@ -2072,10 +2078,12 @@
     // === 標示部 ===
     const loNoM = t.match(/([^\s]{2,6}段(?:[^\s]{1,6}小段)?\s*[\d\-]+)\s*地號/);
     const areaM = t.match(/面\s*積\s*([\d]+(?:\.[\d]+)?)\s*平\s*方\s*公\s*尺/);
-    const distM = t.match(/高雄市([^\s]{1,4}區)/);
+    const cd = extractCountyDist(t);
     const loNo = loNoM ? loNoM[1].replace(/\s/g, '') : '';
     const fullArea = areaM ? parseFloat(areaM[1]) : 0;
-    const distName = distM ? distM[1] : '';
+    const distName = cd.distName;
+    const county = cd.county;
+    const countyName = cd.countyName;
 
     // 前次移轉現值（既有邏輯）
     let prevYearROC = null, prevMonth = null, prevValue = null;
@@ -2154,7 +2162,7 @@
     return {
       loNo,
       fullArea,
-      distName,
+      distName, county, countyName,
       prevYearROC, prevMonth, prevValue,
       owners,
       mortgages,
@@ -2305,6 +2313,7 @@
       const p = r.parsed;
       if (!basic) {
         basic = { loNo: p.loNo, fullArea: p.fullArea, distName: p.distName,
+          county: p.county, countyName: p.countyName,
           prevYearROC: p.prevYearROC, prevMonth: p.prevMonth, prevValue: p.prevValue };
         firstFile = r.file;
       }
@@ -2344,6 +2353,7 @@
       numerator: ss.num, denominator: ss.denom,
       detail: `${basic.fullArea}m² × ${ss.num}/${ss.denom} ≈ ${ping}坪`,
       distName: basic.distName,
+      county: basic.county, countyName: basic.countyName,
       prevYearROC: basic.prevYearROC, prevMonth: basic.prevMonth, prevValue: basic.prevValue,
       _raw: group[0].raw,
       _fileName: firstFile?.name || '',
@@ -3863,13 +3873,14 @@
       const sect4 = sectInfo.sectcode;
       const parts = landNo.split('-');
       const landno8 = parts[0].padStart(4, '0') + (parts[1] || '0').padStart(4, '0');
-      // NLSC 主資料 + NLSC 測量類別 並行（共用既有 queryLandSurveyInfo 內部解析會 fail，自己打）
+      // NLSC 測量類別（屏東部分段碼 GetLandSecInfoNlsc 會 404，僅 retry 5xx）
       const surveyP = (async () => {
         const apiUrl = `https://api.nlsc.gov.tw/other/GetLandSecInfoNlsc/T/${sect4}`;
         for (let i = 0; i < 3; i++) {
           if (i) await new Promise(r => setTimeout(r, 600));
           try {
             const r = await fetch(apiUrl);
+            if (r.status === 404) return null; // 該段碼無資料，不 retry
             if (!r.ok) continue;
             const xml = await r.text();
             const get = tag => xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`))?.[1]?.trim() || '';
