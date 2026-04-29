@@ -3753,11 +3753,10 @@
     '9': '農地重劃',       'A': '國有原野地',    'B': '區段徵收',     'C': '國有林班地',
     'D': '解除林班地',     'E': '海埔新生地',    'F': '農村社區重劃', 'Z': '其他'
   };
-  async function queryLandSurveyInfo(distName, sectName) {
-    const entry = await getSectCodeEntry(distName, sectName);
-    if (!entry) return null;
-    const sect4 = entry.code;
-    const apiUrl = `https://api.nlsc.gov.tw/other/GetLandSecInfoNlsc/E/${sect4}`;
+  // 純 fetch helper，高雄/屏東/未來其他縣市共用
+  async function _fetchNlscSurveyInfo(county, sect4) {
+    if (!county || !sect4) return null;
+    const apiUrl = `https://api.nlsc.gov.tw/other/GetLandSecInfoNlsc/${county}/${sect4}`;
     const target = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
     for (let i = 0; i < 3; i++) {
       if (i) await new Promise(r => setTimeout(r, 600 + (i - 1) * 800));
@@ -3783,6 +3782,12 @@
       } catch (e) { /* retry */ }
     }
     return null;
+  }
+
+  async function queryLandSurveyInfo(distName, sectName) {
+    const entry = await getSectCodeEntry(distName, sectName);
+    if (!entry) return null;
+    return _fetchNlscSurveyInfo('E', entry.code);
   }
 
   // ===== 屏東 NLSC enricher（Phase A）=====
@@ -3881,32 +3886,10 @@
       const sect4 = sectInfo.sectcode;
       const parts = landNo.split('-');
       const landno8 = parts[0].padStart(4, '0') + (parts[1] || '0').padStart(4, '0');
-      // NLSC 測量類別（GetLandSecInfoNlsc 必須帶 Referer=maps.nlsc.gov.tw，跨域走 worker proxy）
-      const surveyP = (async () => {
-        const apiUrl = `https://api.nlsc.gov.tw/other/GetLandSecInfoNlsc/T/${sect4}`;
-        const target = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
-        for (let i = 0; i < 3; i++) {
-          if (i) await new Promise(r => setTimeout(r, 600));
-          try {
-            const r = await fetch(target);
-            if (!r.ok) continue;
-            const xml = await r.text();
-            const get = tag => xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`))?.[1]?.trim() || '';
-            const svType = get('svType'), mYear = get('mYear'), mMonth = get('mMonth');
-            const hasRealDate = mYear && mMonth && mYear !== '1900';
-            return {
-              svTypeCode: svType,
-              svTypeText: NLSC_SURVEY_TYPE[svType] || '',
-              mapYear: mYear, mapMonth: mMonth,
-              mapDate: hasRealDate ? `${mYear}-${String(mMonth).padStart(2,'0')}` : '',
-            };
-          } catch (e) {/* retry */}
-        }
-        return null;
-      })();
+      // NLSC 主資料 + 測量類別 並行（測量類別走共用 helper，跟高雄同邏輯）
       const [land, survey] = await Promise.all([
         queryNlscLandFull('T', sect4, landno8),
-        surveyP,
+        _fetchNlscSurveyInfo('T', sect4),
       ]);
       if (!land) { el.textContent = '⚠ NLSC 查無此地號'; return; }
 
