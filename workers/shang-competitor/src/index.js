@@ -37,8 +37,10 @@ function mergeKey(item) {
 
 // ============ 591 爬蟲（雙階段 + Browser Rendering）============
 async function scrape591(env, params, subject) {
-  const district = extractDistrict(subject.address) || '前鎮區';
-  const section = KAOHSIUNG_SECTIONS[district] || 0;
+  const districtRaw = extractDistrict(subject.address);
+  const district = districtRaw || '前鎮區';
+  // 強制保險：若 KAOHSIUNG_SECTIONS 沒命中（可能因為 address 空白或區名變體），用前鎮區當 default
+  const section = KAOHSIUNG_SECTIONS[district] || KAOHSIUNG_SECTIONS['前鎮區'];
   const shape = SHAPE_MAP[subject.buildingType?.replace(/\s/g, '')] || 2;
 
   const ageMin = params.ageMin ?? 0;
