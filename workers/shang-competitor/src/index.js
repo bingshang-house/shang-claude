@@ -553,7 +553,7 @@ export default {
       p.totalAreaMin = subject.totalArea ? Math.max(0, subject.totalArea - 5) : null;
       p.totalAreaMax = subject.totalArea ? subject.totalArea + 15 : null;
       p.ageMin = subject.age ? Math.max(0, subject.age - 5) : null;
-      p.ageMax = subject.age ? subject.age + 15 : null;
+      p.ageMax = subject.age ? subject.age + 10 : null;
     }
 
     const start = Date.now();

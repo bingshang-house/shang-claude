@@ -8374,7 +8374,7 @@ ${factsText}
       <h3>🔍 競品分析</h3>
       <div class="cm-auto-card" onclick="runCompetitorSearch('auto')">
         <div class="cm-auto-title">🤖 自動分析</div>
-        <div class="cm-auto-sub">用本案社區名 + 坪數 -5/+15 ｜ 屋齡 -5/+15 年｜同社區 + 鄰近條件</div>
+        <div class="cm-auto-sub">用本案社區名 + 坪數 -5/+15 ｜ 屋齡 -5/+10 年｜同社區 + 鄰近條件</div>
       </div>
       <div class="cm-divider">或自訂條件</div>
       <div class="cm-row"><label>關鍵字</label><input type="text" id="cmKeyword" placeholder="例：翻新、明星學區（選填）"></div>
@@ -8505,7 +8505,7 @@ function runCompetitorSearch(mode) {
       priceMin: null, priceMax: null,
       totalAreaMin: Math.max(0, subject.totalArea - 5), totalAreaMax: subject.totalArea + 15,
       mainAreaMin: null, mainAreaMax: null,
-      ageMin: subject.age ? Math.max(0, subject.age - 5) : null, ageMax: subject.age ? subject.age + 15 : null,
+      ageMin: subject.age ? Math.max(0, subject.age - 5) : null, ageMax: subject.age ? subject.age + 10 : null,
     };
   } else {
     const v = id => { const x = document.getElementById(id)?.value; return x === '' || x == null ? null : (isNaN(+x) ? x : +x); };
@@ -8564,7 +8564,7 @@ function renderCompetitorResults(data) {
   showCmStep('result');
   const banner = document.getElementById('cmModeBanner');
   if (data.mode === 'auto') {
-    banner.innerHTML = `🤖 自動分析｜本案 <strong>${data.subject.community || '(無社區名)'}</strong>｜${data.subject.totalArea}坪 ${data.subject.age || '?'}年｜坪數 -5/+15 ｜ 屋齡 -5/+15 年`;
+    banner.innerHTML = `🤖 自動分析｜本案 <strong>${data.subject.community || '(無社區名)'}</strong>｜${data.subject.totalArea}坪 ${data.subject.age || '?'}年｜坪數 -5/+15 ｜ 屋齡 -5/+10 年`;
   } else {
     const p = data.params;
     const parts = [];
