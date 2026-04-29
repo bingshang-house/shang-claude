@@ -914,6 +914,20 @@
     <!-- Supplement Form -->
     <div class="supplement">
 
+      <!-- 批次拖放區（全局）：拖 N 份土地/建物謄本自動解析 + 分流 + 建列 -->
+      <div id="batch-deed-zone"
+        style="border:2px dashed #CC8F00;border-radius:10px;padding:14px;text-align:center;background:#FFFCF5;cursor:pointer;font-size:13px;color:#7A5500;font-weight:600;margin-bottom:14px;transition:background 0.2s,border-color 0.2s;line-height:1.6;"
+        onclick="document.getElementById('batch-deed-files').click()"
+        ondragover="event.preventDefault();this.style.background='#FFF3E0';this.style.borderColor='#7A5500'"
+        ondragleave="this.style.background='#FFFCF5';this.style.borderColor='#CC8F00'"
+        ondrop="event.preventDefault();this.style.background='#FFFCF5';this.style.borderColor='#CC8F00';batchDeedDispatch(event.dataTransfer.files)">
+        📦 批次拖放 N 份土地 / 建物謄本到此<br>
+        <span style="font-size:11px;color:#888;font-weight:400;">同地號 / 同建號的多份自動合併共有人；不同的自動建多筆，不用先按「+ 新增筆」</span>
+      </div>
+      <input type="file" id="batch-deed-files" multiple accept="application/pdf" style="display:none"
+        onchange="batchDeedDispatch(this.files);this.value=''">
+      <div id="batch-deed-progress" style="display:none;font-size:12px;color:#7A5500;margin-bottom:10px;padding:8px 12px;background:#FFFCF5;border-radius:6px;border:1px solid #E8E0CC;"></div>
+
       <div class="form-sep">建物資訊</div>
       <div id="building-entries"></div>
       <button class="btn-sm" onclick="addBuildingEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #CC8F00;color:#CC8F00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增建物筆</button>
@@ -1582,7 +1596,8 @@
         <button onclick="removeBuildingEntry(${idx})" title="移除"
           style="background:#7A5500;color:#fff;border:none;border-radius:50%;width:28px;height:28px;padding:0;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>
       </div>
-      <div id="building-info-${idx}" style="font-size:11px;color:#16a34a;margin-top:5px;"></div>`;
+      <div id="building-info-${idx}" style="font-size:11px;color:#16a34a;margin-top:5px;"></div>
+      <div id="building-share-banner-${idx}" style="display:none;font-size:11px;margin-top:6px;padding:6px 10px;border-radius:6px;line-height:1.5;"></div>`;
     document.getElementById('building-entries').appendChild(div);
     return idx;
   }
@@ -1634,6 +1649,7 @@
       }
       updateCard();
       updateValidationBanner();
+      updateShareBanner('building', idx);
 
       // 只有第 1 筆觸發外部查詢（里鄰、學區、周邊機能）
       if (isFirst) {
@@ -1765,8 +1781,10 @@
         </div>
         <div id="land-info-${idx}" style="font-size:10px;color:#16a34a;margin-top:3px;">${preset?.detail||''}</div>
         <div id="land-zone-${idx}" style="font-size:10px;color:#1d4ed8;margin-top:2px;">${preset?.zone ? '✓ '+preset.zone+(preset.pubVal?'　現值 '+preset.pubVal.toLocaleString()+' 元/m²':'')+(preset.pubPrice?'　地價 '+preset.pubPrice.toLocaleString()+' 元/m²':'') : ''}</div>
+        <div id="land-share-banner-${idx}" style="display:none;font-size:11px;margin-top:6px;padding:6px 10px;border-radius:6px;line-height:1.5;"></div>
       </div>`;
     document.getElementById('land-entries').appendChild(div);
+    if (preset && (preset.owners || []).length) updateShareBanner('land', idx);
   }
 
   function removeLandEntry(idx) {
@@ -1833,6 +1851,16 @@
           expectedLandNos: expected.expectedLandNos,
           expectedBuildingNos: expected.expectedBuildingNos,
         };
+        // 補 owners / 抵押 / 持分加總（批次校驗用）
+        try {
+          const full = parseLandDeedFull(raw);
+          _landData[idx].owners = full.owners;
+          _landData[idx].mortgages = full.mortgages;
+          _landData[idx].shareSum = full.shareSum;
+          _landData[idx].shareSumPct = full.shareSumPct;
+          _landData[idx].shareSumOk = full.shareSumOk;
+          _landData[idx].orphanObligors = full.orphanObligors;
+        } catch(e) { console.warn('parseLandDeedFull 補欄位失敗', e); }
         document.getElementById(`land-ping-${idx}`).value = ping;
         document.getElementById(`land-lono-${idx}`).value = loNo;
         document.getElementById(`land-info-${idx}`).textContent = `✓ ${total} m²，持分 ${denom}分之${numer} ≈ ${ping} 坪`;
@@ -1840,6 +1868,7 @@
         updateCard();
         updateValidationBanner();
         queryZoning(idx);
+        updateShareBanner('land', idx);
       } else {
         document.getElementById(`land-info-${idx}`).textContent = '⚠ 無法辨識，請手動填寫';
         document.getElementById(`land-zone-label-${idx}`).textContent = file.name;
@@ -1862,10 +1891,15 @@
   // 漢字 + 遮蔽符號 + 法人後綴可能字（限制 backtrack 範圍）
   const NAME_CHAR = '[一-龥＊○\\*Ａ-Ｚａ-ｚA-Za-z]';
 
-  // 把 raw 切到「土地所有權部」section
-  function sliceOwnSection(t) {
-    const startRe = /土\s*地\s*所\s*有\s*權\s*部/;
-    const endRe = /土\s*地\s*他\s*項\s*權\s*利\s*部|本\s*謄\s*本\s*查\s*詢\s*資\s*料|備\s*註/;
+  // 把 raw 切到「所有權部」section（土地或建物共用）
+  // type: 'land'（預設）| 'building'
+  function sliceOwnSection(t, type = 'land') {
+    const startRe = type === 'building'
+      ? /建\s*物\s*所\s*有\s*權\s*部/
+      : /土\s*地\s*所\s*有\s*權\s*部/;
+    const endRe = type === 'building'
+      ? /建\s*物\s*他\s*項\s*權\s*利\s*部|共\s*有\s*部\s*分|土\s*地\s*標\s*示\s*部|土\s*地\s*所\s*有\s*權\s*部|本\s*謄\s*本\s*查\s*詢\s*資\s*料|備\s*註/
+      : /土\s*地\s*他\s*項\s*權\s*利\s*部|本\s*謄\s*本\s*查\s*詢\s*資\s*料|備\s*註/;
     const sIdx = t.search(startRe);
     if (sIdx < 0) return '';
     const after = t.slice(sIdx);
@@ -1873,9 +1907,11 @@
     return eMatch ? after.slice(0, eMatch.index) : after;
   }
 
-  // 切到「土地他項權利部」section
-  function sliceMortSection(t) {
-    const startRe = /土\s*地\s*他\s*項\s*權\s*利\s*部/;
+  // 切到「他項權利部」section（土地或建物共用）
+  function sliceMortSection(t, type = 'land') {
+    const startRe = type === 'building'
+      ? /建\s*物\s*他\s*項\s*權\s*利\s*部/
+      : /土\s*地\s*他\s*項\s*權\s*利\s*部/;
     const endRe = /本\s*謄\s*本\s*查\s*詢\s*資\s*料|備\s*註|---\s*以\s*下\s*空\s*白/;
     const sIdx = t.search(startRe);
     if (sIdx < 0) return '';
@@ -1984,6 +2020,21 @@
   function extractMortKind(body) {
     const m = body.match(/權\s*利\s*種\s*類[\s::]*([一-龥]{2,12}(?:抵押權|地上權|地役權|永佃權|典權|耕作權))/);
     return m ? m[1].replace(/\s/g, '') : '';
+  }
+
+  // 持分加總（分數運算）— owners 陣列 → {num, denom, pct, ok}
+  function computeShareSum(owners) {
+    let sum = { num: 0, denom: 1 };
+    const gcd = (x, y) => y === 0 ? x : gcd(y, x % y);
+    for (const o of owners) {
+      if (!o.share || !o.share.denom) continue;
+      const newNum = sum.num * o.share.denom + o.share.num * sum.denom;
+      const newDenom = sum.denom * o.share.denom;
+      const g = gcd(Math.abs(newNum) || 1, newDenom);
+      sum = { num: newNum / g, denom: newDenom / g };
+    }
+    const pct = sum.denom > 0 ? (sum.num / sum.denom) : 0;
+    return { num: sum.num, denom: sum.denom, pct, ok: Math.abs(pct - 1) < 0.0001 };
   }
 
   // 主函式：raw text → 結構化
@@ -2102,6 +2153,311 @@
   // 全局曝光（賞哥 console 測）
   window.parseLandDeedFull = parseLandDeedFull;
   window.parseLandDeedFromFile = parseLandDeedFromFile;
+
+  // ===== 階段 2-4：批次拖放 → 自動分流 + 解析 + 分組合併 + 自動建列 + 校驗 =====
+  // pipeline：files → parse → group by loNo/建號 → merge owners → addLandEntry/addBuildingEntry / 更新既有 row
+  async function batchDeedDispatch(fileList) {
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList).filter(f => /\.pdf$/i.test(f.name));
+    if (!files.length) { alert('沒拖到 PDF 檔'); return; }
+
+    const progEl = document.getElementById('batch-deed-progress');
+    if (progEl) { progEl.style.display = 'block'; progEl.innerHTML = `📦 開始解析 ${files.length} 份…`; }
+
+    // 階段 A：序列解析（不平行，避免 PDF.js race）
+    const results = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (progEl) progEl.innerHTML = `📦 解析中 ${i + 1}/${files.length}：${f.name}`;
+      try {
+        const buf = await f.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        let raw = '';
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const pg = await pdf.getPage(p);
+          raw += (await pg.getTextContent()).items.map(it => it.str).join(' ') + '\n';
+        }
+        // 分流：建物標示部 → 建物；只有土地標示部 → 土地；fallback 看「建號」
+        const t = fw(raw);
+        const hasBuildSec = /建\s*物\s*標\s*示\s*部/.test(t);
+        const hasLandSec  = /土\s*地\s*標\s*示\s*部/.test(t);
+        let type = 'unknown';
+        if (hasBuildSec) type = 'building';
+        else if (hasLandSec) type = 'land';
+        else if (/\d{4,5}\s*-\s*\d{3}\s*建\s*號/.test(t)) type = 'building';
+
+        let parsed = null;
+        if (type === 'land') parsed = parseLandDeedFull(raw);
+        else if (type === 'building') parsed = parseDeed(raw);
+
+        results.push({ file: f, raw, type, parsed });
+      } catch (e) {
+        console.error('[batch parse]', f.name, e);
+        results.push({ file: f, raw: '', type: 'error', error: e.message });
+      }
+    }
+
+    // 階段 B：分組
+    const landGroups = {}, buildingGroups = {}, errors = [], unknowns = [];
+    for (const r of results) {
+      if (r.type === 'error')   { errors.push(r); continue; }
+      if (r.type === 'unknown') { unknowns.push(r); continue; }
+      if (r.type === 'land') {
+        const key = r.parsed.loNo || `?land_${results.indexOf(r)}`;
+        (landGroups[key] = landGroups[key] || []).push(r);
+      } else if (r.type === 'building') {
+        const key = r.parsed.buildingNo || r.parsed.buildingNoRaw || `?bld_${results.indexOf(r)}`;
+        (buildingGroups[key] = buildingGroups[key] || []).push(r);
+      }
+    }
+
+    // 階段 C：dispatch
+    for (const [loNo, g] of Object.entries(landGroups)) {
+      try { await dispatchLandGroup(loNo, g); }
+      catch (e) { console.error('[dispatch land]', loNo, e); errors.push({ file: { name: loNo }, error: e.message }); }
+    }
+    for (const [bno, g] of Object.entries(buildingGroups)) {
+      try { await dispatchBuildingGroup(bno, g); }
+      catch (e) { console.error('[dispatch building]', bno, e); errors.push({ file: { name: bno }, error: e.message }); }
+    }
+
+    // 階段 D：總結
+    if (progEl) {
+      const parts = [];
+      if (Object.keys(landGroups).length)     parts.push(`<strong>${Object.keys(landGroups).length}</strong> 個地號（${results.filter(r => r.type==='land').length} 份）`);
+      if (Object.keys(buildingGroups).length) parts.push(`<strong>${Object.keys(buildingGroups).length}</strong> 個建號（${results.filter(r => r.type==='building').length} 份）`);
+      let html = `✅ 解析完成 ${results.length} 份：${parts.join('、')}`;
+      if (errors.length)   html += `<br><span style="color:#dc2626">⚠ ${errors.length} 個錯誤</span>`;
+      if (unknowns.length) html += `<br><span style="color:#dc2626">⚠ ${unknowns.length} 個無法判定：${unknowns.map(u => u.file.name).join('、')}</span>`;
+      progEl.innerHTML = html;
+      setTimeout(() => { if (progEl) progEl.style.display = 'none'; }, 8000);
+    }
+  }
+
+  // 找既有 row（同 loNo / 建號）；找不到回 null（需新建）
+  function findLandRowByLoNo(loNo) {
+    for (const [k, v] of Object.entries(_landData)) {
+      if (v && v.loNo === loNo) return parseInt(k, 10);
+    }
+    // fallback：空 row（沒填地號 + 沒解析）
+    for (const [k, v] of Object.entries(_landData)) {
+      if (v && !v.loNo && !v._raw && !v.fullArea) return parseInt(k, 10);
+    }
+    return null;
+  }
+  function findBuildingRowByBno(bno) {
+    for (const [k, v] of Object.entries(_buildingData)) {
+      if (v && (v.buildingNo === bno || v.buildingNoRaw === bno)) return parseInt(k, 10);
+    }
+    for (const [k, v] of Object.entries(_buildingData)) {
+      if (v && !v.buildingNo && !v._raw) return parseInt(k, 10);
+    }
+    return null;
+  }
+
+  // 合併 N 份土地謄本 group → 寫進 / 更新 _landData
+  // 重複偵測：既有 owners + 新 owners 用 (regOrder + name) 當 key 自動 dedup
+  // 同 key 多次出現 → dupCount++，不打擾用戶；最後在 banner 顯示
+  async function dispatchLandGroup(loNo, group) {
+    let idx = findLandRowByLoNo(loNo);
+    const existing = idx != null ? _landData[idx] : null;
+
+    const ownersByKey = {}, mortByKey = {};
+    let dupCount = 0;
+    // 既有先進 dedup map（跨拖入合併）
+    for (const o of (existing?.owners || [])) {
+      ownersByKey[`${o.regOrder}|${o.name}`] = o;
+    }
+    for (const m of (existing?.mortgages || [])) {
+      mortByKey[m.regOrder] = m;
+    }
+
+    let basic = null, firstFile = null;
+    for (const r of group) {
+      const p = r.parsed;
+      if (!basic) {
+        basic = { loNo: p.loNo, fullArea: p.fullArea, distName: p.distName,
+          prevYearROC: p.prevYearROC, prevMonth: p.prevMonth, prevValue: p.prevValue };
+        firstFile = r.file;
+      }
+      for (const o of (p.owners || [])) {
+        const key = `${o.regOrder}|${o.name}`;
+        if (ownersByKey[key]) dupCount++;
+        else ownersByKey[key] = { ...o, sourceFile: r.file.name };
+      }
+      for (const m of (p.mortgages || [])) {
+        if (!mortByKey[m.regOrder]) mortByKey[m.regOrder] = m;
+      }
+    }
+    const owners = Object.values(ownersByKey);
+    const mortgages = Object.values(mortByKey);
+    const ss = computeShareSum(owners);
+    const ownerNamesSet = new Set(owners.map(o => o.name));
+    const orphanObligors = mortgages.map(m => m.obligor).filter(n => n && !ownerNamesSet.has(n));
+
+    const myArea = ss.pct > 0 ? basic.fullArea * ss.pct : 0;
+    const ping = myArea > 0 ? p2(sqm2ping(myArea)) : 0;
+    const expected = extractExpectedParcels(group[0].raw, 'land');
+
+    const totalBatchCount = (existing?._batchCount || 0) + group.length;
+    const totalDupCount = (existing?._batchDupCount || 0) + dupCount;
+    const entry = {
+      loNo: basic.loNo, ping, fullArea: basic.fullArea,
+      numerator: ss.num, denominator: ss.denom,
+      detail: `${basic.fullArea}m² × ${ss.num}/${ss.denom} ≈ ${ping}坪`,
+      distName: basic.distName,
+      prevYearROC: basic.prevYearROC, prevMonth: basic.prevMonth, prevValue: basic.prevValue,
+      _raw: group[0].raw,
+      _fileName: firstFile?.name || '',
+      _batchCount: totalBatchCount,
+      _batchDupCount: totalDupCount,
+      expectedLandNos: expected.expectedLandNos,
+      expectedBuildingNos: expected.expectedBuildingNos,
+      owners, mortgages,
+      shareSum: { num: ss.num, denom: ss.denom },
+      shareSumPct: ss.pct,
+      shareSumOk: ss.ok,
+      orphanObligors,
+    };
+
+    if (idx == null) {
+      addLandEntry(entry);
+      idx = _landIdx - 1;
+    } else {
+      _landData[idx] = entry;
+      const lonoInput = document.getElementById(`land-lono-${idx}`);
+      const pingInput = document.getElementById(`land-ping-${idx}`);
+      const infoEl    = document.getElementById(`land-info-${idx}`);
+      const labelEl   = document.getElementById(`land-zone-label-${idx}`);
+      if (lonoInput) lonoInput.value = entry.loNo;
+      if (pingInput) pingInput.value = entry.ping;
+      if (infoEl)    infoEl.textContent = `✓ ${entry.fullArea} m²，加總 ${ss.num}/${ss.denom} ≈ ${entry.ping} 坪（${group.length} 份）`;
+      if (labelEl)   labelEl.textContent = `✓ ${group.length} 份合併`;
+    }
+
+    updateCard();
+    updateValidationBanner();
+    try { queryZoning(idx); } catch (e) { console.warn('queryZoning', e); }
+    updateShareBanner('land', idx);
+  }
+
+  // 合併 N 份建物謄本 group → 寫進 / 更新 _buildingData
+  async function dispatchBuildingGroup(bno, group) {
+    let idx = findBuildingRowByBno(bno);
+    const existing = idx != null ? _buildingData[idx] : null;
+
+    const ownersByKey = {};
+    let dupCount = 0;
+    for (const o of (existing?.owners || [])) {
+      ownersByKey[`${o.regOrder}|${o.name}`] = o;
+    }
+
+    let basic = null, firstFile = null;
+    for (const r of group) {
+      const p = r.parsed;
+      if (!basic) { basic = p; firstFile = r.file; }
+      for (const o of (p.owners || [])) {
+        const key = `${o.regOrder}|${o.name}`;
+        if (ownersByKey[key]) dupCount++;
+        else ownersByKey[key] = { ...o, sourceFile: r.file.name };
+      }
+    }
+    const owners = Object.values(ownersByKey);
+    const ss = computeShareSum(owners);
+    const ownerNamesSet = new Set(owners.map(o => o.name));
+    const orphanObligors = (basic.mortgageList || [])
+      .map(m => m.obligor).filter(n => n && !ownerNamesSet.has(n));
+
+    const totalBatchCount = (existing?._batchCount || 0) + group.length;
+    const totalDupCount = (existing?._batchDupCount || 0) + dupCount;
+    const entry = {
+      ...basic,
+      _raw: group[0].raw,
+      _fileName: firstFile?.name || '',
+      _batchCount: totalBatchCount,
+      _batchDupCount: totalDupCount,
+      owners,
+      shareSum: { num: ss.num, denom: ss.denom },
+      shareSumPct: ss.pct,
+      shareSumOk: ss.ok,
+      orphanObligors,
+    };
+    Object.assign(entry, extractExpectedParcels(group[0].raw, 'building'));
+
+    const isNew = idx == null;
+    if (isNew) idx = addBuildingEntry({});
+    _buildingData[idx] = entry;
+
+    const labelEl = document.getElementById(`building-zone-label-${idx}`);
+    const infoEl  = document.getElementById(`building-info-${idx}`);
+    const brief = [entry.buildingNo, entry.address || ''].filter(Boolean).join('　');
+    if (labelEl) labelEl.textContent = `✓ ${firstFile?.name || ''}（${group.length} 份）`;
+    if (infoEl) {
+      let txt = brief;
+      if (group.length > 1) txt += `（${group.length} 份合併，持分 ${ss.num}/${ss.denom}）`;
+      infoEl.textContent = txt;
+    }
+
+    try { syncDeedAlias(); } catch (e) {}
+    const priorParsed = Object.entries(_buildingData)
+      .filter(([k, v]) => +k !== idx && v && v.address).length;
+    if (priorParsed === 0 && entry.address) {
+      try { showParsedSummary(deed); } catch (e) { console.warn('showParsedSummary', e); }
+      try { _pointsTouched = false; } catch (e) {}
+    }
+    updateCard();
+    updateValidationBanner();
+    updateShareBanner('building', idx);
+  }
+
+  // 持分加總 banner（土地 + 建物共用）
+  function updateShareBanner(type, idx) {
+    const dataMap = type === 'land' ? _landData : _buildingData;
+    const entry = dataMap[idx];
+    const el = document.getElementById(`${type}-share-banner-${idx}`);
+    if (!el) return;
+    if (!entry || !(entry.owners || []).length) {
+      el.style.display = 'none';
+      return;
+    }
+    const owners = entry.owners;
+    const ss = entry.shareSum || { num: 0, denom: 1 };
+    const pct = entry.shareSumPct || 0;
+    const ok = !!entry.shareSumOk;
+    const orphans = entry.orphanObligors || [];
+    const lines = [];
+
+    if (ok) {
+      lines.push(`<span style="color:#16a34a;font-weight:600;">✅ 持分加總 100%（${owners.length} 人）</span>`);
+    } else if (pct > 1.0001) {
+      lines.push(`<span style="color:#dc2626;font-weight:600;">⚠️ 持分加總 ${(pct*100).toFixed(2)}% 超過 100%（${owners.length} 人，請檢查重複）</span>`);
+    } else if (pct > 0) {
+      const missing = ((1 - pct) * 100).toFixed(2);
+      lines.push(`<span style="color:#a16207;font-weight:600;">⚠️ 持分加總 ${(pct*100).toFixed(2)}%（缺 ${missing}%，可能漏件或不賣）</span>`);
+    }
+    if (orphans.length) {
+      lines.push(`<span style="color:#dc2626;">⚠️ 抵押義務人「${orphans.join('、')}」不在所有權人名單，可能漏帶謄本</span>`);
+    }
+    if (entry._batchCount && entry._batchCount > 1) {
+      let s = `（${entry._batchCount} 份謄本合併`;
+      if (entry._batchDupCount && entry._batchDupCount > 0) s += `，自動忽略 ${entry._batchDupCount} 份重複`;
+      s += '）';
+      lines.push(`<span style="color:#888;font-size:10px;">${s}</span>`);
+    }
+    if (!lines.length) { el.style.display = 'none'; return; }
+
+    let bg = '#f0fdf4', border = '#86efac';
+    if (orphans.length || pct > 1.0001) { bg = '#fef2f2'; border = '#fca5a5'; }
+    else if (!ok) { bg = '#fefce8'; border = '#fde047'; }
+
+    el.style.display = 'block';
+    el.style.background = bg;
+    el.style.border = `1px solid ${border}`;
+    el.innerHTML = lines.join('<br>');
+  }
+
+  window.batchDeedDispatch = batchDeedDispatch;
+  window.updateShareBanner = updateShareBanner;
 
   // ===== 使用分區查詢（高雄市都計 GIS）=====
   const URBAN_PROXY = 'https://kcg-urban-proxy.bingshang1019.workers.dev';
@@ -3880,6 +4236,25 @@
       }
     }
 
+    // ===== 多筆所有權人（批次模式校驗用）=====
+    // 同一建號可能多人共有（少見但存在），切「登記次序」抓每人
+    {
+      const ownSec = sliceOwnSection(t, 'building');
+      const ownerBlocks = splitByRegOrder(ownSec, false);
+      const owners = ownerBlocks.map(({ regOrder, body }) => ({
+        regOrder,
+        name: extractOwnerName(body),
+        share: extractShare(body),
+        regDate: extractRegDate(body),
+        cause: extractRegCause(body),
+      })).filter(o => o.name);
+      d.owners = owners;
+      const ss = computeShareSum(owners);
+      d.shareSum = { num: ss.num, denom: ss.denom };
+      d.shareSumPct = ss.pct;
+      d.shareSumOk = ss.ok;
+    }
+
     // ===== 附屬建物（全部動態解析）=====
     d.attachedBuildings = [];
     {
@@ -4020,9 +4395,12 @@
           const amtM = blk.match(/擔保債權總金額\s*新台幣\s*([\d,]+)\s*元/);
           if (!amtM) continue;
           const holderM = blk.match(/權利人\s+([^\s\n]+?)(?:\s*權利人統編|\s*統一編號|\s{2,}|\n)/);
+          // 義務人（批次校驗用：對應到所有權人）
+          const oblM = blk.match(/義\s*務\s*人\s+([^\s\n]+?)(?:\s*義務人統編|\s*統一編號|\s{2,}|\n)/);
           mortList.push({
             amt: parseInt(amtM[1].replace(/,/g, '')),
             holder: holderM ? holderM[1].trim() : '',
+            obligor: oblM ? oblM[1].trim() : '',
           });
         }
       }
@@ -4034,6 +4412,9 @@
       } else {
         d.hasMortgage = false;
       }
+      // orphan obligor 校驗：義務人不在所有權人名單 → 漏帶謄本警示
+      const ownerNames = new Set((d.owners || []).map(o => o.name));
+      d.orphanObligors = mortList.map(m => m.obligor).filter(n => n && !ownerNames.has(n));
     }
 
     // 使用執照（只取字號，不含後續說明文字）
