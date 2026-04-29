@@ -8583,6 +8583,11 @@ function renderCompetitorResults(data) {
   // 距離過濾統計（worker 端 geocode + haversine 過濾，自動 / 手選都套 maxDistanceKm）
   if (s.geoStats && s.geoStats.subjectLoc) {
     const g = s.geoStats;
+    // 本案座標 + Google Maps 連結（驗證 geocode 落點）
+    const lat = g.subjectLoc.lat.toFixed(5);
+    const lng = g.subjectLoc.lng.toFixed(5);
+    const gmapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    statsHtml += `<br>📍 本案座標：<code>${lat}, ${lng}</code> <a href="${gmapUrl}" target="_blank" style="color:#b45309;text-decoration:underline;">看 Google Maps 落點 ↗</a>`;
     if (g.nearbyDistricts && g.nearbyDistricts.length) {
       const label = g.userPicked ? '手選搜尋區' : `實際搜尋區（${s.maxDistanceKm} km 圓內）`;
       statsHtml += `<br>🗺️ ${label}：<strong>${g.nearbyDistricts.join('、')}</strong>`;
