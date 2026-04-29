@@ -8431,18 +8431,43 @@ function runCompetitorSearch(mode) {
   }
   // 進 loading
   showCmStep('loading');
-  const texts = ['啟動爬蟲中...', '正在搜尋 591 + 樂屋網...', '正在計算距離與歸併同物件...', '快好了，等下...'];
+  const texts = ['啟動爬蟲中...', '開瀏覽器抓 591 列表...', '翻頁中...', '計算距離 + 歸併同物件...', '快好了，等下...'];
   let ti = 0;
   const txtEl = document.getElementById('cmLoadingText');
   txtEl.textContent = texts[0];
-  const itv = setInterval(() => { ti++; if (ti < texts.length) txtEl.textContent = texts[ti]; }, 2000);
+  const itv = setInterval(() => { ti++; if (ti < texts.length) txtEl.textContent = texts[ti]; else txtEl.textContent = '591 比較久，再等一下...'; }, 3500);
 
-  // 後端尚未串接 → 用 PoC sample 模擬
-  // TODO: 替換成 fetch('https://shang-competitor.workers.dev/search', {method:'POST', body: JSON.stringify({mode, params, subject})})
-  setTimeout(() => {
+  // 真實 fetch shang-competitor Worker
+  const WORKER_URL = 'https://shang-competitor.bingshang1019.workers.dev/search';
+  fetch(WORKER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode, params, subject, sources: ['591'] }),
+  })
+  .then(res => res.json())
+  .then(data => {
     clearInterval(itv);
-    renderCompetitorResults({ mode, params, subject, ...CM_SAMPLE });
-  }, 4500);
+    if (data.ok) {
+      // 合併 client subject (含 totalArea/age) + worker subject (含 lat/lon)
+      renderCompetitorResults({
+        mode, params,
+        subject: { ...subject, ...(data.subject || {}) },
+        stats: data.stats,
+        items: data.items || [],
+        beyond: data.beyond || [],
+        failed: data.failed || [],
+      });
+    } else {
+      showCmStep('form');
+      alert('搜尋失敗：' + (data.error || '未知錯誤'));
+      console.error('Competitor search error', data);
+    }
+  })
+  .catch(e => {
+    clearInterval(itv);
+    showCmStep('form');
+    alert('連線錯誤：' + e.message + '\n\n（可能 Worker 還沒熱啟動，過 30 秒再試一次）');
+  });
 }
 function renderCompetitorResults(data) {
   showCmStep('result');
@@ -8464,9 +8489,8 @@ function renderCompetitorResults(data) {
   // stats
   const s = data.stats;
   document.getElementById('cmStats').innerHTML = `
-    📈 原始 ${s.rawCount} 筆 → 歸併 ${s.mergedCount} 筆 → ${data.params.radiusM}m 內 <strong>${s.withinRadius}</strong> 筆<br>
-    ⏱ 耗時 ${(s.elapsedMs/1000).toFixed(1)}s ｜ 超出範圍 ${s.beyondRadius} 筆 ｜ Geocode 失敗 ${s.geocodeFailed} 筆<br>
-    <span style="color:#999;font-size:11px;">⚠ 目前 UI 用 PoC 樣本資料，後端 Worker 串接中</span>
+    📈 原始 ${s.rawCount} 筆 → 歸併 ${s.mergedCount} 筆 → ${data.params.radiusM || 1000}m 內 <strong>${s.withinRadius}</strong> 筆<br>
+    ⏱ 耗時 ${(s.elapsedMs/1000).toFixed(1)}s ｜ 超出範圍 ${s.beyondRadius} 筆 ｜ Geocode 失敗 ${s.geocodeFailed} 筆
   `;
   // cards
   const wrap = document.getElementById('cmCards');

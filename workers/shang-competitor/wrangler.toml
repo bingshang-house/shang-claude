@@ -9,7 +9,7 @@ browser = { binding = "MYBROWSER" }
 # KV：geocode cache（30 天 TTL，避免重複 query Google Maps）
 [[kv_namespaces]]
 binding = "GEOCACHE"
-id = "REPLACE_WITH_KV_ID_AFTER_CREATE"
+id = "43dade7042dd4a229deb251ffa4eeabe"
 
 # 環境變數（部署後 wrangler secret put）
 # - GOOGLE_MAPS_API_KEY：Google Maps Geocoding API key
