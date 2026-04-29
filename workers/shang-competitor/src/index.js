@@ -12,10 +12,37 @@ const CORS = {
 };
 
 // ============ 高雄市區 sectionid 對照（591）============
+// ✅ 前鎮 = 249（2026-04-29 賞哥親自驗證）
+// 245 + 268 來自三選 URL「鳳山+前鎮+苓雅 = 249,245,268」推得，但哪個對哪個未驗證
+// 其他區為早期推測值，未經 591 真實驗證 → TODO 逐步確認
 const KAOHSIUNG_SECTIONS = {
-  '前鎮區': 249, '苓雅區': 248, '三民區': 246, '左營區': 247, '楠梓區': 245,
-  '鼓山區': 244, '鳳山區': 250, '小港區': 251, '新興區': 243, '前金區': 242,
-  '鹽埕區': 241,
+  '前鎮區': 249,           // ✅ 已驗證
+  '苓雅區': 268,           // 推測（兩擇一，可能是 245）
+  '鳳山區': 245,           // 推測（兩擇一，可能是 268）
+  '小港區': 251,           // ⚠️ 推測，未驗證
+  '三民區': 246,           // ⚠️ 推測，未驗證
+  '左營區': 247,           // ⚠️ 推測，未驗證
+  '鼓山區': 244,           // ⚠️ 推測，未驗證
+  '楠梓區': 250,           // ⚠️ 推測，未驗證
+  '新興區': 243,           // ⚠️ 推測，未驗證
+  '前金區': 242,           // ⚠️ 推測，未驗證
+  '鹽埕區': 241,           // ⚠️ 推測，未驗證
+};
+
+// 相鄰區對照（賞哥 2026-04-29 idea：跨區比較才符合房仲場景）
+// 規則：包含本區 + 地理上相鄰的區，最多 5 個（591 多選 URL 用逗號分隔）
+const ADJACENT_DISTRICTS = {
+  '前鎮區': ['前鎮區', '苓雅區', '小港區', '鳳山區'],
+  '苓雅區': ['苓雅區', '前鎮區', '三民區', '新興區', '前金區'],
+  '三民區': ['三民區', '苓雅區', '新興區', '鼓山區', '左營區'],
+  '左營區': ['左營區', '三民區', '鼓山區', '楠梓區'],
+  '楠梓區': ['楠梓區', '左營區'],
+  '鼓山區': ['鼓山區', '三民區', '左營區', '鹽埕區'],
+  '鳳山區': ['鳳山區', '前鎮區', '小港區', '三民區'],
+  '小港區': ['小港區', '前鎮區', '鳳山區'],
+  '新興區': ['新興區', '苓雅區', '三民區', '前金區'],
+  '前金區': ['前金區', '苓雅區', '新興區', '鹽埕區'],
+  '鹽埕區': ['鹽埕區', '鼓山區', '前金區'],
 };
 
 // 建物型態 → 591 shape 參數
@@ -39,8 +66,15 @@ function mergeKey(item) {
 async function scrape591(env, params, subject) {
   const districtRaw = extractDistrict(subject.address);
   const district = districtRaw || '前鎮區';
-  // 強制保險：若 KAOHSIUNG_SECTIONS 沒命中（可能因為 address 空白或區名變體），用前鎮區當 default
   const section = KAOHSIUNG_SECTIONS[district] || KAOHSIUNG_SECTIONS['前鎮區'];
+
+  // 相鄰區（含本區），組成 591 多選 URL「section=A,B,C,D」
+  const adjacentList = ADJACENT_DISTRICTS[district] || [district];
+  const adjacentSectionIds = adjacentList
+    .map(d => KAOHSIUNG_SECTIONS[d])
+    .filter(Boolean);
+  const adjacentSectionParam = adjacentSectionIds.join(',');
+
   const shape = SHAPE_MAP[subject.buildingType?.replace(/\s/g, '')] || 2;
 
   const ageMin = params.ageMin ?? 0;
@@ -48,16 +82,17 @@ async function scrape591(env, params, subject) {
   const areaMin = params.totalAreaMin ?? 0;
   const areaMax = params.totalAreaMax ?? 999;
 
-  function buildUrl({ keywords, useFilter, firstRow = 0 }) {
+  function buildUrl({ keywords, useFilter, firstRow = 0, sectionOverride }) {
     let u = `https://sale.591.com.tw/?regionid=17&shape=${shape}&firstRow=${firstRow}&shType=list`;
+    const sectionToUse = sectionOverride !== undefined ? sectionOverride : section;
     if (useFilter) {
       u += `&houseage=${ageMin}_${ageMax}&area=${Math.floor(areaMin)}_${Math.ceil(areaMax)}`;
-      if (section) u += `&section=${section}`;
+      if (sectionToUse) u += `&section=${sectionToUse}`;
       if (params.priceMin || params.priceMax) {
         u += `&price=${params.priceMin || 0}_${params.priceMax || 999999}`;
       }
-    } else if (section) {
-      u += `&section=${section}`;
+    } else if (sectionToUse) {
+      u += `&section=${sectionToUse}`;
     }
     if (keywords) u += `&keywords=${encodeURIComponent(keywords)}`;
     return u;
@@ -77,12 +112,19 @@ async function scrape591(env, params, subject) {
     req.continue();
   });
 
+  // 每個階段限 25 秒 wall clock，超時提前 break，避免 worker 整體 hang 爆 timeout
   async function scrapePages(url, maxPages, matchType) {
     const items = [];
+    const stageStart = Date.now();
+    const STAGE_TIMEOUT_MS = 25000;
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
       await page.waitForSelector('.ware-item, .no-result', { timeout: 10000 }).catch(() => null);
       for (let p = 0; p < maxPages; p++) {
+        if (Date.now() - stageStart > STAGE_TIMEOUT_MS) {
+          console.warn(`[${matchType}] stage timeout at page ${p}, returning ${items.length} items`);
+          break;
+        }
         await new Promise(r => setTimeout(r, 600));
         const pageItems = await page.evaluate(parseListPage);
         if (!pageItems.length) break;
@@ -107,18 +149,22 @@ async function scrape591(env, params, subject) {
   const allItems = [];
   const stages = [];
 
-  // 階段 1：同社區（用 community 名搜尋，1 頁就夠 — 一個社區掛賣通常 < 30 筆）
+  // 階段 1：同社區（keyword 不限區，社區名搜全市，1 頁就夠）
   if (subject.community) {
-    const url1 = buildUrl({ keywords: subject.community, useFilter: false });
+    const url1 = buildUrl({ keywords: subject.community, useFilter: false, sectionOverride: '' });
     const stage1 = await scrapePages(url1, 1, 'same_community');
     stages.push({ name: '同社區', url: url1, count: stage1.length });
     allItems.push(...stage1);
   }
 
-  // 階段 2：鄰近條件（同區 + ±10 坪 / ±5 年）
-  const url2 = buildUrl({ useFilter: true });
+  // 階段 2：本區 + 相鄰區條件搜（最多 5 區一起 ±10 坪 / ±5 年，3 頁）
+  const url2 = buildUrl({ useFilter: true, sectionOverride: adjacentSectionParam });
   const stage2 = await scrapePages(url2, 3, 'nearby');
-  stages.push({ name: '鄰近條件', url: url2, count: stage2.length });
+  stages.push({
+    name: `本區+相鄰（${adjacentList.length} 區）`,
+    url: url2,
+    count: stage2.length,
+  });
   allItems.push(...stage2);
 
   await browser.close();
