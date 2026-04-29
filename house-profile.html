@@ -1854,6 +1854,220 @@
     return Object.values(_landData).reduce((s, e) => s + (e.ping || 0), 0);
   }
 
+  // ===== 階段 1：完整土地謄本解析（多人 + 抵押 + 既有欄位）=====
+  // 純函式 raw text → 結構化 JSON。先不接 UI，在 console 跑驗收 parser 正確性。
+  // 用法（dev）：window.parseLandDeedFull(rawText) 或 await parseLandDeedFromFile(file)
+  // 設計：登記次序當切塊 anchor、漢字 capture 限 [一-龥＊○]{1,15}、section-level compact
+
+  // 漢字 + 遮蔽符號 + 法人後綴可能字（限制 backtrack 範圍）
+  const NAME_CHAR = '[一-龥＊○\\*Ａ-Ｚａ-ｚA-Za-z]';
+
+  // 把 raw 切到「土地所有權部」section
+  function sliceOwnSection(t) {
+    const startRe = /土\s*地\s*所\s*有\s*權\s*部/;
+    const endRe = /土\s*地\s*他\s*項\s*權\s*利\s*部|本\s*謄\s*本\s*查\s*詢\s*資\s*料|備\s*註/;
+    const sIdx = t.search(startRe);
+    if (sIdx < 0) return '';
+    const after = t.slice(sIdx);
+    const eMatch = after.match(endRe);
+    return eMatch ? after.slice(0, eMatch.index) : after;
+  }
+
+  // 切到「土地他項權利部」section
+  function sliceMortSection(t) {
+    const startRe = /土\s*地\s*他\s*項\s*權\s*利\s*部/;
+    const endRe = /本\s*謄\s*本\s*查\s*詢\s*資\s*料|備\s*註|---\s*以\s*下\s*空\s*白/;
+    const sIdx = t.search(startRe);
+    if (sIdx < 0) return '';
+    const after = t.slice(sIdx);
+    const eMatch = after.match(endRe);
+    return eMatch ? after.slice(0, eMatch.index) : after;
+  }
+
+  // 用「登記次序 XXXX」當 anchor 切塊，回傳 [{regOrder, body}]
+  // 所有權部：4 位數（0001 / 0002）
+  // 他項權利部：父子號（0001-001 / 0001-002）
+  function splitByRegOrder(section, isMort) {
+    if (!section) return [];
+    // 找所有「登記次序」位置
+    const anchorRe = /登\s*記\s*次\s*序/g;
+    const positions = [];
+    let m;
+    while ((m = anchorRe.exec(section)) !== null) positions.push(m.index);
+    if (!positions.length) return [];
+    const blocks = [];
+    for (let i = 0; i < positions.length; i++) {
+      const start = positions[i];
+      const end = i + 1 < positions.length ? positions[i + 1] : section.length;
+      const body = section.slice(start, end);
+      // 抓次序值：4 位 + 可選 -3 位
+      const orderRe = isMort
+        ? /登\s*記\s*次\s*序[\s::]*(\d{4}\s*-\s*\d{3}|\d{4})/
+        : /登\s*記\s*次\s*序[\s::]*(\d{4})/;
+      const om = body.match(orderRe);
+      const regOrder = om ? om[1].replace(/\s/g, '') : `?${i}`;
+      blocks.push({ regOrder, body });
+    }
+    return blocks;
+  }
+
+  // 抓姓名（個人「黃＊＊」、法人「○○有限公司」）
+  // 切片：所有權人 anchor → 統一編號 / 身分證 / 住址 / 登記日期 之前
+  function extractOwnerName(body) {
+    const m = body.match(/所\s*有\s*權\s*人[\s::]*((?:[一-龥＊○]|\*){1,15}(?:[股有限公司行號社]{1,8})?)\s*(?:統一編號|身分證|住址|登記日期|出生日期|權利範圍)/);
+    if (m) return m[1].replace(/\s/g, '');
+    // fallback：只抓第一段漢字 + 遮蔽符
+    const m2 = body.match(/所\s*有\s*權\s*人[\s::]*([一-龥＊○\*]{2,15})/);
+    return m2 ? m2[1].replace(/\s/g, '') : '';
+  }
+
+  // 抓權利範圍：「分之」式 / 「全部」單詞
+  function extractShare(body) {
+    // 「全部」單詞 → 1/1
+    if (/[権權]\s*利\s*[範]\s*[囲圍][\s::]*全\s*部(?!\s*\d)/.test(body)) {
+      return { num: 1, denom: 1, raw: '全部' };
+    }
+    const m = body.match(/[権權]\s*利\s*[範]\s*[囲圍][\s::]*(?:全\s*部|共\s*有)?\s*(\d+)\s*分\s*之\s*(\d+)/);
+    if (m) {
+      return { num: parseInt(m[2], 10), denom: parseInt(m[1], 10), raw: `${m[1]}分之${m[2]}` };
+    }
+    return { num: 0, denom: 0, raw: '' };
+  }
+
+  // 登記日期（民國年月日）
+  function extractRegDate(body) {
+    const m = body.match(/登\s*記\s*日\s*期[\s::]*民\s*國\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日/);
+    if (!m) return null;
+    return { yearROC: parseInt(m[1], 10), month: parseInt(m[2], 10), day: parseInt(m[3], 10) };
+  }
+
+  // 登記原因（買賣 / 繼承 / 贈與 / 拍賣 ...）
+  function extractRegCause(body) {
+    const m = body.match(/登\s*記\s*原\s*因[\s::]*([一-龥]{2,8})/);
+    return m ? m[1] : '';
+  }
+
+  // 抵押義務人（土地他項權利部 / 設定權利部）
+  function extractObligor(body) {
+    const m = body.match(/[債務]?\s*務\s*人[\s::]*((?:[一-龥＊○]|\*){2,15})\s*(?:統一編號|身分證|住址|權利人|債權額|擔保)/);
+    if (m) return m[1].replace(/\s/g, '');
+    const m2 = body.match(/義\s*務\s*人[\s::]*([一-龥＊○\*]{2,15})/);
+    return m2 ? m2[1].replace(/\s/g, '') : '';
+  }
+
+  // 抵押權利人 / 銀行
+  function extractCreditor(body) {
+    const m = body.match(/[權]?\s*利\s*人[\s::]*([一-龥]{2,20}(?:銀行|農會|公司|信用合作社|郵政儲金|資產管理)[一-龥]{0,5})/);
+    if (m) return m[1].replace(/\s/g, '');
+    const m2 = body.match(/權\s*利\s*人[\s::]*([一-龥A-Za-z＊○\*]{2,20})/);
+    return m2 ? m2[1].replace(/\s/g, '') : '';
+  }
+
+  // 擔保債權金額（元）
+  function extractMortAmount(body) {
+    // section-compact 後抓「擔保債權總金額 5,000,000元」這類
+    const compact = body.replace(/\s+/g, '');
+    const m = compact.match(/(?:擔保債權總?金額|債權額比例|本金最高限額)(\d[\d,]*)元/);
+    return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+  }
+
+  // 主函式：raw text → 結構化
+  function parseLandDeedFull(raw) {
+    const t = fw(raw);
+
+    // === 標示部 ===
+    const loNoM = t.match(/([^\s]{2,6}段(?:[^\s]{1,6}小段)?\s*[\d\-]+)\s*地號/);
+    const areaM = t.match(/面\s*積\s*([\d]+(?:\.[\d]+)?)\s*平\s*方\s*公\s*尺/);
+    const distM = t.match(/高雄市([^\s]{1,4}區)/);
+    const loNo = loNoM ? loNoM[1].replace(/\s/g, '') : '';
+    const fullArea = areaM ? parseFloat(areaM[1]) : 0;
+    const distName = distM ? distM[1] : '';
+
+    // 前次移轉現值（既有邏輯）
+    let prevYearROC = null, prevMonth = null, prevValue = null;
+    const prevSecIdx = t.search(/前\s*次\s*移\s*轉\s*現\s*值\s*或\s*原\s*規\s*定\s*地\s*價/);
+    if (prevSecIdx >= 0) {
+      const compact = t.slice(prevSecIdx, prevSecIdx + 800).replace(/\s+/g, '');
+      const pm = compact.match(/(\d{2,3})年(\d{1,2})月\d{4}(\d[\d,]*(?:\.\d+)?)元/);
+      if (pm) {
+        prevYearROC = parseInt(pm[1], 10);
+        prevMonth = parseInt(pm[2], 10);
+        prevValue = parseFloat(pm[3].replace(/,/g, ''));
+      }
+    }
+
+    // === 所有權部多人切塊 ===
+    const ownSec = sliceOwnSection(t);
+    const ownerBlocks = splitByRegOrder(ownSec, false);
+    const owners = ownerBlocks.map(({ regOrder, body }) => ({
+      regOrder,
+      name: extractOwnerName(body),
+      share: extractShare(body),
+      regDate: extractRegDate(body),
+      cause: extractRegCause(body),
+    })).filter(o => o.name); // 名字抽不到視為解析失敗，丟掉
+
+    // === 他項權利部多筆切塊 ===
+    const mortSec = sliceMortSection(t);
+    const mortBlocks = splitByRegOrder(mortSec, true);
+    const mortgages = mortBlocks.map(({ regOrder, body }) => ({
+      regOrder,
+      obligor: extractObligor(body),
+      creditor: extractCreditor(body),
+      amount: extractMortAmount(body),
+    })).filter(m => m.obligor || m.creditor);
+
+    // 持分加總（分數運算，避免浮點）
+    let shareSum = { num: 0, denom: 1 };
+    for (const o of owners) {
+      if (!o.share.denom) continue;
+      // a/b + c/d = (a*d + c*b) / (b*d)
+      const newNum = shareSum.num * o.share.denom + o.share.num * shareSum.denom;
+      const newDenom = shareSum.denom * o.share.denom;
+      // 簡化（最大公因數）
+      const gcd = (x, y) => y === 0 ? x : gcd(y, x % y);
+      const g = gcd(Math.abs(newNum), newDenom);
+      shareSum = { num: newNum / g, denom: newDenom / g };
+    }
+    const shareSumPct = shareSum.denom > 0 ? (shareSum.num / shareSum.denom) : 0;
+
+    // 義務人對應驗證（每個 mortgage obligor 是否在 owners 名單）
+    const ownerNames = new Set(owners.map(o => o.name));
+    const orphanObligors = mortgages
+      .map(m => m.obligor)
+      .filter(n => n && !ownerNames.has(n));
+
+    return {
+      loNo,
+      fullArea,
+      distName,
+      prevYearROC, prevMonth, prevValue,
+      owners,
+      mortgages,
+      shareSum,
+      shareSumPct,
+      shareSumOk: Math.abs(shareSumPct - 1) < 0.0001,
+      orphanObligors,
+      _raw: raw, // debug 用
+    };
+  }
+
+  // dev/console helper：拖一份 PDF 進來看 parsed JSON
+  async function parseLandDeedFromFile(file) {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let raw = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const pg = await pdf.getPage(i);
+      raw += (await pg.getTextContent()).items.map(it => it.str).join(' ') + '\n';
+    }
+    return parseLandDeedFull(raw);
+  }
+
+  // 全局曝光（賞哥 console 測）
+  window.parseLandDeedFull = parseLandDeedFull;
+  window.parseLandDeedFromFile = parseLandDeedFromFile;
+
   // ===== 使用分區查詢（高雄市都計 GIS）=====
   const URBAN_PROXY = 'https://kcg-urban-proxy.bingshang1019.workers.dev';
   const PROXY_BASE  = 'http://urbanproxy.kcg.gov.tw/arcgis/rest/services';
