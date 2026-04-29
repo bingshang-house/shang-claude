@@ -8522,6 +8522,13 @@ function renderCompetitorResults(data) {
     📈 原始 ${s.rawCount} 筆 → 歸併 ${s.mergedCount} 筆<br>
     🏠 同社區 <strong>${s.sameCommunity}</strong> 筆 ｜ 📍 鄰近條件 <strong>${s.nearby}</strong> 筆 ｜ ⏱ ${(s.elapsedMs/1000).toFixed(1)}s
   `;
+  // 距離過濾統計（worker 端 geocode + haversine 過濾 1km 外）
+  if (s.geoStats && s.geoStats.subjectLoc) {
+    const g = s.geoStats;
+    statsHtml += `<br>📐 ${s.maxDistanceKm} km 內過濾：保留 <strong>${g.kept}</strong> 筆 ｜ 排除 <strong>${g.dropped}</strong> 筆${g.ungeocoded ? ` ｜ 無法定位 ${g.ungeocoded} 筆（保守保留）` : ''}`;
+  } else if (s.geoStats && !s.geoStats.subjectLoc) {
+    statsHtml += `<br>⚠️ 本案地址 geocode 失敗，未做距離過濾`;
+  }
   // debug：顯示每階段 URL + 抓到筆數（任一階段 0 筆就展開）
   if (s.stages && s.stages.length) {
     const anyZero = s.stages.some(st => st.count === 0);
@@ -8587,7 +8594,7 @@ function renderCompetitorResults(data) {
         <div class="cm-card-img">${x.imgSrc ? `<img src="${x.imgSrc}" alt="" loading="lazy">` : ''}</div>
         <div class="cm-card-info">
           <div class="cm-card-title">#${i+1} ${x.community || '(無社區名)'}${x.road ? `（${x.road}）` : ''}</div>
-          <div class="cm-card-meta">${x.rooms || ''} ｜ 權狀 ${x.totalArea} / 主建 ${x.mainArea}坪 ｜ ${x.age}年 ｜ ${x.floor}</div>
+          <div class="cm-card-meta">${x.rooms || ''} ｜ 權狀 ${x.totalArea} / 主建 ${x.mainArea}坪 ｜ ${x.age}年 ｜ ${x.floor}${x._distanceKm != null ? ` ｜ 📍 ${x._distanceKm} km` : ''}</div>
           <div class="cm-card-price">💰 ${(x.totalPrice||0).toLocaleString()} 萬<span class="unit">${x.unitPrice} 萬/坪${x.hasPark ? ' ｜ ✓ 含車位' : ''}</span></div>
           <div class="cm-card-tags">${multi}${warn}${src}</div>
           <div style="margin-top:6px;">${links}</div>

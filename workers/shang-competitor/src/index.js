@@ -52,6 +52,61 @@ const SHAPE_MAP = { '公寓': 1, '電梯大樓': 2, '大樓': 2, '透天厝': 3,
 // ============ Helper ============
 function livingFloor(f) { return ((f || '').match(/^(\d+(?:~\d+)?)F/) || [])[1] || (f || ''); }
 
+// haversine 距離（km），輸入 {lat, lng}
+function haversineKm(a, b) {
+  if (!a || !b) return null;
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+// Google Maps Geocoding + KV cache（30 天）
+async function geocodeWithCache(env, query) {
+  if (!query || !query.trim()) return null;
+  const q = query.trim().slice(0, 200);
+  const cacheKey = `geo:${q}`;
+  try {
+    const cached = await env.GEOCACHE.get(cacheKey, { type: 'json' });
+    if (cached && cached.lat && cached.lng) return cached;
+    if (cached && cached.notFound) return null; // 之前查過就是查不到，不重複打 API
+  } catch (_) { /* KV miss 繼續 geocode */ }
+  if (!env.GOOGLE_MAPS_API_KEY) return null;
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}&language=zh-TW&region=tw&key=${env.GOOGLE_MAPS_API_KEY}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status === 'OK' && data.results?.[0]?.geometry?.location) {
+      const { lat, lng } = data.results[0].geometry.location;
+      const out = { lat, lng };
+      env.GEOCACHE.put(cacheKey, JSON.stringify(out), { expirationTtl: 30 * 24 * 3600 }).catch(() => {});
+      return out;
+    }
+    // ZERO_RESULTS / not found → 寫個 notFound 標記，避免重複打 API
+    env.GEOCACHE.put(cacheKey, JSON.stringify({ notFound: true }), { expirationTtl: 7 * 24 * 3600 }).catch(() => {});
+    return null;
+  } catch (e) {
+    console.error('geocode failed', q, e.message);
+    return null;
+  }
+}
+
+// 591 item → geocode query 字串（按優先級組合）
+function itemGeocodeQuery(item) {
+  const district = item.district || '';
+  const community = (item.community || '').trim();
+  const road = (item.road || '').trim();
+  const parts = [];
+  if (community) parts.push(community);
+  if (district) parts.push(district.startsWith('高雄市') ? district : `高雄市${district}`);
+  else parts.push('高雄市');
+  if (road && road !== community) parts.push(road);
+  return parts.join(' ');
+}
+
 function extractDistrict(addr) {
   const m = (addr || '').match(/([一-龥]+(?:區|鄉|鎮|市))/);
   return m ? m[1] : null;
@@ -385,6 +440,8 @@ export default {
     }
 
     const start = Date.now();
+    // 距離過濾半徑（km），預設 1km；同社區（matchType=same_community）不受此限制
+    const maxDistanceKm = typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 1;
 
     try {
       // 1. 爬資料（並行多來源）
@@ -398,6 +455,45 @@ export default {
       const all = allByPlatform.flatMap(x => x.items || []);
       const platformStages = allByPlatform.flatMap(x => x.stages || []);
       const platformDebug = allByPlatform.find(x => x._debugInfo)?._debugInfo || null;
+
+      // 1.5 距離過濾：subject geocode 一次 + 每筆 nearby 物件 geocode + haversine
+      // 同社區（same_community）保留所有，不算距離（信任 591 keyword + isSameCommunity）
+      const subjectQuery = subject.community
+        ? `${subject.community} ${(subject.address || '').replace(/^.+市/, '高雄市')}`.trim()
+        : (subject.address || '');
+      const subjectLoc = await geocodeWithCache(env, subjectQuery);
+      let geoStats = { subjectLoc, total: 0, kept: 0, dropped: 0, ungeocoded: 0 };
+      if (subjectLoc) {
+        // 並行 geocode 每筆 nearby item（same_community 不算）
+        const nearbyItems = all.filter(x => x.matchType !== 'same_community');
+        geoStats.total = nearbyItems.length;
+        const distances = await Promise.all(nearbyItems.map(async (item) => {
+          const q = itemGeocodeQuery(item);
+          const loc = await geocodeWithCache(env, q);
+          if (!loc) return null;
+          return haversineKm(subjectLoc, loc);
+        }));
+        // mark item with distance + filter
+        const survivors = [];
+        for (let i = 0; i < nearbyItems.length; i++) {
+          const item = nearbyItems[i];
+          const d = distances[i];
+          if (d == null) {
+            // geocode 失敗 → 保守保留（避免漏合理物件，前端會看到 distance:null）
+            item._distanceKm = null;
+            survivors.push(item);
+            geoStats.ungeocoded++;
+          } else {
+            item._distanceKm = Math.round(d * 100) / 100;
+            if (d <= maxDistanceKm) { survivors.push(item); geoStats.kept++; }
+            else geoStats.dropped++;
+          }
+        }
+        // 重組 all：same_community 全留 + nearby 過濾後
+        const same = all.filter(x => x.matchType === 'same_community');
+        all.length = 0;
+        all.push(...same, ...survivors);
+      }
 
       // 2. 歸併
       const merged = mergeItems(all);
@@ -423,13 +519,15 @@ export default {
         }
       }
 
-      // 排序：同社區依單價、鄰近依屋齡接近度 + 單價
+      // 排序：同社區依單價、鄰近依「距離 → 屋齡接近度 → 單價」
       sameCommunity.sort((a, b) => (a.unitPrice || 9999) - (b.unitPrice || 9999));
       nearby.sort((a, b) => {
-        const ageDiff = (subject.age || 0);
-        const da = Math.abs((a.age || 0) - ageDiff);
-        const db = Math.abs((b.age || 0) - ageDiff);
-        if (da !== db) return da - db;
+        const da = a._distanceKm != null ? a._distanceKm : 999;
+        const db = b._distanceKm != null ? b._distanceKm : 999;
+        if (Math.abs(da - db) > 0.05) return da - db; // 50m 以上的差才用距離排
+        const ageA = Math.abs((a.age || 0) - (subject.age || 0));
+        const ageB = Math.abs((b.age || 0) - (subject.age || 0));
+        if (ageA !== ageB) return ageA - ageB;
         return (a.unitPrice || 9999) - (b.unitPrice || 9999);
       });
 
@@ -455,6 +553,8 @@ export default {
           debugSample,            // 591 第一筆 innerText 樣本（前 350 字）
           stages: platformStages, // 每階段的 URL + 抓到筆數
           debugInfo: platformDebug, // worker 收到的 subject + 算出的 district / section
+          maxDistanceKm,
+          geoStats,               // { subjectLoc, total, kept, dropped, ungeocoded }
         },
         sameCommunity: sameCommunity.map(cleanItem),
         nearby: nearby.slice(0, 30).map(cleanItem),  // 鄰近最多顯示 30 筆
