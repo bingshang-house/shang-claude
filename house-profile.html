@@ -8528,14 +8528,14 @@ function runCompetitorSearch(mode) {
   let ti = 0;
   const txtEl = document.getElementById('cmLoadingText');
   txtEl.textContent = texts[0];
-  const itv = setInterval(() => { ti++; if (ti < texts.length) txtEl.textContent = texts[ti]; else txtEl.textContent = '591 比較久，再等一下...'; }, 3500);
+  const itv = setInterval(() => { ti++; if (ti < texts.length) txtEl.textContent = texts[ti]; else txtEl.textContent = '591 + 信義並行抓，再等下...'; }, 3500);
 
   // 真實 fetch shang-competitor Worker
   const WORKER_URL = 'https://shang-competitor.bingshang1019.workers.dev/search';
   fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, params, subject, sources: ['591'] }),
+    body: JSON.stringify({ mode, params, subject, sources: ['591', 'sinyi'] }),
   })
   .then(res => res.json())
   .then(data => {
@@ -8658,8 +8658,10 @@ function renderCompetitorResults(data) {
   const renderCard = (x, i) => {
     const multi = x.agentCount > 1 ? `<span class="cm-tag multi">🤝 ${x.agentCount} 家掛牌</span>` : '';
     const warn = (x.warningTags || []).map(t => `<span class="cm-tag danger">⚠ ${t}</span>`).join('');
-    const src = (x.sources || []).map(s => `<span class="cm-tag">${s === '591' ? '🅰 591' : '🅱 樂屋'}</span>`).join('');
-    const links = Object.entries(x.links || {}).filter(([_,v])=>v).map(([k,v]) => `<a href="${v}" target="_blank" class="cm-card-link">看 ${k} →</a>`).join('');
+    const SRC_LABELS = { '591': '🅰 591', 'sinyi': '🅒 信義', 'rakuya': '🅱 樂屋' };
+    const src = (x.sources || []).map(s => `<span class="cm-tag">${SRC_LABELS[s] || s}</span>`).join('');
+    const LINK_LABELS = { '591': '591', 'sinyi': '信義', 'rakuya': '樂屋' };
+    const links = Object.entries(x.links || {}).filter(([_,v])=>v).map(([k,v]) => `<a href="${v}" target="_blank" class="cm-card-link">看 ${LINK_LABELS[k] || k} →</a>`).join('');
     return `
       <div class="cm-card">
         <div class="cm-card-img">${x.imgSrc ? `<img src="${x.imgSrc}" alt="" loading="lazy">` : ''}</div>

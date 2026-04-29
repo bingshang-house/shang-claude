@@ -49,6 +49,24 @@ const ADJACENT_DISTRICTS = {
 // 建物型態 → 591 shape 參數
 const SHAPE_MAP = { '公寓': 1, '電梯大樓': 2, '大樓': 2, '透天厝': 3, '透天': 3, '別墅': 4 };
 
+// ============ 高雄市區 zipcode 對照（信義/樂屋）============
+// 中華郵政公開靜態資料；信義 URL slug `{zip}-zip`
+const KAOHSIUNG_ZIPS = {
+  '新興區': '800', '前金區': '801', '苓雅區': '802', '鹽埕區': '803',
+  '鼓山區': '804', '旗津區': '805', '前鎮區': '806', '三民區': '807',
+  '楠梓區': '811', '小港區': '812', '左營區': '813',
+  '仁武區': '814', '大社區': '815', '岡山區': '820', '路竹區': '821',
+  '阿蓮區': '822', '田寮區': '823', '燕巢區': '824', '橋頭區': '825',
+  '梓官區': '826', '彌陀區': '827', '永安區': '828', '湖內區': '829',
+  '鳳山區': '830', '大寮區': '831', '林園區': '832', '鳥松區': '833',
+  '大樹區': '840', '旗山區': '842', '美濃區': '843', '六龜區': '844',
+  '內門區': '845', '杉林區': '846', '甲仙區': '847', '桃源區': '848',
+  '那瑪夏區': '849', '茂林區': '851', '茄萣區': '852',
+};
+
+// 信義建物型態 slug（路徑 `{type}-type`，可複選 +）
+const SINYI_TYPE_MAP = { '公寓': 'apartment', '電梯大樓': 'dalou', '大樓': 'dalou', '透天厝': 'townhouse', '透天': 'townhouse', '別墅': 'townhouse' };
+
 // ============ Helper ============
 function livingFloor(f) { return ((f || '').match(/^(\d+(?:~\d+)?)F/) || [])[1] || (f || ''); }
 
@@ -392,6 +410,237 @@ async function scrape591(env, params, subject, opts = {}) {
   return { items: allItems.map(x => ({ ...x, source: '591' })), stages, _debugInfo };
 }
 
+// ============ 信義房屋爬蟲（同社區 keyword + 鄰近區 zip 並行 + Browser Rendering）============
+// 2026-04-29 Playwright probe 確認 URL slug 結構，詳見 reference_sinyi_structure.md
+async function scrapeSinyi(env, params, subject, opts = {}) {
+  const districtRaw = extractDistrict(subject.address);
+  const district = districtRaw || '前鎮區';
+  const zip = KAOHSIUNG_ZIPS[district] || '806';
+
+  let adjacentList = (opts.nearbyDistricts && opts.nearbyDistricts.length)
+    ? opts.nearbyDistricts
+    : (ADJACENT_DISTRICTS[district] || [district]);
+  let adjacentZips = adjacentList
+    .map(d => ({ d, zip: KAOHSIUNG_ZIPS[d] }))
+    .filter(x => x.zip);
+  if (adjacentZips.length === 0) {
+    adjacentList = ['前鎮區', '苓雅區'];
+    adjacentZips = [{ d: '前鎮區', zip: '806' }, { d: '苓雅區', zip: '802' }];
+  }
+
+  const _debugInfo = {
+    receivedAddress: subject.address || '(空)',
+    receivedCommunity: subject.community || '(空)',
+    finalDistrict: district,
+    zipResolved: zip,
+    adjacentList,
+    adjacentZips,
+  };
+
+  const ageMin = params.ageMin ?? 0;
+  const ageMax = params.ageMax ?? 99;
+  const areaMin = params.totalAreaMin ?? 0;
+  const areaMax = params.totalAreaMax ?? 999;
+
+  // 信義 URL 段：filter slugs → city → zip → sort → page
+  function buildUrl({ keyword, useFilter, zipOverride, page = 1 }) {
+    const segs = [];
+    if (keyword) segs.push(`${encodeURIComponent(keyword)}-keyword`);
+    if (useFilter) {
+      if (params.priceMin || params.priceMax) {
+        segs.push(`${params.priceMin || 0}-${params.priceMax || 99999}-price`);
+      }
+      if (areaMin || areaMax < 999) {
+        segs.push(`${Math.floor(areaMin)}-${Math.ceil(areaMax)}-area`);
+      }
+      if (params.mainAreaMin != null || params.mainAreaMax != null) {
+        segs.push(`${Math.floor(params.mainAreaMin || 0)}-${Math.ceil(params.mainAreaMax || 999)}-balconyarea`);
+      }
+      if (ageMin || ageMax < 99) {
+        segs.push(`${Math.floor(ageMin)}-${Math.ceil(ageMax)}-year`);
+      }
+    }
+    segs.push('Kaohsiung-city');
+    if (zipOverride) segs.push(`${zipOverride}-zip`);
+    segs.push('default-desc', String(page));
+    return `https://www.sinyi.com.tw/buy/list/${segs.join('/')}`;
+  }
+
+  const browser = await puppeteer.launch(env.MYBROWSER);
+
+  async function newConfiguredPage() {
+    const p = await browser.newPage();
+    await p.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36');
+    await p.setRequestInterception(true);
+    p.on('request', req => {
+      const type = req.resourceType();
+      const u = req.url();
+      if (type === 'image' || type === 'media' || type === 'font' || type === 'stylesheet') return req.abort();
+      if (/google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|criteo|googlesyndication|adservice|tiktok|line-scdn|tagcommander|matomo|sentry/.test(u)) return req.abort();
+      req.continue();
+    });
+    return p;
+  }
+
+  async function scrapeOneUrl(url, matchType) {
+    const items = [];
+    let pageDebug = null;
+    const page = await newConfiguredPage();
+    try {
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
+      } catch (gotoErr) {
+        console.warn(`[sinyi ${matchType}] goto timeout:`, gotoErr.message);
+      }
+      // 等 Next.js hydrate 出卡片
+      try {
+        await page.waitForSelector('.buy-list-item, [class*="searchNoResult"]', { timeout: 15000 });
+      } catch (_) { /* 沒等到也試一下 evaluate */ }
+      let cardCount = 0;
+      for (let retry = 0; retry < 4; retry++) {
+        cardCount = await page.evaluate(() => document.querySelectorAll('.buy-list-item').length).catch(() => 0);
+        if (cardCount > 0) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      const pageItems = await page.evaluate(parseSinyiPage).catch(() => []);
+      if (!pageItems.length) {
+        pageDebug = await page.evaluate(() => ({
+          cardCount: document.querySelectorAll('.buy-list-item').length,
+          bodyTextStart: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 600),
+          title: document.title,
+          url: location.href,
+        })).catch(e => ({ error: String(e), cardCount: 0 }));
+      }
+      pageItems.forEach(x => x.matchType = matchType);
+      items.push(...pageItems);
+    } catch (e) {
+      console.error(`scrapeSinyi failed (${matchType})`, e);
+      pageDebug = { error: String(e), cardCount: 0 };
+    } finally {
+      await page.close().catch(() => {});
+    }
+    return { items, pageDebug };
+  }
+
+  const tasks = [];
+
+  // 階段 1：同社區（keyword 搜，全城範圍）
+  if (subject.community) {
+    const u = buildUrl({ keyword: subject.community, useFilter: false });
+    tasks.push(
+      scrapeOneUrl(u, 'same_community').then(r => ({
+        name: '同社區', url: u, count: r.items.length, pageDebug: r.pageDebug, items: r.items,
+      }))
+    );
+  }
+
+  // 階段 2：本區 + 相鄰區，每區並行（信義一頁 10 筆，先抓第 1 頁，量不夠再加）
+  adjacentZips.forEach(({ d, zip: z }) => {
+    const u = buildUrl({ useFilter: true, zipOverride: z });
+    tasks.push(
+      scrapeOneUrl(u, 'nearby').then(r => ({
+        name: d, url: u, count: r.items.length, pageDebug: r.pageDebug, items: r.items,
+      }))
+    );
+  });
+
+  const results = await Promise.all(tasks);
+
+  const allItems = [];
+  const stages = [];
+  results.forEach(r => {
+    stages.push({ name: `信義-${r.name}`, url: r.url, count: r.count, pageDebug: r.pageDebug });
+    allItems.push(...r.items);
+  });
+
+  await browser.close().catch(() => {});
+  return { items: allItems.map(x => ({ ...x, source: 'sinyi' })), stages, _debugInfo };
+}
+
+// 信義頁面 context parser
+function parseSinyiPage() {
+  const cards = document.querySelectorAll('.buy-list-item');
+  const out = [];
+  cards.forEach((c, idx) => {
+    const link = c.querySelector('a[href*="/buy/house/"]');
+    const href = link ? new URL(link.getAttribute('href'), location.origin).href.split('?')[0] : '';
+    if (!href) return;
+
+    // 三組 span 分別位於 Address / HouseInfo / SpecificTags
+    const addrSpans = c.querySelector('[class*="LongInfoCard_Type_Address"]')?.querySelectorAll('span') || [];
+    const houseSpans = c.querySelector('[class*="LongInfoCard_Type_HouseInfo"]')?.querySelectorAll('span') || [];
+
+    const addrText = (addrSpans[0]?.textContent || '').trim(); // 「高雄市前鎮區光華三路」
+    const ageText = (addrSpans[1]?.textContent || '').trim();   // 「19.9年」
+    const buildingType = (addrSpans[2]?.textContent || '').trim(); // 「大樓」
+
+    // 建坪 / 主+陽 / 房型 / 樓層
+    const totalAreaText = (houseSpans[0]?.textContent || '').trim(); // 「建坪 33.81」
+    const mainAreaText = (houseSpans[1]?.textContent || '').trim();  // 「主 + 陽16.16」
+    const roomsText = (houseSpans[2]?.textContent || '').trim();     // 「2房2廳1衛」
+    const floorText = (houseSpans[3]?.textContent || '').trim();     // 「7樓/15樓」
+
+    const totalArea = parseFloat((totalAreaText.match(/([\d.]+)/) || [])[1] || 0);
+    const mainArea = parseFloat((mainAreaText.match(/([\d.]+)/) || [])[1] || 0);
+    const age = parseFloat((ageText.match(/([\d.]+)/) || [])[1] || 0);
+    const roomsM = roomsText.match(/(\d+)房(\d+)廳(\d+)衛/);
+    const floorM = floorText.match(/(\d+)樓\/(\d+)樓/);
+    const floor = floorM ? `${floorM[1]}F/${floorM[2]}F` : floorText.replace(/樓/g, 'F').replace(/\//, '/');
+
+    // 標題從 anchor 第一個 generic 抓（snapshot 顯示「title」是 e91 那層）
+    // innerText 黏字 — 取 anchor 的 aria-label 或第一個非空文字
+    let title = '';
+    const titleEl = c.querySelector('[class*="LongInfoCard_Type_Name"]');
+    if (titleEl) title = titleEl.textContent.trim();
+    if (!title) {
+      // fallback: anchor 第一段 alt 圖片或文字
+      const img = c.querySelector('img[alt]');
+      if (img) title = img.getAttribute('alt') || '';
+    }
+
+    // community = title（信義卡片標題基本上 = 社區名 / 物件名）
+    const community = title;
+
+    // road / district 從地址抽
+    let road = '', district = '';
+    const dm = addrText.match(/(高雄市)?([一-龥]{1,3}區)([一-龥\d\w]+?)(?:$)/);
+    if (dm) { district = dm[2]; road = dm[3]; }
+
+    // 價格：從卡片 innerText 抓「{原價}萬{現價}萬」or 單價，取現價
+    const cardText = (c.innerText || '').replace(/\s+/g, ' ').trim();
+    let totalPrice = 0;
+    const priceM = cardText.match(/([\d,]+)\s*萬\s*([\d,]+)\s*萬/);
+    if (priceM) {
+      totalPrice = parseFloat(priceM[2].replace(/,/g, ''));
+    } else {
+      const single = cardText.match(/([\d,]+)\s*萬(?!\/坪)/);
+      if (single) totalPrice = parseFloat(single[1].replace(/,/g, ''));
+    }
+    const unitPrice = totalArea > 0 && totalPrice > 0 ? Math.round((totalPrice / totalArea) * 100) / 100 : 0;
+
+    // 圖
+    const img = c.querySelector('img');
+    const imgSrc = img ? (img.getAttribute('data-src') || img.getAttribute('src') || '') : '';
+
+    // 車位（信義會在 specific tags 顯示「警衛管理」「有車位」等，但建坪通常含車位坪數，車位識別比較難）
+    const hasPark = /車位|車墅|平車/.test(cardText);
+
+    // sanity check
+    if (!totalArea || totalArea < 5) return;
+    if (!totalPrice || totalPrice < 50) return;
+
+    const item = {
+      title, community, road, district,
+      rooms: roomsM ? `${roomsM[1]}房${roomsM[2]}廳${roomsM[3]}衛` : '',
+      totalArea, mainArea, age, floor, agent: '信義房屋', hasPark, totalPrice, unitPrice,
+      href, imgSrc, buildingType,
+    };
+    if (idx < 2) item._raw = cardText.slice(0, 350);
+    out.push(item);
+  });
+  return out;
+}
+
 // 在頁面 context 跑的 parser
 // v2.1: 591 SPA layout 變動 → community/age/district 加多重 fallback + DOM selector
 function parseListPage() {
@@ -582,10 +831,13 @@ export default {
         if (set.size) nearbyDistricts = [...set];
       }
 
-      // 1. 爬資料（並行多來源；591 用動態算出的 nearbyDistricts）
+      // 1. 爬資料（並行多來源；591/sinyi 各自 launch browser 並行不衝突）
       const promises = [];
       if (sources.includes('591')) promises.push(
         scrape591(env, p, subject, { nearbyDistricts }).catch(e => { console.error('591 fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
+      );
+      if (sources.includes('sinyi')) promises.push(
+        scrapeSinyi(env, p, subject, { nearbyDistricts }).catch(e => { console.error('sinyi fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
       );
       // TODO Phase 1B: rakuya
       const allByPlatform = await Promise.all(promises);
