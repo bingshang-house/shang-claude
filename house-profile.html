@@ -1887,10 +1887,10 @@
   // 用「登記次序 XXXX」當 anchor 切塊，回傳 [{regOrder, body}]
   // 所有權部：4 位數（0001 / 0002）
   // 他項權利部：父子號（0001-001 / 0001-002）
+  // ⚠️ 用 negative lookbehind 避開「標的登記次序」誤切（他項權利部裡有這個 sub-label）
   function splitByRegOrder(section, isMort) {
     if (!section) return [];
-    // 找所有「登記次序」位置
-    const anchorRe = /登\s*記\s*次\s*序/g;
+    const anchorRe = /(?<!標\s*的\s*)登\s*記\s*次\s*序/g;
     const positions = [];
     let m;
     while ((m = anchorRe.exec(section)) !== null) positions.push(m.index);
@@ -1947,28 +1947,43 @@
     return m ? m[1] : '';
   }
 
-  // 抵押義務人（土地他項權利部 / 設定權利部）
-  function extractObligor(body) {
-    const m = body.match(/[債務]?\s*務\s*人[\s::]*((?:[一-龥＊○]|\*){2,15})\s*(?:統一編號|身分證|住址|權利人|債權額|擔保)/);
-    if (m) return m[1].replace(/\s/g, '');
-    const m2 = body.match(/義\s*務\s*人[\s::]*([一-龥＊○\*]{2,15})/);
-    return m2 ? m2[1].replace(/\s/g, '') : '';
+  // 抵押「標的登記次序」抽出（土地他項權利部用「標的登記次序」對應所有權部，沒有獨立「義務人」欄位）
+  // 例：「標的登記次序 0003 0004 0005」→ ['0003','0004','0005']
+  function extractTargetOrders(body) {
+    const m = body.match(/標\s*的\s*登\s*記\s*次\s*序([\s\d]+?)(?=設\s*定\s*權\s*利\s*範\s*圍|證\s*明\s*書|共\s*同\s*擔\s*保|其\s*他\s*登\s*記\s*事\s*項)/);
+    if (!m) return [];
+    return [...m[1].matchAll(/\d{4}/g)].map(x => x[0]);
   }
 
-  // 抵押權利人 / 銀行
+  // 抵押權利人 / 銀行（要排除「權利人統編」label）
   function extractCreditor(body) {
-    const m = body.match(/[權]?\s*利\s*人[\s::]*([一-龥]{2,20}(?:銀行|農會|公司|信用合作社|郵政儲金|資產管理)[一-龥]{0,5})/);
+    // 隔離「權利人統編」label，免得 regex 從這裡起點誤抓「統編」
+    const cleaned = body.replace(/權\s*利\s*人\s*統\s*編/g, '◆◆◆◆');
+    // 法人優先（銀行/農會/公司...字尾）
+    const m = cleaned.match(/權\s*利\s*人[\s::]*([一-龥]{2,20}(?:銀行|農會|公司|信用合作社|郵政儲金|資產管理|資融)[一-龥]{0,5})/);
     if (m) return m[1].replace(/\s/g, '');
-    const m2 = body.match(/權\s*利\s*人[\s::]*([一-龥A-Za-z＊○\*]{2,20})/);
-    return m2 ? m2[1].replace(/\s/g, '') : '';
+    // fallback：個人遮蔽名「唐**」「黃＊＊」，限漢字 + 遮蔽符 + 字數短
+    const m2 = cleaned.match(/權\s*利\s*人[\s::]*([一-龥]{1,3}[\*＊○]{1,3})/);
+    if (m2) return m2[1].replace(/\s/g, '');
+    // 最後 fallback：純漢字
+    const m3 = cleaned.match(/權\s*利\s*人[\s::]+([一-龥]{2,20})/);
+    return m3 ? m3[1].replace(/\s/g, '') : '';
   }
 
-  // 擔保債權金額（元）
+  // 擔保債權金額（元）— 處理「新台幣XXX元正」格式
   function extractMortAmount(body) {
-    // section-compact 後抓「擔保債權總金額 5,000,000元」這類
     const compact = body.replace(/\s+/g, '');
-    const m = compact.match(/(?:擔保債權總?金額|債權額比例|本金最高限額)(\d[\d,]*)元/);
-    return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+    // 「擔保債權總金額新台幣19200000元正」/「擔保債權總金額5,000,000元」
+    const m = compact.match(/擔保債權總?金額(?:新台幣)?(\d[\d,]*)元/);
+    if (m) return parseInt(m[1].replace(/,/g, ''), 10);
+    const m2 = compact.match(/(?:本金最高限額|債權額比例)(?:新台幣)?(\d[\d,]*)元/);
+    return m2 ? parseInt(m2[1].replace(/,/g, ''), 10) : 0;
+  }
+
+  // 權利種類（最高限額抵押權 / 抵押權 / 地上權 ...）
+  function extractMortKind(body) {
+    const m = body.match(/權\s*利\s*種\s*類[\s::]*([一-龥]{2,12}(?:抵押權|地上權|地役權|永佃權|典權|耕作權))/);
+    return m ? m[1].replace(/\s/g, '') : '';
   }
 
   // 主函式：raw text → 結構化
@@ -2008,14 +2023,29 @@
     })).filter(o => o.name); // 名字抽不到視為解析失敗，丟掉
 
     // === 他項權利部多筆切塊 ===
+    // 設計改點（2026-04-29 五權街 PDF 暴露）：
+    //   1. 沒有獨立「義務人」欄位 → 用「標的登記次序」對應到所有權部抓 names
+    //   2. 「權利人統編」label 跟「權利人」是兩個欄位，要先 mask 隔離
+    //   3. 金額有「新台幣 XXX 元正」格式
     const mortSec = sliceMortSection(t);
     const mortBlocks = splitByRegOrder(mortSec, true);
-    const mortgages = mortBlocks.map(({ regOrder, body }) => ({
-      regOrder,
-      obligor: extractObligor(body),
-      creditor: extractCreditor(body),
-      amount: extractMortAmount(body),
-    })).filter(m => m.obligor || m.creditor);
+    const mortgages = mortBlocks.map(({ regOrder, body }) => {
+      const targetOrders = extractTargetOrders(body);
+      // 對應所有權人姓名（targetOrder ∈ owners → 抓 name；否則標 ?次序XXXX）
+      const obligorNames = targetOrders.map(ord => {
+        const found = owners.find(o => o.regOrder === ord);
+        return found ? found.name : `?次序${ord}`;
+      });
+      return {
+        regOrder,
+        kind: extractMortKind(body),
+        targetOrders,            // 標的登記次序原始數字
+        obligorNames,            // 對應到的所有權人姓名（單份 PDF 內可能對不到，要等批次合併）
+        obligor: obligorNames[0] || '',  // 第一個（向後相容）
+        creditor: extractCreditor(body),
+        amount: extractMortAmount(body),
+      };
+    }).filter(m => m.creditor || m.amount > 0 || m.targetOrders.length);
 
     // 持分加總（分數運算，避免浮點）
     let shareSum = { num: 0, denom: 1 };
@@ -2031,11 +2061,16 @@
     }
     const shareSumPct = shareSum.denom > 0 ? (shareSum.num / shareSum.denom) : 0;
 
-    // 義務人對應驗證（每個 mortgage obligor 是否在 owners 名單）
-    const ownerNames = new Set(owners.map(o => o.name));
-    const orphanObligors = mortgages
-      .map(m => m.obligor)
-      .filter(n => n && !ownerNames.has(n));
+    // 義務人對應驗證（mortgage 的所有 targetOrders 是否都在 owners 次序）
+    // 階段 1 單份 PDF：個人第 2 類謄本可能 owners 只 1 人，target orders 多會對不到 → 標 ?次序XXXX
+    // 階段 2 批次合併後：所有 owners 都 build 完，這時的 orphan 才是真正漏件
+    const ownerOrders = new Set(owners.map(o => o.regOrder));
+    const orphanObligors = [];
+    for (const m of mortgages) {
+      for (const ord of (m.targetOrders || [])) {
+        if (!ownerOrders.has(ord)) orphanObligors.push(`次序${ord}（mort#${m.regOrder}）`);
+      }
+    }
 
     return {
       loNo,
