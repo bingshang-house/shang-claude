@@ -8139,12 +8139,26 @@ ${factsText}
     if (cur.fileId) {
       const shortName = (cur.fileName || '').replace('.json', '');
       const display = shortName.length > 16 ? shortName.slice(0, 14) + '…' : shortName;
-      btn.textContent = '💾 更新「' + display + '」';
-      btn.title = '更新此案到 Drive（原檔覆蓋）';
+      btn.textContent = '💾 覆寫雲端「' + display + '」';
+      btn.title = '把目前畫面整份覆寫到雲端原檔「' + shortName + '」（無法復原）';
     } else {
       btn.textContent = '💾 存雲端';
       btn.title = '把目前資料存進你 Google Drive 的「賞好賞銷售資料」資料夾';
     }
+  }
+
+  // form 是否實質為空（用來防止「重整後畫面空白卻去覆寫雲端」的災難）
+  // 判準：案名空 + 沒有任何建物 entry + 沒有任何土地 entry
+  function isFormEffectivelyEmpty() {
+    const caseName = (document.getElementById('cs-s-case-name')?.value || '').trim();
+    if (caseName) return false;
+    if (window.__shangState) {
+      const buildings = window.__shangState.getBuildings();
+      if (buildings && buildings.data && Object.keys(buildings.data).length > 0) return false;
+      const lands = window.__shangState.getLands();
+      if (lands && lands.data && Object.keys(lands.data).length > 0) return false;
+    }
+    return true;
   }
 
   // ===== UI handlers =====
@@ -8158,6 +8172,16 @@ ${factsText}
     const cur = getCurrentCase();
     let filename;
     if (cur.fileId) {
+      // 最後防線：覆寫雲端原檔前若畫面是空白 → 跳 confirm 擋下來
+      if (isFormEffectivelyEmpty()) {
+        const shortName = (cur.fileName || '').replace('.json', '');
+        if (!confirm(
+          '⚠️ 警告：目前畫面看起來是空白\n\n' +
+          '繼續會把雲端「' + shortName + '」整份蓋成空白，無法復原！\n\n' +
+          '若要修改該案，請改用右上「📂 我的案件」載入後再修改。\n\n' +
+          '確定要把雲端覆寫成空白嗎？'
+        )) return;
+      }
       filename = cur.fileName;
     } else {
       const baseName = buildBaseName();
@@ -8307,10 +8331,21 @@ ${factsText}
   };
 
   // 頁面載入時恢復按鈕 label（如果 sessionStorage 有 currentCase）
+  // 治本：若 sessionStorage 還記著上次的 case 但 form 已空（重整 / OAuth redirect 後常見），
+  // 自動清掉避免「按更新覆寫雲端為空白」的災難。要接續就走「📂 我的案件」重載。
+  function initSaveButtonState() {
+    const cur = getCurrentCase();
+    if (cur.fileId && isFormEffectivelyEmpty()) {
+      console.log('[shang] 偵測到 sessionStorage 有 currentCase 但 form 為空，自動清除避免誤覆寫雲端');
+      setCurrentCase(null, null);  // 內部會呼叫 updateSaveButtonLabel
+    } else {
+      updateSaveButtonLabel();
+    }
+  }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', updateSaveButtonLabel);
+    document.addEventListener('DOMContentLoaded', initSaveButtonState);
   } else {
-    updateSaveButtonLabel();
+    initSaveButtonState();
   }
 
   window.__shangCloud = {
