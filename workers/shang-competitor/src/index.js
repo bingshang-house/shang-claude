@@ -52,6 +52,54 @@ const SHAPE_MAP = { '公寓': 1, '電梯大樓': 2, '大樓': 2, '透天厝': 3,
 // ============ Helper ============
 function livingFloor(f) { return ((f || '').match(/^(\d+(?:~\d+)?)F/) || [])[1] || (f || ''); }
 
+// 在 center 周圍以 radiusKm 半徑取 8 個圓周點（每 45 度一個）
+function getCirclePoints(center, radiusKm) {
+  const points = [];
+  const latPerKm = 1 / 111;
+  const lngPerKm = 1 / (111 * Math.cos(center.lat * Math.PI / 180));
+  for (let i = 0; i < 8; i++) {
+    const angle = (i * 45) * Math.PI / 180;
+    points.push({
+      lat: center.lat + radiusKm * latPerKm * Math.cos(angle),
+      lng: center.lng + radiusKm * lngPerKm * Math.sin(angle),
+    });
+  }
+  return points;
+}
+
+// reverse geocode lat/lng → 區名（KV cache）
+async function reverseGeocodeDistrict(env, lat, lng) {
+  if (!env.GOOGLE_MAPS_API_KEY) return null;
+  const key = `rev:${lat.toFixed(4)}:${lng.toFixed(4)}`;
+  try {
+    const cached = await env.GEOCACHE.get(key, { type: 'json' });
+    if (cached && cached.district) return cached.district;
+    if (cached && cached.notFound) return null;
+  } catch (_) { /* miss → 繼續打 API */ }
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=zh-TW&result_type=administrative_area_level_3&key=${env.GOOGLE_MAPS_API_KEY}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status === 'OK' && data.results?.length) {
+      for (const r of data.results) {
+        const comp = r.address_components?.find(c =>
+          c.types.includes('administrative_area_level_3') || c.types.includes('sublocality_level_1')
+        );
+        const name = comp?.long_name;
+        if (name && name.endsWith('區')) {
+          env.GEOCACHE.put(key, JSON.stringify({ district: name }), { expirationTtl: 30 * 24 * 3600 }).catch(() => {});
+          return name;
+        }
+      }
+    }
+    env.GEOCACHE.put(key, JSON.stringify({ notFound: true }), { expirationTtl: 7 * 24 * 3600 }).catch(() => {});
+    return null;
+  } catch (e) {
+    console.error('reverseGeocode failed', lat, lng, e.message);
+    return null;
+  }
+}
+
 // haversine 距離（km），輸入 {lat, lng}
 function haversineKm(a, b) {
   if (!a || !b) return null;
@@ -150,21 +198,24 @@ function mergeKey(item) {
 }
 
 // ============ 591 爬蟲（雙階段 + Browser Rendering）============
-async function scrape591(env, params, subject) {
+async function scrape591(env, params, subject, opts = {}) {
   const districtRaw = extractDistrict(subject.address);
   const district = districtRaw || '前鎮區';
   const section = KAOHSIUNG_SECTIONS[district] || KAOHSIUNG_SECTIONS['前鎮區'];
 
-  // 相鄰區（含本區），組成 591 多選 URL「section=A,B,C,D」
-  let adjacentList = ADJACENT_DISTRICTS[district] || [district];
+  // 鄰近區決定：優先用 opts.nearbyDistricts（main handler reverse geocode 算出 1km 圓覆蓋的區）
+  // 其次 fallback 行政區相鄰表
+  let adjacentList = (opts.nearbyDistricts && opts.nearbyDistricts.length)
+    ? opts.nearbyDistricts
+    : (ADJACENT_DISTRICTS[district] || [district]);
   let adjacentSectionIds = adjacentList
     .map(d => KAOHSIUNG_SECTIONS[d])
     .filter(Boolean);
   // 終極保險：算出來空的（可能 district 是 11 主要區外的郊區、或 address 異常），
-  // 硬塞前鎮 + 苓雅 + 小港 + 鳳山（市區常見組合，sectionId 已 Playwright 驗證）
+  // 硬塞前鎮 + 苓雅（保守只取兩個市區）
   if (adjacentSectionIds.length === 0) {
-    adjacentList = ['前鎮區', '苓雅區', '小港區', '鳳山區'];
-    adjacentSectionIds = [249, 245, 252, 268];
+    adjacentList = ['前鎮區', '苓雅區'];
+    adjacentSectionIds = [249, 245];
   }
 
   // echo 給前端 debug 用（看 worker 真實收到 / 算出的內容）
@@ -475,10 +526,26 @@ export default {
     const maxDistanceKm = typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 1;
 
     try {
-      // 1. 爬資料（並行多來源）
+      // 0. 先 geocode subject 拿到本案座標
+      const subjectQuery = subject.community
+        ? `${subject.community} ${(subject.address || '').replace(/^.+市/, '高雄市')}`.trim()
+        : (subject.address || '');
+      const subjectLoc = await geocodeWithCache(env, normalizeForGeocode(subjectQuery));
+
+      // 0.5 用本案座標 + 1km 圓周 8 點 reverse geocode → 算出真正涵蓋的區
+      // 例：文橫三路三多商圈 1km 圓 → 通常只有前鎮 + 苓雅，不會碰到小港
+      let nearbyDistricts = null;
+      if (subjectLoc) {
+        const points = [{ lat: subjectLoc.lat, lng: subjectLoc.lng }, ...getCirclePoints(subjectLoc, maxDistanceKm)];
+        const districtList = await Promise.all(points.map(p => reverseGeocodeDistrict(env, p.lat, p.lng)));
+        const set = new Set(districtList.filter(Boolean).filter(d => KAOHSIUNG_SECTIONS[d]));
+        if (set.size) nearbyDistricts = [...set];
+      }
+
+      // 1. 爬資料（並行多來源；591 用動態算出的 nearbyDistricts）
       const promises = [];
       if (sources.includes('591')) promises.push(
-        scrape591(env, p, subject).catch(e => { console.error('591 fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
+        scrape591(env, p, subject, { nearbyDistricts }).catch(e => { console.error('591 fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
       );
       // TODO Phase 1B: rakuya
       const allByPlatform = await Promise.all(promises);
@@ -487,13 +554,9 @@ export default {
       const platformStages = allByPlatform.flatMap(x => x.stages || []);
       const platformDebug = allByPlatform.find(x => x._debugInfo)?._debugInfo || null;
 
-      // 1.5 距離過濾：subject geocode 一次 + 每筆 nearby 物件 geocode + haversine
+      // 1.5 距離過濾：每筆 nearby 物件 geocode + haversine
       // 同社區（same_community）保留所有，不算距離（信任 591 keyword + isSameCommunity）
-      const subjectQuery = subject.community
-        ? `${subject.community} ${(subject.address || '').replace(/^.+市/, '高雄市')}`.trim()
-        : (subject.address || '');
-      const subjectLoc = await geocodeWithCache(env, normalizeForGeocode(subjectQuery));
-      let geoStats = { subjectLoc, total: 0, kept: 0, dropped: 0, ungeocoded: 0, hitL1: 0, hitL2: 0, hitL3: 0 };
+      let geoStats = { subjectLoc, total: 0, kept: 0, dropped: 0, ungeocoded: 0, hitL1: 0, hitL2: 0, hitL3: 0, nearbyDistricts };
       if (subjectLoc) {
         // 並行 geocode 每筆 nearby item（same_community 不算）
         const nearbyItems = all.filter(x => x.matchType !== 'same_community');
@@ -507,15 +570,15 @@ export default {
           return haversineKm(subjectLoc, loc);
         }));
         // mark item with distance + filter
+        // 改激進：geocode 失敗（三段 fallback 都不行）= 直接排除，不再保守保留
+        // 賞哥反饋：ungeocoded 保守保留會讓超遠物件混在結果裡
         const survivors = [];
         for (let i = 0; i < nearbyItems.length; i++) {
           const item = nearbyItems[i];
           const d = distances[i];
           if (d == null) {
-            // geocode 失敗 → 保守保留（避免漏合理物件，前端會看到 distance:null）
-            item._distanceKm = null;
-            survivors.push(item);
             geoStats.ungeocoded++;
+            // 不 push survivors → 直接排除
           } else {
             item._distanceKm = Math.round(d * 100) / 100;
             if (d <= maxDistanceKm) { survivors.push(item); geoStats.kept++; }
