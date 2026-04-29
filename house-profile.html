@@ -8541,13 +8541,25 @@ function renderCompetitorResults(data) {
         <summary style="cursor:pointer;color:#b45309;">🔍 各階段 591 抓取結果（debug）</summary>
         <div style="background:#fffbeb;padding:8px;border-radius:6px;margin-top:6px;font-size:10px;line-height:1.6;">
           ${diHtml}
-          ${s.stages.map(st => `
-            <div style="margin-bottom:4px;">
-              <strong>${st.name}：${st.count} 筆</strong>
-              <a href="${st.url}" target="_blank" style="color:#0369a1;text-decoration:underline;margin-left:6px;">親自開 591 看 →</a>
-              <div style="word-break:break-all;color:#999;font-size:9px;">${st.url}</div>
-            </div>
-          `).join('')}
+          ${s.stages.map(st => {
+            const pd = st.pageDebug;
+            const pdHtml = pd ? `
+              <div style="margin-top:4px;padding:6px;background:#fef2f2;border-left:3px solid #dc2626;border-radius:3px;color:#7f1d1d;">
+                <strong>worker 0 筆時 591 真實回傳：</strong><br>
+                title: <code>${(pd.title || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</code><br>
+                .ware-item 數: <strong>${pd.cardCount}</strong>　${pd.error ? `error: ${pd.error}` : ''}<br>
+                ${pd.bodyTextStart ? `body: <code style="font-size:9px;">${pd.bodyTextStart.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])).slice(0, 400)}</code>` : ''}
+              </div>
+            ` : '';
+            return `
+              <div style="margin-bottom:4px;">
+                <strong>${st.name}：${st.count} 筆</strong>
+                <a href="${st.url}" target="_blank" style="color:#0369a1;text-decoration:underline;margin-left:6px;">親自開 591 看 →</a>
+                <div style="word-break:break-all;color:#999;font-size:9px;">${st.url}</div>
+                ${pdHtml}
+              </div>
+            `;
+          }).join('')}
         </div>
       </details>
     `;

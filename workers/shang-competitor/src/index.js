@@ -134,19 +134,36 @@ async function scrape591(env, params, subject) {
   // 每個階段限 25 秒 wall clock，超時提前 break，避免 worker 整體 hang 爆 timeout
   async function scrapePages(url, maxPages, matchType) {
     const items = [];
+    let pageDebug = null;
     const stageStart = Date.now();
     const STAGE_TIMEOUT_MS = 25000;
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
-      await page.waitForSelector('.ware-item, .no-result', { timeout: 10000 }).catch(() => null);
+      // retry wait .ware-item 渲染（591 SPA hydrate 可能需要 2-3 秒）
+      let cardCount = 0;
+      for (let retry = 0; retry < 6; retry++) {
+        await new Promise(r => setTimeout(r, 1200));
+        cardCount = await page.evaluate(() => document.querySelectorAll('.ware-item').length);
+        if (cardCount > 0) break;
+      }
       for (let p = 0; p < maxPages; p++) {
         if (Date.now() - stageStart > STAGE_TIMEOUT_MS) {
           console.warn(`[${matchType}] stage timeout at page ${p}, returning ${items.length} items`);
           break;
         }
-        await new Promise(r => setTimeout(r, 600));
         const pageItems = await page.evaluate(parseListPage);
-        if (!pageItems.length) break;
+        if (!pageItems.length) {
+          // 0 筆 → 抓 page debug 樣本（看 591 對 worker 環境回什麼）
+          if (p === 0 && !pageDebug) {
+            pageDebug = await page.evaluate(() => ({
+              cardCount: document.querySelectorAll('.ware-item').length,
+              bodyTextStart: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 800),
+              title: document.title,
+              url: location.href,
+            }));
+          }
+          break;
+        }
         pageItems.forEach(x => x.matchType = matchType);
         items.push(...pageItems);
         if (p === maxPages - 1) break;
@@ -161,8 +178,9 @@ async function scrape591(env, params, subject) {
       }
     } catch (e) {
       console.error(`scrape stage failed (${matchType})`, e);
+      pageDebug = { error: String(e) };
     }
-    return items;
+    return { items, pageDebug };
   }
 
   const allItems = [];
@@ -171,20 +189,21 @@ async function scrape591(env, params, subject) {
   // 階段 1：同社區（keyword 不限區，社區名搜全市，1 頁就夠）
   if (subject.community) {
     const url1 = buildUrl({ keywords: subject.community, useFilter: false, sectionOverride: '' });
-    const stage1 = await scrapePages(url1, 1, 'same_community');
-    stages.push({ name: '同社區', url: url1, count: stage1.length });
-    allItems.push(...stage1);
+    const r1 = await scrapePages(url1, 1, 'same_community');
+    stages.push({ name: '同社區', url: url1, count: r1.items.length, pageDebug: r1.pageDebug });
+    allItems.push(...r1.items);
   }
 
   // 階段 2：本區 + 相鄰區條件搜（最多 5 區一起 ±10 坪 / ±5 年，3 頁）
   const url2 = buildUrl({ useFilter: true, sectionOverride: adjacentSectionParam });
-  const stage2 = await scrapePages(url2, 3, 'nearby');
+  const r2 = await scrapePages(url2, 3, 'nearby');
   stages.push({
     name: `本區+相鄰（${adjacentList.length} 區）`,
     url: url2,
-    count: stage2.length,
+    count: r2.items.length,
+    pageDebug: r2.pageDebug,
   });
-  allItems.push(...stage2);
+  allItems.push(...r2.items);
 
   await browser.close();
   return { items: allItems.map(x => ({ ...x, source: '591' })), stages, _debugInfo };
