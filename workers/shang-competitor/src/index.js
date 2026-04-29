@@ -202,12 +202,21 @@ function normCommunityForMerge(s) {
     .slice(0, 8); // 取前 8 字當 key（避免極端長社區名）
 }
 
+// road 標準化（合併 591 仲介間變體：「新光路」「新光路62巷」「新光路62巷100號」都歸一成「新光路」）
+function normRoadForMerge(s) {
+  if (!s) return '';
+  return s.toString()
+    .replace(/\s+/g, '')
+    .replace(/(\d+巷|\d+弄|\d+號|\d+段|一段|二段|三段|四段|五段|六段|七段|八段|九段).*$/, '') // 去尾巷弄號段
+    .slice(0, 10);
+}
+
 function mergeKey(item) {
   const fl = livingFloor(item.floor);
   // 用 totalArea 不 fallback mainArea（591 列表 totalArea 100% 有值，mainArea 偶爾為 0）
   const area = Math.round((item.totalArea || 0) * 2) / 2;
   const price = Math.round((item.totalPrice || 0) / 10) * 10;
-  const road = (item.road || '').replace(/\s+/g, '');
+  const road = normRoadForMerge(item.road);
   const comm = normCommunityForMerge(item.community);
   return `${comm}|${road}|${fl}|${area}|${price}`;
 }
