@@ -561,10 +561,8 @@ export default {
     const userPickedDistricts = (p.customDistricts && Array.isArray(p.customDistricts) && p.customDistricts.length)
       ? p.customDistricts.slice(0, 3).filter(d => KAOHSIUNG_SECTIONS[d])
       : null;
-    // 距離過濾半徑（km）：手選區時關掉（讓選的區結果都看到），預設 1km
-    const maxDistanceKm = userPickedDistricts
-      ? (typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 9999)
-      : (typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 1);
+    // 距離過濾半徑（km），預設 1.5 km（自動 / 手選都一樣，賞哥 2026-04-29 確認）
+    const maxDistanceKm = typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 1.5;
 
     try {
       // 0. 先 geocode subject 拿到本案座標
@@ -575,11 +573,10 @@ export default {
 
       // 0.5 決定實際搜尋區：
       // (A) 用戶手選了 → 用手選的（custom 下拉）
-      // (B) 沒手選 → 用 1km 圓 + reverse geocode 8 點動態算
+      // (B) 沒手選 → 用 maxDistanceKm 圓 + reverse geocode 8 點動態算
       let nearbyDistricts = userPickedDistricts;
       if (!nearbyDistricts && subjectLoc) {
-        const radius = typeof body.maxDistanceKm === 'number' ? body.maxDistanceKm : 1;
-        const points = [{ lat: subjectLoc.lat, lng: subjectLoc.lng }, ...getCirclePoints(subjectLoc, radius)];
+        const points = [{ lat: subjectLoc.lat, lng: subjectLoc.lng }, ...getCirclePoints(subjectLoc, maxDistanceKm)];
         const districtList = await Promise.all(points.map(p => reverseGeocodeDistrict(env, p.lat, p.lng)));
         const set = new Set(districtList.filter(Boolean).filter(d => KAOHSIUNG_SECTIONS[d]));
         if (set.size) nearbyDistricts = [...set];
@@ -639,19 +636,14 @@ export default {
           return haversineKm(subjectLoc, loc);
         }));
         // mark item with distance + filter
-        // auto 模式（1km 圓）：ungeocoded 直接排除（避免超遠物件混入）
-        // custom 模式（手選區）：ungeocoded 保留（用戶明確要看這幾區所有結果，距離不重要）
+        // 統一邏輯（賞哥 2026-04-29 確認）：自動 / 手選都套 maxDistanceKm 過濾、ungeocoded 都排除
         const survivors = [];
         for (let i = 0; i < nearbyItems.length; i++) {
           const item = nearbyItems[i];
           const d = distances[i];
           if (d == null) {
             geoStats.ungeocoded++;
-            if (userPickedDistricts) {
-              item._distanceKm = null;
-              survivors.push(item); // 手選區 → 保留
-            }
-            // auto 模式不 push → 排除
+            // 不 push → 排除
           } else {
             item._distanceKm = Math.round(d * 100) / 100;
             if (d <= maxDistanceKm) { survivors.push(item); geoStats.kept++; }
