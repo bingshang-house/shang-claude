@@ -8148,16 +8148,20 @@ ${factsText}
   }
 
   // form 是否實質為空（用來防止「重整後畫面空白卻去覆寫雲端」的災難）
-  // 判準：案名空 + 沒有任何建物 entry + 沒有任何土地 entry
+  // 判準：看 A4 預覽的關鍵 td-* 欄位是否有實質內容
+  // 這比看 __shangState 內部 entry 數量更穩（form 初始化常有 1 筆空 land entry）
   function isFormEffectivelyEmpty() {
     const caseName = (document.getElementById('cs-s-case-name')?.value || '').trim();
     if (caseName) return false;
-    if (window.__shangState) {
-      const buildings = window.__shangState.getBuildings();
-      if (buildings && buildings.data && Object.keys(buildings.data).length > 0) return false;
-      const lands = window.__shangState.getLands();
-      if (lands && lands.data && Object.keys(lands.data).length > 0) return false;
-    }
+    // 把 placeholder 字符（- / － / 待補充 / 空白）全清掉再判斷
+    const cleanText = (id) => (document.getElementById(id)?.textContent || '')
+      .replace(/[\s\-－]/g, '')
+      .replace(/待補充/g, '')
+      .trim();
+    if (cleanText('td-addr')) return false;
+    if (cleanText('td-community')) return false;
+    if (cleanText('td-total-area')) return false;
+    if (cleanText('td-completion')) return false;
     return true;
   }
 
