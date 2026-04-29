@@ -8528,14 +8528,14 @@ function runCompetitorSearch(mode) {
   let ti = 0;
   const txtEl = document.getElementById('cmLoadingText');
   txtEl.textContent = texts[0];
-  const itv = setInterval(() => { ti++; if (ti < texts.length) txtEl.textContent = texts[ti]; else txtEl.textContent = '591 + 信義並行抓，再等下...'; }, 3500);
+  const itv = setInterval(() => { ti++; if (ti < texts.length) txtEl.textContent = texts[ti]; else txtEl.textContent = '591 + 信義 + 樂屋三家並行抓，再等下...'; }, 3500);
 
   // 真實 fetch shang-competitor Worker
   const WORKER_URL = 'https://shang-competitor.bingshang1019.workers.dev/search';
   fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, params, subject, sources: ['591', 'sinyi'] }),
+    body: JSON.stringify({ mode, params, subject, sources: ['591', 'sinyi', 'rakuya'] }),
   })
   .then(res => res.json())
   .then(data => {

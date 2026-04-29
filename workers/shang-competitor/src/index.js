@@ -641,6 +641,197 @@ function parseSinyiPage() {
   return out;
 }
 
+// ============ 樂屋網爬蟲（zipcode 區搜尋 + 並行 + Browser Rendering）============
+// reference_rakuya_structure.md：URL query string、CF Challenge 擋 fetch、innerText 一行一欄
+// 樂屋沒有 keyword 同社區搜尋功能，全靠 zipcode 抓回來 client-side 跨平台 mergeKey 合併
+async function scrapeRakuya(env, params, subject, opts = {}) {
+  const districtRaw = extractDistrict(subject.address);
+  const district = districtRaw || '前鎮區';
+  const zip = KAOHSIUNG_ZIPS[district] || '806';
+
+  let adjacentList = (opts.nearbyDistricts && opts.nearbyDistricts.length)
+    ? opts.nearbyDistricts
+    : (ADJACENT_DISTRICTS[district] || [district]);
+  let adjacentZips = adjacentList
+    .map(d => ({ d, zip: KAOHSIUNG_ZIPS[d] }))
+    .filter(x => x.zip);
+  if (adjacentZips.length === 0) {
+    adjacentList = ['前鎮區', '苓雅區'];
+    adjacentZips = [{ d: '前鎮區', zip: '806' }, { d: '苓雅區', zip: '802' }];
+  }
+
+  const _debugInfo = {
+    receivedAddress: subject.address || '(空)',
+    receivedCommunity: subject.community || '(空)',
+    finalDistrict: district,
+    zipResolved: zip,
+    adjacentList,
+    adjacentZips,
+  };
+
+  // 樂屋 URL 只下 zipcode + 寬鬆 price（其他 client-side 過濾，因區間 boundary 會刷掉）
+  function buildUrl({ zipOverride }) {
+    const u = new URL('https://www.rakuya.com.tw/sell/result');
+    u.searchParams.set('zipcode', zipOverride || zip);
+    if (params.priceMin || params.priceMax) {
+      u.searchParams.set('price', `${params.priceMin || ''}~${params.priceMax || ''}`);
+    }
+    return u.toString();
+  }
+
+  const browser = await puppeteer.launch(env.MYBROWSER);
+
+  async function newConfiguredPage() {
+    const p = await browser.newPage();
+    await p.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36');
+    await p.setRequestInterception(true);
+    p.on('request', req => {
+      const type = req.resourceType();
+      const u = req.url();
+      if (type === 'image' || type === 'media' || type === 'font' || type === 'stylesheet') return req.abort();
+      if (/google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|criteo|googlesyndication|adservice|tiktok|line-scdn|tagcommander|matomo|sentry/.test(u)) return req.abort();
+      req.continue();
+    });
+    return p;
+  }
+
+  async function scrapeOneUrl(url, matchType) {
+    const items = [];
+    let pageDebug = null;
+    const page = await newConfiguredPage();
+    try {
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
+      } catch (gotoErr) {
+        console.warn(`[rakuya ${matchType}] goto timeout:`, gotoErr.message);
+      }
+      // 等 CF Challenge 過 + 卡片 hydrate
+      try {
+        await page.waitForSelector('section.grid-item.search-obj, .no-result', { timeout: 20000 });
+      } catch (_) { /* 沒等到也試 evaluate */ }
+      let cardCount = 0;
+      for (let retry = 0; retry < 4; retry++) {
+        cardCount = await page.evaluate(() => document.querySelectorAll('section.grid-item.search-obj').length).catch(() => 0);
+        if (cardCount > 0) break;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+      const pageItems = await page.evaluate(parseRakuyaPage).catch(() => []);
+      if (!pageItems.length) {
+        pageDebug = await page.evaluate(() => ({
+          cardCount: document.querySelectorAll('section.grid-item.search-obj').length,
+          bodyTextStart: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 600),
+          title: document.title,
+          url: location.href,
+        })).catch(e => ({ error: String(e), cardCount: 0 }));
+      }
+      pageItems.forEach(x => x.matchType = matchType);
+      items.push(...pageItems);
+    } catch (e) {
+      console.error(`scrapeRakuya failed (${matchType})`, e);
+      pageDebug = { error: String(e), cardCount: 0 };
+    } finally {
+      await page.close().catch(() => {});
+    }
+    return { items, pageDebug };
+  }
+
+  // 樂屋每區一個 page 並行（沒 keyword 同社區，全靠 zipcode）
+  const tasks = adjacentZips.map(({ d, zip: z }) => {
+    const u = buildUrl({ zipOverride: z });
+    return scrapeOneUrl(u, 'nearby').then(r => ({
+      name: d, url: u, count: r.items.length, pageDebug: r.pageDebug, items: r.items,
+    }));
+  });
+
+  const results = await Promise.all(tasks);
+
+  const allItems = [];
+  const stages = [];
+  results.forEach(r => {
+    stages.push({ name: `樂屋-${r.name}`, url: r.url, count: r.count, pageDebug: r.pageDebug });
+    allItems.push(...r.items);
+  });
+
+  await browser.close().catch(() => {});
+  return { items: allItems.map(x => ({ ...x, source: 'rakuya' })), stages, _debugInfo };
+}
+
+// 樂屋頁面 context parser（innerText 一行一欄超乾淨）
+function parseRakuyaPage() {
+  const cards = document.querySelectorAll('section.grid-item.search-obj');
+  const out = [];
+  cards.forEach((c, idx) => {
+    const link = c.querySelector('a[href*="/sell_item/info"]');
+    const href = link ? new URL(link.getAttribute('href'), location.origin).href : '';
+    if (!href) return;
+
+    const text = (c.innerText || '').trim();
+    const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+
+    const get = (re) => (text.match(re) || [])[1];
+
+    const totalArea = parseFloat(get(/總建\s*([\d.]+)\s*坪/) || 0);
+    const mainArea = parseFloat(get(/主建\s*([\d.]+)\s*坪/) || 0);
+    const ageText = get(/^([\d.]+)\s*年$/m);
+    const age = ageText ? parseFloat(ageText) : 0;
+    const roomsM = text.match(/(\d+)房(\d+)廳(\d+)衛/);
+    const floorM = text.match(/(\d+)\/(\d+)樓/);
+    const floor = floorM ? `${floorM[1]}F/${floorM[2]}F` : '';
+    const unitPrice = parseFloat(get(/([\d.]+)\s*萬\/坪/) || 0);
+    const totalPriceText = get(/^([\d,]+)\s*萬$/m);
+    const totalPrice = totalPriceText ? parseInt(totalPriceText.replace(/,/g, '')) : 0;
+
+    // 區、社區、物件型態：從 lines 結構抓
+    // 樂屋格式：標題 → 上架狀態 → 區 → 社區 → 型態 → 房型 → ...
+    let district = '';
+    let community = '';
+    let buildingType = '';
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (/^[一-龥]{1,3}區$/.test(l) && !district) {
+        district = l;
+        // 社區通常是下一行（型態前）
+        if (lines[i + 1] && !/電梯|公寓|透天|別墅|大廈/.test(lines[i + 1])) {
+          community = lines[i + 1];
+        }
+        // 型態
+        for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+          if (/電梯大[廈樓]|公寓|透天厝|別墅|大廈|華廈/.test(lines[j])) {
+            buildingType = lines[j];
+            break;
+          }
+        }
+        break;
+      }
+    }
+
+    // 標題：列表第一行非「比較/立即預約」的有意義文字（卡片頂部物件名）
+    let title = '';
+    for (const l of lines) {
+      if (/^(比較|立即預約|進入店鋪|新上架|降價|店長推薦|優質)$/.test(l)) continue;
+      if (l.length >= 2 && l.length <= 30) { title = l; break; }
+    }
+    if (!community) community = title;
+
+    const img = c.querySelector('img');
+    const imgSrc = img ? (img.getAttribute('data-src') || img.getAttribute('src') || '') : '';
+    const hasPark = /車位|平車|車墅/.test(text);
+
+    if (!totalArea || totalArea < 5) return;
+    if (!totalPrice || totalPrice < 50) return;
+
+    const item = {
+      title, community, road: '', district,
+      rooms: roomsM ? `${roomsM[1]}房${roomsM[2]}廳${roomsM[3]}衛` : '',
+      totalArea, mainArea, age, floor, agent: '樂屋網', hasPark, totalPrice, unitPrice,
+      href, imgSrc, buildingType,
+    };
+    if (idx < 2) item._raw = text.slice(0, 350);
+    out.push(item);
+  });
+  return out;
+}
+
 // 在頁面 context 跑的 parser
 // v2.1: 591 SPA layout 變動 → community/age/district 加多重 fallback + DOM selector
 function parseListPage() {
@@ -839,7 +1030,9 @@ export default {
       if (sources.includes('sinyi')) promises.push(
         scrapeSinyi(env, p, subject, { nearbyDistricts }).catch(e => { console.error('sinyi fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
       );
-      // TODO Phase 1B: rakuya
+      if (sources.includes('rakuya')) promises.push(
+        scrapeRakuya(env, p, subject, { nearbyDistricts }).catch(e => { console.error('rakuya fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
+      );
       const allByPlatform = await Promise.all(promises);
       // 各 platform 回傳 { items, stages, _debugInfo }，items 攤平、stages 收集
       const all = allByPlatform.flatMap(x => x.items || []);
@@ -920,15 +1113,13 @@ export default {
       const sameCommunity = [];
       const nearby = [];
       for (const item of merged) {
-        // 確認真的同社區（用 community 名 fuzzy match）
+        // community 名 fuzzy match → 不分 matchType 都歸 sameCommunity
+        // （樂屋/信義 nearby 撞 subject community 也晉升；591 keyword 搜到但名對不上的降回 nearby）
         const reallySame = isSameCommunity(item.community, subject.community);
-        if (item.matchType === 'same_community' && reallySame) {
-          sameCommunity.push(item);
-        } else if (item.matchType === 'same_community' && !reallySame) {
-          // keyword 搜到但社區名對不上 → 歸到鄰近
-          nearby.push({ ...item, matchType: 'nearby' });
+        if (reallySame) {
+          sameCommunity.push({ ...item, matchType: 'same_community' });
         } else {
-          nearby.push(item);
+          nearby.push({ ...item, matchType: 'nearby' });
         }
       }
 
