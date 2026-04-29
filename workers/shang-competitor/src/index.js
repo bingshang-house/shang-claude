@@ -69,11 +69,29 @@ async function scrape591(env, params, subject) {
   const section = KAOHSIUNG_SECTIONS[district] || KAOHSIUNG_SECTIONS['前鎮區'];
 
   // 相鄰區（含本區），組成 591 多選 URL「section=A,B,C,D」
-  const adjacentList = ADJACENT_DISTRICTS[district] || [district];
-  const adjacentSectionIds = adjacentList
+  let adjacentList = ADJACENT_DISTRICTS[district] || [district];
+  let adjacentSectionIds = adjacentList
     .map(d => KAOHSIUNG_SECTIONS[d])
     .filter(Boolean);
+  // 終極保險：算出來空的（可能 district 是 11 主要區外的郊區、或 address 異常），
+  // 硬塞前鎮 + 苓雅 + 小港 + 鳳山（市區常見組合）
+  if (adjacentSectionIds.length === 0) {
+    adjacentList = ['前鎮區', '苓雅區', '小港區', '鳳山區'];
+    adjacentSectionIds = [249, 268, 251, 245];
+  }
   const adjacentSectionParam = adjacentSectionIds.join(',');
+
+  // echo 給前端 debug 用（看 worker 真實收到 / 算出的內容）
+  const _debugInfo = {
+    receivedAddress: subject.address || '(空)',
+    receivedCommunity: subject.community || '(空)',
+    receivedBuildingType: subject.buildingType || '(空)',
+    extractedDistrictRaw: districtRaw,
+    finalDistrict: district,
+    sectionResolved: section,
+    adjacentList,
+    adjacentSectionIds,
+  };
 
   const shape = SHAPE_MAP[subject.buildingType?.replace(/\s/g, '')] || 2;
 
@@ -168,7 +186,7 @@ async function scrape591(env, params, subject) {
   allItems.push(...stage2);
 
   await browser.close();
-  return { items: allItems.map(x => ({ ...x, source: '591' })), stages };
+  return { items: allItems.map(x => ({ ...x, source: '591' })), stages, _debugInfo };
 }
 
 // 在頁面 context 跑的 parser
@@ -334,13 +352,14 @@ export default {
       // 1. 爬資料（並行多來源）
       const promises = [];
       if (sources.includes('591')) promises.push(
-        scrape591(env, p, subject).catch(e => { console.error('591 fail', e); return { items: [], stages: [] }; })
+        scrape591(env, p, subject).catch(e => { console.error('591 fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
       );
       // TODO Phase 1B: rakuya
       const allByPlatform = await Promise.all(promises);
-      // 各 platform 回傳 { items, stages }，items 攤平、stages 收集
+      // 各 platform 回傳 { items, stages, _debugInfo }，items 攤平、stages 收集
       const all = allByPlatform.flatMap(x => x.items || []);
       const platformStages = allByPlatform.flatMap(x => x.stages || []);
+      const platformDebug = allByPlatform.find(x => x._debugInfo)?._debugInfo || null;
 
       // 2. 歸併
       const merged = mergeItems(all);
@@ -396,7 +415,8 @@ export default {
           nearby: nearby.length,
           elapsedMs: Date.now() - start,
           debugSample,            // 591 第一筆 innerText 樣本（前 350 字）
-          stages: platformStages, // 每階段的 URL + 抓到筆數，方便 debug filter / SPA 渲染問題
+          stages: platformStages, // 每階段的 URL + 抓到筆數
+          debugInfo: platformDebug, // worker 收到的 subject + 算出的 district / section
         },
         sameCommunity: sameCommunity.map(cleanItem),
         nearby: nearby.slice(0, 30).map(cleanItem),  // 鄰近最多顯示 30 筆

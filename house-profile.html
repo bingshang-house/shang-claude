@@ -8521,10 +8521,22 @@ function renderCompetitorResults(data) {
   // debug：顯示每階段 URL + 抓到筆數（任一階段 0 筆就展開）
   if (s.stages && s.stages.length) {
     const anyZero = s.stages.some(st => st.count === 0);
+    const di = s.debugInfo;
+    const diHtml = di ? `
+      <div style="margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #f59e0b33;">
+        <strong>worker 收到的 subject：</strong><br>
+        　address: <code>${(di.receivedAddress || '(空)').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</code><br>
+        　community: <code>${(di.receivedCommunity || '(空)').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</code><br>
+        　buildingType: <code>${(di.receivedBuildingType || '(空)').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</code><br>
+        <strong>算出：</strong>extractDistrict=<code>${di.extractedDistrictRaw || 'null'}</code> ／ finalDistrict=<code>${di.finalDistrict}</code> ／ sectionId=<code>${di.sectionResolved}</code><br>
+        <strong>相鄰區：</strong>${(di.adjacentList || []).join('、')}（sectionIds=${(di.adjacentSectionIds || []).join(',')}）
+      </div>
+    ` : '';
     statsHtml += `
       <details style="margin-top:8px;font-size:11px;color:#666;" ${anyZero ? 'open' : ''}>
         <summary style="cursor:pointer;color:#b45309;">🔍 各階段 591 抓取結果（debug）</summary>
         <div style="background:#fffbeb;padding:8px;border-radius:6px;margin-top:6px;font-size:10px;line-height:1.6;">
+          ${diHtml}
           ${s.stages.map(st => `
             <div style="margin-bottom:4px;">
               <strong>${st.name}：${st.count} 筆</strong>
