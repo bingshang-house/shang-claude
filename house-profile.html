@@ -1819,8 +1819,19 @@
         const numer = parseInt(ratioM[2]);
         const ping  = p2(sqm2ping(total * numer / denom));
         const loNo  = loNoM ? loNoM[1].replace(/\s/g,'') : '';
-        const distM2 = t.match(/高雄市([^\s]{1,4}區)/);
-        const distName = distM2 ? distM2[1] : (deed.district || '').replace('高雄市','');
+        // 縣市 + 鄉鎮市區廣義抽取（南台灣 5 縣市白名單，避免誤抓「台北市」這類）
+        const distM2 = t.match(/(高雄市|屏東縣|台南市|臺南市|台東縣|臺東縣|嘉義市|嘉義縣)([^\s]{1,4}(?:區|鄉|鎮|市))/);
+        const NLSC_COUNTY_CODE = {
+          '高雄市':'E', '屏東縣':'T',
+          '台南市':'D', '臺南市':'D',
+          '台東縣':'V', '臺東縣':'V',
+          '嘉義市':'I', '嘉義縣':'Q',
+        };
+        const countyName = distM2 ? distM2[1] : '';
+        const county = NLSC_COUNTY_CODE[countyName] || '';
+        const distName = distM2
+          ? distM2[2]
+          : (deed?.district || '').replace(/^(高雄市|屏東縣|臺?南市|臺?東縣|嘉義[市縣])/, '');
         const expected = extractExpectedParcels(raw, 'land');
 
         // 前次移轉現值（土增稅起算點）
@@ -1846,6 +1857,7 @@
           numerator: numer, denominator: denom,
           detail: `${total}m² × ${denom}分之${numer} ≈ ${ping}坪`,
           distName,
+          county, countyName,
           prevYearROC, prevMonth, prevValue,
           _raw: raw,
           expectedLandNos: expected.expectedLandNos,
@@ -2976,13 +2988,18 @@
 
   // 「瑞崗段四小段2945-0000」 + nlscSect=1025 → https://maps.nlsc.gov.tw/T09/mapshow.action?county=E&parno=102529450000
   // 用 mapshow.action 直接定位（goland 路由是 frameset wrapper，某些情境不觸發內框）
+  // 高雄 nlscSect 是字串 4 碼；屏東是 object {sect4, county, ...}
   function nlscGolandUrl(entry) {
     if (!entry?.nlscSect || !entry?.loNo) return null;
     const m = entry.loNo.match(/(\d[\d-]*)\s*$/);
     if (!m) return null;
     const parts = m[1].split('-');
     const land8 = parts[0].padStart(4,'0') + (parts[1]||'0').padStart(4,'0');
-    return `https://maps.nlsc.gov.tw/T09/mapshow.action?county=E&parno=${entry.nlscSect}${land8}`;
+    const isObj = typeof entry.nlscSect === 'object';
+    const county = isObj ? (entry.nlscSect.county || 'E') : 'E';
+    const sect4  = isObj ? entry.nlscSect.sect4 : entry.nlscSect;
+    if (!sect4) return null;
+    return `https://maps.nlsc.gov.tw/T09/mapshow.action?county=${county}&parno=${sect4}${land8}`;
   }
 
   function landNoHtml(entry) {
@@ -3735,6 +3752,152 @@
     return null;
   }
 
+  // ===== 屏東 NLSC enricher（Phase A）=====
+  // 一個 call 拿 8 欄：面積/使用分區/使用地類別/公告現值/公告地價/登記日期/段碼/權利人比例
+  // CORS=*，前端直接 fetch
+  // 段名 → sect4：用 NLSC ListLandSection/T/{Txx} 動態查（不需本地對照表）
+  // FUD「國土功能分區」走 nluz.nlma.gov.tw 屬 Phase B（需 worker puppeteer 拿 token）
+  let _pingdongTowns = null; // { '屏東市':'T01', '潮州鎮':'T02', ..., '枋寮鄉':'T16', ... } 33 筆
+  const _pingdongSectByTown = {}; // { 'T16': [{office,sectcode,sectstr}, ...] }
+
+  async function getPingdongTowns() {
+    if (_pingdongTowns) return _pingdongTowns;
+    _pingdongTowns = {};
+    try {
+      const r = await fetch('https://api.nlsc.gov.tw/other/ListTown/T').then(r => r.text());
+      [...r.matchAll(/<townItem>[\s\S]*?<towncode>([^<]+)<\/towncode>[\s\S]*?<townname>([^<]+)<\/townname>[\s\S]*?<\/townItem>/g)]
+        .forEach(m => { _pingdongTowns[m[2]] = m[1]; });
+    } catch (e) { console.warn('屏東鄉鎮對照載入失敗', e); }
+    return _pingdongTowns;
+  }
+
+  async function getPingdongSectInfo(townCode, sectName) {
+    if (!_pingdongSectByTown[townCode]) {
+      try {
+        const r = await fetch(`https://api.nlsc.gov.tw/other/ListLandSection/T/${townCode}`).then(r => r.text());
+        _pingdongSectByTown[townCode] = [...r.matchAll(/<sectItem>([\s\S]*?)<\/sectItem>/g)].map(m => {
+          const body = m[1];
+          const get = tag => body.match(new RegExp(`<${tag}>([^<]*)</${tag}>`))?.[1] || '';
+          return { office: get('office'), officestr: get('officestr'), sectcode: get('sectcode'), sectstr: get('sectstr') };
+        });
+      } catch (e) {
+        console.warn('屏東地段表載入失敗', townCode, e);
+        _pingdongSectByTown[townCode] = [];
+      }
+    }
+    return _pingdongSectByTown[townCode].find(s => s.sectstr === sectName) || null;
+  }
+
+  // POST getLandInfoSect 一個 call 拿 8 欄
+  async function queryNlscLandFull(county, sect4, landno8) {
+    for (let i = 0; i < 3; i++) {
+      if (i) await new Promise(r => setTimeout(r, 600 + (i - 1) * 800));
+      try {
+        const r = await fetch('https://api.nlsc.gov.tw/S09_Ralid/getLandInfoSect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `city=${county}&sect=${sect4}&landno=${landno8}`,
+        });
+        if (!r.ok) continue;
+        const json = await r.json();
+        if (!json || !json.ralid) return null;
+        const d = json.ralid;
+        // AA11/AA12 是 base64 編碼的中文（NLSC 為了避 ANSI codepage 問題）
+        const decB64 = (s) => {
+          if (!s) return '';
+          try { return decodeURIComponent(escape(atob(s))); } catch { return ''; }
+        };
+        // AA05 民國 YYYMMDD（例 0640909 = 民國 64 年 9 月 9 日）
+        const formatRoc = (s) => {
+          if (!s || String(s).length < 5) return '';
+          const ss = String(s).padStart(7, '0');
+          return `民國${parseInt(ss.slice(0,3),10)}年${parseInt(ss.slice(3,5),10)}月${parseInt(ss.slice(5,7),10)}日`;
+        };
+        return {
+          area: Number(d.AA10) || 0,
+          aa11: decB64(d.AA11),
+          aa12: decB64(d.AA12),
+          pubVal: parseInt(d.AA16, 10) || 0,
+          pubPrice: parseInt(d.AA17, 10) || 0,
+          regDate: formatRoc(d.AA05),
+          aa48: d.AA48 || '',
+          aa49: d.AA49 || '',
+        };
+      } catch (e) { /* retry */ }
+    }
+    return null;
+  }
+
+  // 屏東 zoning dispatcher（對齊既有 _landData[idx] 欄位）
+  async function queryZoningPingdong(idx) {
+    const data = _landData[idx];
+    const el = document.getElementById(`land-zone-${idx}`);
+    if (!el || !data?.loNo) return;
+    const sectM = data.loNo.match(/^(.+?段(?:.+?小段)?)\s*(\d[\d-]*)/);
+    if (!sectM) { el.textContent = '⚠ 地號格式無法解析'; return; }
+    const sectName = sectM[1].trim();
+    const landNo   = sectM[2].trim();
+    el.textContent = '⏳ 查詢中…';
+    el.style.color = '#92400e';
+    try {
+      const towns = await getPingdongTowns();
+      const townCode = towns[data.distName];
+      if (!townCode) { el.textContent = '⚠ 找不到屏東鄉鎮對應'; return; }
+      const sectInfo = await getPingdongSectInfo(townCode, sectName);
+      if (!sectInfo) { el.textContent = '⚠ 找不到地段'; return; }
+      const sect4 = sectInfo.sectcode;
+      const parts = landNo.split('-');
+      const landno8 = parts[0].padStart(4, '0') + (parts[1] || '0').padStart(4, '0');
+      // NLSC 主資料 + NLSC 測量類別 並行（共用既有 queryLandSurveyInfo 內部解析會 fail，自己打）
+      const surveyP = (async () => {
+        const apiUrl = `https://api.nlsc.gov.tw/other/GetLandSecInfoNlsc/T/${sect4}`;
+        for (let i = 0; i < 3; i++) {
+          if (i) await new Promise(r => setTimeout(r, 600));
+          try {
+            const r = await fetch(apiUrl);
+            if (!r.ok) continue;
+            const xml = await r.text();
+            const get = tag => xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`))?.[1]?.trim() || '';
+            const svType = get('svType'), mYear = get('mYear'), mMonth = get('mMonth');
+            const hasRealDate = mYear && mMonth && mYear !== '1900';
+            return {
+              svTypeCode: svType,
+              svTypeText: NLSC_SURVEY_TYPE[svType] || '',
+              mapYear: mYear, mapMonth: mMonth,
+              mapDate: hasRealDate ? `${mYear}-${String(mMonth).padStart(2,'0')}` : '',
+            };
+          } catch (e) {/* retry */}
+        }
+        return null;
+      })();
+      const [land, survey] = await Promise.all([
+        queryNlscLandFull('T', sect4, landno8),
+        surveyP,
+      ]);
+      if (!land) { el.textContent = '⚠ NLSC 查無此地號'; return; }
+
+      // 對齊高雄欄位語意：屏東多為非都市，zone 顯示使用分區（一般農業區 等）
+      _landData[idx].zone         = land.aa11 || '查得';
+      _landData[idx].pubVal       = land.pubVal;
+      _landData[idx].pubPrice     = land.pubPrice;
+      _landData[idx].nonUrbanZone = land.aa11;
+      _landData[idx].nonUrbanUse  = land.aa12;
+      _landData[idx].nlscSect     = { sect4, office: sectInfo.office, sectName: sectInfo.sectstr, county: 'T' };
+      if (survey) _landData[idx].survey = survey;
+
+      let msg = `✓ ${land.aa11 || '查得'}`;
+      if (land.aa12) msg += ` / ${land.aa12}`;
+      if (land.pubVal)   msg += `　現值 ${land.pubVal.toLocaleString()} 元/m²`;
+      if (land.pubPrice) msg += `　地價 ${land.pubPrice.toLocaleString()} 元/m²`;
+      el.textContent = msg;
+      el.style.color = '#1d4ed8';
+      try { updateCard(); } catch (e) {}
+    } catch (e) {
+      console.warn('queryZoningPingdong failed', e);
+      el.textContent = '⚠ 屏東查詢失敗';
+    }
+  }
+
   // ===== SWC 水利局 enricher：山坡地比例、特定水保區、崩塌區、違規案件 =====
   // SWC SectionID 與 gisdawh AA48 完全相同（1483 筆零差異），沿用 sect-code-gisdawh.json
   async function querySwcByLand(distName, sectName, landNo) {
@@ -3913,6 +4076,13 @@
     const distCode = DIST_CODE[data.distName || ''];
     const el = document.getElementById(`land-zone-${idx}`);
     if (!el) return;
+    // 外縣市分流：屏東先做（Phase A），其他縣市待擴
+    if (data.county && data.county !== 'E') {
+      if (data.county === 'T') return queryZoningPingdong(idx);
+      el.textContent = `⚠ ${data.countyName || '此縣市'} 自動查詢尚未支援`;
+      el.style.color = '#92400e';
+      return;
+    }
     if (!distCode) { el.textContent = '⚠ 無法判斷行政區'; return; }
     el.textContent = '⏳ 查詢中…';
     el.style.color = '#92400e';
