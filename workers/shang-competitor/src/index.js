@@ -969,13 +969,107 @@ async function checkAuth(env, request, body) {
   return { ok: true };
 }
 
+// ============ 屏東 nluz FUD 查詢 ============
+// nluz.nlma.gov.tw 是 ArcGIS Server + token gating。
+// 流程：puppeteer 進 default.aspx 拿 token → KV cache 23hr → POST SEARCHCADA 拿 FUD
+// 第一次查詢 ~5-10s（puppeteer），後續 cache hit ~300ms（直接 fetch）
+async function getNluzToken(env, forceRefresh = false) {
+  const KEY = 'nluz_token_T';
+  if (!forceRefresh) {
+    const cached = await env.GEOCACHE.get(KEY);
+    if (cached) return cached;
+  }
+  const browser = await puppeteer.launch(env.MYBROWSER);
+  try {
+    const page = await browser.newPage();
+    await page.goto('https://nluz.nlma.gov.tw/ex3smap/default.aspx?CN=屏東縣&version=報部版', {
+      waitUntil: 'networkidle0', timeout: 30000,
+    });
+    // 等 ArcGIS IdentityManager 註冊 token
+    const token = await page.evaluate(() => new Promise((resolve) => {
+      const start = Date.now();
+      const tryGet = () => {
+        if (Date.now() - start > 15000) return resolve(null);
+        if (!window.require) return setTimeout(tryGet, 500);
+        window.require(['esri/identity/IdentityManager'], (IM) => {
+          const cred = IM.credentials.find(c => c.server.includes('nluzmap'));
+          if (cred?.token) resolve(cred.token);
+          else setTimeout(tryGet, 500);
+        });
+      };
+      tryGet();
+    }));
+    if (!token) throw new Error('no token from nluz IdentityManager');
+    await env.GEOCACHE.put(KEY, token, { expirationTtl: 23 * 3600 });
+    return token;
+  } finally {
+    await browser.close();
+  }
+}
+
+async function postNluzSearchcada(token, sect6, landno8) {
+  const r = await fetch(`https://nluz.nlma.gov.tw/ex3smap/ex_data?CMD=SEARCHCADA&TOKEN=${encodeURIComponent(token)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Referer': 'https://nluz.nlma.gov.tw/ex3smap/default.aspx',
+    },
+    body: `VAL1=${encodeURIComponent(sect6)}&VAL2=${encodeURIComponent(landno8)}`,
+  });
+  if (!r.ok) return null;
+  const text = await r.text();
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+async function fetchNluzFud(env, sect6, landno8) {
+  let token = await getNluzToken(env);
+  let json = await postNluzSearchcada(token, sect6, landno8);
+  // token 過期或失敗 → 強制刷新一次
+  if (!json || json.STATUS !== 1) {
+    token = await getNluzToken(env, true);
+    json = await postNluzSearchcada(token, sect6, landno8);
+  }
+  if (!json || !json.features?.[0]) return null;
+  const f = json.features[0];
+  const a = f.attributes || {};
+  return {
+    fud: a['國土功能分區'] || '',
+    nonUrbanZone: a['原使用分區'] || '',
+    nonUrbanUse: a['原使用地'] || '',
+    landUse: a['使用地'] || '',
+    townName: a['鄉鎮市區'] || '',
+    sectName: a['地段'] || '',
+    landNo: a['地號'] || '',
+    cx: f.geometry?.x ?? null,  // EPSG:3857
+    cy: f.geometry?.y ?? null,
+  };
+}
+
 // ============ Main handler ============
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: CORS });
 
     const url = new URL(request.url);
+
+    // 屏東 nluz FUD 查詢路由（GET，前端直接 call）
+    if (url.pathname === '/nluz-fud') {
+      if (request.method !== 'GET') return new Response('Method Not Allowed', { status: 405, headers: CORS });
+      const sect6 = url.searchParams.get('sect6');
+      const landno8 = url.searchParams.get('landno8');
+      if (!sect6 || !landno8) {
+        return Response.json({ ok: false, error: 'sect6 and landno8 required' }, { status: 400, headers: CORS });
+      }
+      try {
+        const data = await fetchNluzFud(env, sect6, landno8);
+        if (!data) return Response.json({ ok: false, error: 'no result' }, { status: 404, headers: CORS });
+        return Response.json({ ok: true, ...data }, { headers: CORS });
+      } catch (e) {
+        return Response.json({ ok: false, error: String(e?.message || e) }, { status: 500, headers: CORS });
+      }
+    }
+
+    if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: CORS });
     if (url.pathname !== '/search') return new Response('Not Found', { status: 404, headers: CORS });
 
     let body;

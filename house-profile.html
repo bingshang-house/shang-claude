@@ -3865,6 +3865,23 @@
     return null;
   }
 
+  // 屏東 nluz FUD（puppeteer worker；首次 5-10s，後續 cache 命中 ~300ms）
+  // worker 端：cf-workers/shang-competitor /nluz-fud?sect6=TF0351&landno8=01260000
+  async function fetchNluzFud(sect6, landno8) {
+    if (!sect6 || !landno8) return null;
+    const url = `https://shang-competitor.bingshang1019.workers.dev/nluz-fud?sect6=${encodeURIComponent(sect6)}&landno8=${encodeURIComponent(landno8)}`;
+    for (let i = 0; i < 2; i++) {
+      if (i) await new Promise(r => setTimeout(r, 2000));
+      try {
+        const r = await fetch(url);
+        if (!r.ok) continue;
+        const j = await r.json();
+        if (j && j.ok) return j; // {fud, nonUrbanZone, nonUrbanUse, landUse, cx, cy ...}
+      } catch (e) { /* retry */ }
+    }
+    return null;
+  }
+
   // 屏東 zoning dispatcher（對齊既有 _landData[idx] 欄位）
   async function queryZoningPingdong(idx) {
     const data = _landData[idx];
@@ -3885,27 +3902,36 @@
       const sect4 = sectInfo.sectcode;
       const parts = landNo.split('-');
       const landno8 = parts[0].padStart(4, '0') + (parts[1] || '0').padStart(4, '0');
-      // NLSC 主資料 + 測量類別 並行（測量類別走共用 helper，跟高雄同邏輯）
-      const [land, survey] = await Promise.all([
+      // NLSC 主資料 + 測量類別 + nluz FUD 三向並行
+      // sect6 = office+sect4 (例 TF0351)，nluz SEARCHCADA 用
+      const sect6 = sectInfo.office + sect4;
+      const [land, survey, fud] = await Promise.all([
         queryNlscLandFull('T', sect4, landno8),
         _fetchNlscSurveyInfo('T', sect4),
+        fetchNluzFud(sect6, landno8),
       ]);
-      if (!land) { el.textContent = '⚠ NLSC 查無此地號'; return; }
+      if (!land && !fud) { el.textContent = '⚠ NLSC 與 nluz 都查無此地號'; return; }
 
-      // 對齊高雄欄位語意：屏東多為非都市，zone 顯示使用分區（一般農業區 等）
-      // AA11/AA12 屏東部分地號 NLSC 真的回空（要靠 nluz Phase B 才有）
-      _landData[idx].zone         = land.aa11 || '（NLSC 無分區資料）';
-      _landData[idx].pubVal       = land.pubVal;
-      _landData[idx].pubPrice     = land.pubPrice;
-      _landData[idx].nonUrbanZone = land.aa11;
-      _landData[idx].nonUrbanUse  = land.aa12;
+      // 整合：分區/用地優先 nluz（nluz 給「原使用分區」「原使用地」覆蓋率高），fallback NLSC AA11/AA12
+      const finalZone = fud?.nonUrbanZone || land?.aa11 || '';
+      const finalUse  = fud?.nonUrbanUse  || land?.aa12 || '';
+
+      _landData[idx].zone         = finalZone || '（無分區資料）';
+      _landData[idx].pubVal       = land?.pubVal || 0;
+      _landData[idx].pubPrice     = land?.pubPrice || 0;
+      _landData[idx].nonUrbanZone = finalZone;
+      _landData[idx].nonUrbanUse  = finalUse;
+      _landData[idx].fud          = fud?.fud || '';
       _landData[idx].nlscSect     = { sect4, office: sectInfo.office, sectName: sectInfo.sectstr, county: 'T' };
+      if (fud?.cx) _landData[idx].cx3857 = fud.cx; // EPSG:3857 Web Mercator（跟高雄 3826 不同投影）
+      if (fud?.cy) _landData[idx].cy3857 = fud.cy;
       if (survey) _landData[idx].survey = survey;
 
-      let msg = land.aa11 ? `✓ ${land.aa11}` : '✓ 已查 NLSC（分區/類別待 nluz 補）';
-      if (land.aa12) msg += ` / ${land.aa12}`;
-      if (land.pubVal)   msg += `　現值 ${land.pubVal.toLocaleString()} 元/m²`;
-      if (land.pubPrice) msg += `　地價 ${land.pubPrice.toLocaleString()} 元/m²`;
+      let msg = finalZone ? `✓ ${finalZone}` : '✓ 已查';
+      if (finalUse) msg += ` / ${finalUse}`;
+      if (fud?.fud) msg += `　${fud.fud}`;
+      if (land?.pubVal)   msg += `　現值 ${land.pubVal.toLocaleString()} 元/m²`;
+      if (land?.pubPrice) msg += `　地價 ${land.pubPrice.toLocaleString()} 元/m²`;
       el.textContent = msg;
       el.style.color = '#1d4ed8';
       try { updateCard(); } catch (e) {}
