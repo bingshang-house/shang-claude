@@ -146,32 +146,33 @@ function parseListPage() {
     }
 
     // === community / district / road 多重 fallback ===
+    // 591 raw 樣本：「3F/14F 美國第五街综合大樓前鎮區-文橫三路 仲介」— 區前不一定有空白
     let community = '', district = '', road = '';
-    // 第一試：原 regex（樓層 → 社區 → 區 → 路 → 仲介）
-    const m3 = t.match(/\d+(?:~\d+)?F\/\d+F\s+(\S+?)\s+([一-鿿]{1,3}區)[\-\s]+(\S+?)\s+仲介/);
+    // 第一試：樓層後接「社區+區-路」（區前可能無空白）
+    const m3 = t.match(/\d+(?:~\d+)?F\/\d+F\s+([一-鿿\w]+?)([一-鿿]{1,3}區)[\-\s]+([一-鿿\w]+?)\s+仲介/);
     if (m3) { community = m3[1]; district = m3[2]; road = m3[3]; }
-    // 第二試：DOM selector 抓 community（591 常見 class）
+    // 第二試：DOM selector 抓 community
     if (!community) {
       for (const sel of ['.community', '.community-name', '.community-title', '[class*="community"]', '[class*="Community"]']) {
         const el = c.querySelector(sel);
         if (el && el.textContent.trim()) { community = el.textContent.trim(); break; }
       }
     }
-    // 第三試：純粹從文字抓「XX區-YY路」或「XX區 YY路」
+    // 第三試：純粹從文字抓「XX區-YY路」
     if (!district) {
       const m4 = t.match(/([一-鿿]{1,3}區)[\-\s]+([一-鿿\d]{1,15})/);
       if (m4) { district = m4[1]; if (!road) road = m4[2]; }
     }
 
-    // === age 多重 fallback（591 樓層後接屋齡的格式不固定）===
+    // === age 多重 fallback（591 黏字格式：「坪29年3F/14F」全無空白）===
     let age = 0;
     const ageRegexes = [
       /(?:屋齡|齡)\s*[:：]?\s*(\d+)\s*年/,
       /(\d+)\s*年屋齡/,
       /(\d+)\s*年(?:中古|新成屋)/,
-      /坪\s+(\d+)\s*年\s+\d+F/,        // 原 regex
-      /\d+(?:~\d+)?F\/\d+F\s+(?:.*?)?(\d+)\s*年/,  // 樓層後接屋齡
-      /(\d+)\s*年\s+\d+(?:~\d+)?F\/\d+F/,           // 屋齡接樓層
+      /坪\s*(\d{1,2})\s*年\s*\d+(?:~\d+)?F/,        // 「主建XX坪29年3F/14F」← 591 主流格式
+      /(\d{1,2})\s*年\s*\d+(?:~\d+)?F\/\d+F/,       // 「29年3F/14F」更鬆版
+      /\d+(?:~\d+)?F\/\d+F\s*(\d{1,2})\s*年/,       // 樓層後接屋齡
     ];
     for (const re of ageRegexes) {
       const m = t.match(re);
