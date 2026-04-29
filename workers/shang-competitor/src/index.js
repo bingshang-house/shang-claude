@@ -546,10 +546,10 @@ export default {
     // mode=auto 時自動填參數
     let p = { ...params };
     if (mode === 'auto') {
-      p.totalAreaMin = subject.totalArea ? subject.totalArea - 10 : null;
-      p.totalAreaMax = subject.totalArea ? subject.totalArea + 10 : null;
+      p.totalAreaMin = subject.totalArea ? Math.max(0, subject.totalArea - 5) : null;
+      p.totalAreaMax = subject.totalArea ? subject.totalArea + 15 : null;
       p.ageMin = subject.age ? Math.max(0, subject.age - 5) : null;
-      p.ageMax = subject.age ? subject.age + 5 : null;
+      p.ageMax = subject.age ? subject.age + 15 : null;
     }
 
     const start = Date.now();
