@@ -1,0 +1,2190 @@
+{
+  "subject": {
+    "community": "瑞祥龍邸",
+    "href": "https://sale.591.com.tw/home/house/detail/2/20109065.html",
+    "totalArea": 46.77,
+    "totalPrice": 1098,
+    "floor": "6F/15F",
+    "address": "高雄市前鎮區崗山南街529號"
+  },
+  "subjLoc": {
+    "lat": 22.600692,
+    "lon": 120.326798,
+    "display": "高雄市前鎮區瑞祥國民小學, 福祥街, 瑞祥里, 前鎮區, 前鎮, 高雄市, 806, 臺灣"
+  },
+  "within": [
+    {
+      "title": "瑞隆商圈/瑞豐國中/明亮3房大平車",
+      "community": "誠品生活大樓誠信區",
+      "road": "瑞祥街",
+      "rooms": "3房1廳2衛",
+      "totalArea": 42.85,
+      "mainArea": 22.62,
+      "age": 26,
+      "floor": "9F/9F",
+      "agent": "蘇小姐",
+      "hasPark": true,
+      "totalPrice": 1066,
+      "unitPrice": 24.88,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19968355.html",
+      "imgSrc": "https://img2.591.com.tw/house/2025/10/16/176060097070855200.jpg!400x300.jpg",
+      "agents": [
+        "蘇小姐"
+      ],
+      "prices": [
+        1066
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19968355.html"
+      ],
+      "communityVariants": [
+        "誠品生活大樓誠信區"
+      ],
+      "lat": 22.600692,
+      "lon": 120.326798,
+      "distance": 0
+    },
+    {
+      "title": "親友專約瑞隆商圈誠品生活3房車(中信林先生)可店配",
+      "community": "誠品生活大樓誠信區",
+      "road": "瑞祥街",
+      "rooms": "3房2廳2衛",
+      "totalArea": 42.85,
+      "mainArea": 22.62,
+      "age": 27,
+      "floor": "6F/9F",
+      "agent": "林進榮",
+      "hasPark": true,
+      "totalPrice": 1158,
+      "unitPrice": 27.02,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19754699.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/02/177243360107631505.jpg!400x300.jpg",
+      "agents": [
+        "林進榮",
+        "吳長成",
+        "值班人員"
+      ],
+      "prices": [
+        1158
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19754699.html",
+        "https://sale.591.com.tw/home/house/detail/2/19756104.html",
+        "https://sale.591.com.tw/home/house/detail/2/19826287.html"
+      ],
+      "communityVariants": [
+        "誠品生活大樓誠信區"
+      ],
+      "lat": 22.600692,
+      "lon": 120.326798,
+      "distance": 0
+    },
+    {
+      "title": "🍎瑞祥國小瑞隆商圈庭院一樓精美四房",
+      "community": "",
+      "road": "崗山中街",
+      "rooms": "4房2廳2衛",
+      "totalArea": 41.02,
+      "mainArea": 27.03,
+      "age": 32,
+      "floor": "1F/8F",
+      "agent": "陳絲瑜",
+      "hasPark": false,
+      "totalPrice": 998,
+      "unitPrice": 24.33,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19914411.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/28/177737060092858406.jpg!400x300.jpg",
+      "agents": [
+        "陳絲瑜",
+        "顏河源",
+        "值班人員",
+        "王玉山",
+        "胡暉群",
+        "鍾婉妍",
+        "徐小姐",
+        "周小姐"
+      ],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19914411.html",
+        "https://sale.591.com.tw/home/house/detail/2/19767282.html",
+        "https://sale.591.com.tw/home/house/detail/2/19454894.html",
+        "https://sale.591.com.tw/home/house/detail/2/19470380.html",
+        "https://sale.591.com.tw/home/house/detail/2/19762236.html",
+        "https://sale.591.com.tw/home/house/detail/2/19783932.html",
+        "https://sale.591.com.tw/home/house/detail/2/19813696.html",
+        "https://sale.591.com.tw/home/house/detail/2/19858192.html",
+        "https://sale.591.com.tw/home/house/detail/2/20024550.html",
+        "https://sale.591.com.tw/home/house/detail/2/19281770.html"
+      ],
+      "communityVariants": [
+        "向陽門第",
+        "向陽門第大樓",
+        "崗山中街"
+      ],
+      "lat": 22.6021161,
+      "lon": 120.3270909,
+      "distance": 161.18202098798926
+    },
+    {
+      "title": "瑞隆.海洋商圈｜近衛武營室內大空間｜4改3房+平車",
+      "community": "富貴明園",
+      "road": "瑞福路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 42.95,
+      "mainArea": 26.57,
+      "age": 32,
+      "floor": "7F/12F",
+      "agent": "吳佳霖",
+      "hasPark": true,
+      "totalPrice": 1180,
+      "unitPrice": 27.48,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19927611.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/21/177675131729516402.png!400x300.png",
+      "agents": [
+        "吳佳霖",
+        "盧麗玲",
+        "吳小姐",
+        "陳貞妃"
+      ],
+      "prices": [
+        1180
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19927611.html",
+        "https://sale.591.com.tw/home/house/detail/2/19803178.html",
+        "https://sale.591.com.tw/home/house/detail/2/20062288.html",
+        "https://sale.591.com.tw/home/house/detail/2/19873106.html"
+      ],
+      "communityVariants": [
+        "富貴明園"
+      ],
+      "lat": 22.6016644,
+      "lon": 120.3239563,
+      "distance": 311.10991657385483
+    },
+    {
+      "title": "前鎮瑞隆商圈優質美樓店",
+      "community": "公園圖書館大樓",
+      "road": "崗山南街",
+      "rooms": "3房3廳2衛",
+      "totalArea": 49.08,
+      "mainArea": 38.52,
+      "age": 31,
+      "floor": "2F/10F",
+      "agent": "值小姐",
+      "hasPark": false,
+      "totalPrice": 1938,
+      "unitPrice": 39.49,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19809926.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/09/177304009188471305.jpg!400x300.jpg",
+      "agents": [
+        "值小姐"
+      ],
+      "prices": [
+        1938
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19809926.html"
+      ],
+      "communityVariants": [
+        "公園圖書館大樓"
+      ],
+      "lat": 22.6026143,
+      "lon": 120.3320118,
+      "distance": 576.3268780892491
+    },
+    {
+      "title": "瑞祥國小【公園圖書館】四房附車位🌈有影片",
+      "community": "公園圖書館大樓",
+      "road": "武慶一路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 45.84,
+      "mainArea": 24.75,
+      "age": 29,
+      "floor": "9F/9F",
+      "agent": "優質服務獎",
+      "hasPark": true,
+      "totalPrice": 980,
+      "unitPrice": 21.38,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20074123.html",
+      "imgSrc": "https://img2.591.com.tw/video/cover/2025-12-13/2799974.png!1000x.water2.png",
+      "agents": [
+        "優質服務獎",
+        "陳小姐(橙橙)",
+        "莊小姐",
+        "蔡玉珊"
+      ],
+      "prices": [
+        980
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20074123.html",
+        "https://sale.591.com.tw/home/house/detail/2/20095474.html",
+        "https://sale.591.com.tw/home/house/detail/2/20099266.html",
+        "https://sale.591.com.tw/home/house/detail/2/20086696.html"
+      ],
+      "communityVariants": [
+        "公園圖書館大樓"
+      ],
+      "lat": 22.6066976,
+      "lon": 120.3323863,
+      "distance": 880.3583710823585
+    },
+    {
+      "title": "瑞隆商圈【公園圖書館】景觀4大房+車位[Yan]",
+      "community": "公園圖書館大樓",
+      "road": "武慶一路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 45.84,
+      "mainArea": 24.74,
+      "age": 31,
+      "floor": "9F/10F",
+      "agent": "馮小姐",
+      "hasPark": true,
+      "totalPrice": 980,
+      "unitPrice": 21.38,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20101419.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/27/177727428395308509.jpg!400x300.jpg",
+      "agents": [
+        "馮小姐",
+        "鄭先生"
+      ],
+      "prices": [
+        980
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20101419.html",
+        "https://sale.591.com.tw/home/house/detail/2/20089916.html"
+      ],
+      "communityVariants": [
+        "公園圖書館大樓"
+      ],
+      "lat": 22.6066976,
+      "lon": 120.3323863,
+      "distance": 880.3583710823585
+    },
+    {
+      "title": "瑞隆商圈優質4房+車位",
+      "community": "公園圖書館大樓",
+      "road": "武慶一路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 45.84,
+      "mainArea": 0,
+      "age": 30,
+      "floor": "9F/10F",
+      "agent": "宋小姐",
+      "hasPark": true,
+      "totalPrice": 980,
+      "unitPrice": 21.38,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20081218.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/23/177693694061594308.jpg!400x300.jpg",
+      "agents": [
+        "宋小姐"
+      ],
+      "prices": [
+        980
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20081218.html"
+      ],
+      "communityVariants": [
+        "公園圖書館大樓"
+      ],
+      "lat": 22.6066976,
+      "lon": 120.3323863,
+      "distance": 880.3583710823585
+    },
+    {
+      "title": "秒殺房型-坐西朝東🏡保泰路",
+      "community": "長谷巨星",
+      "road": "保泰路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 45.74,
+      "mainArea": 27.57,
+      "age": 35,
+      "floor": "12F/15F",
+      "agent": "王芷華",
+      "hasPark": true,
+      "totalPrice": 998,
+      "unitPrice": 21.82,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19842948.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/03/13/177340530359280004.jpg!1000x.water2.jpg",
+      "agents": [
+        "王芷華",
+        "范晴熙",
+        "蘇先生",
+        "黃詩婷",
+        "周小姐"
+      ],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19842948.html",
+        "https://sale.591.com.tw/home/house/detail/2/19767883.html",
+        "https://sale.591.com.tw/home/house/detail/2/19832558.html",
+        "https://sale.591.com.tw/home/house/detail/2/19859159.html",
+        "https://sale.591.com.tw/home/house/detail/2/19940756.html"
+      ],
+      "communityVariants": [
+        "長谷巨星"
+      ],
+      "lat": 22.603728,
+      "lon": 120.3355755,
+      "distance": 962.2155028946258
+    }
+  ],
+  "beyond": [
+    {
+      "title": "亞洲新灣區捷運宅~景觀二房+超大平面車位",
+      "community": "摩天高雄大廈",
+      "road": "新光路",
+      "rooms": "2房1廳1衛",
+      "totalArea": 42.31,
+      "mainArea": 13.97,
+      "age": 27,
+      "floor": "27F/39F",
+      "agent": "張先生",
+      "hasPark": true,
+      "totalPrice": 880,
+      "unitPrice": 30.2,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19945164.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/01/31/176984538011490607.jpg!400x300.jpg",
+      "agents": [
+        "張先生"
+      ],
+      "prices": [
+        880
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19945164.html"
+      ],
+      "communityVariants": [
+        "摩天高雄大廈"
+      ],
+      "lat": 22.6100657,
+      "lon": 120.3018585,
+      "distance": 2764.14543896302
+    },
+    {
+      "title": "🌈三多亞灣28樓景觀宅一坪只要27萬🌈三房+平車",
+      "community": "摩天高雄大廈",
+      "road": "新光路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 47.71,
+      "mainArea": 24.86,
+      "age": 27,
+      "floor": "28F/39F",
+      "agent": "黃君玉",
+      "hasPark": true,
+      "totalPrice": 1288,
+      "unitPrice": 27,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19888701.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/26/177449477848298809.jpg!400x300.jpg",
+      "agents": [
+        "黃君玉",
+        "值班",
+        "謝芳華"
+      ],
+      "prices": [
+        1288
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19888701.html",
+        "https://sale.591.com.tw/home/house/detail/2/19858647.html",
+        "https://sale.591.com.tw/home/house/detail/2/19995085.html"
+      ],
+      "communityVariants": [
+        "摩天高雄大廈"
+      ],
+      "lat": 22.6100657,
+      "lon": 120.3018585,
+      "distance": 2764.14543896302
+    },
+    {
+      "title": "正勤國宅-電梯3房",
+      "community": "君毅正勤國宅B區",
+      "road": "中華五路969巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.98,
+      "mainArea": 26.84,
+      "age": 31,
+      "floor": "2F/12F",
+      "agent": "代理人",
+      "hasPark": false,
+      "totalPrice": 798,
+      "unitPrice": 19.01,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19973640.html",
+      "imgSrc": "https://img1.591.com.tw/house/2025/12/18/176603474444133205.jpg!400x300.jpg",
+      "agents": [
+        "代理人",
+        "蔡明芳",
+        "李昱燊"
+      ],
+      "prices": [
+        798
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19973640.html",
+        "https://sale.591.com.tw/home/house/detail/2/19814307.html",
+        "https://sale.591.com.tw/home/house/detail/2/19798299.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅B區"
+      ],
+      "lat": 22.6015195,
+      "lon": 120.3053974,
+      "distance": 2198.814694002992
+    },
+    {
+      "title": "夢時代亞灣｜正勤國宅屋況優免整理高樓大三房",
+      "community": "君毅正勤國宅A區",
+      "road": "中華五路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.96,
+      "mainArea": 26.84,
+      "age": 31,
+      "floor": "12F/12F",
+      "agent": "吳湘寧",
+      "hasPark": false,
+      "totalPrice": 798,
+      "unitPrice": 19.02,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19804958.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/01/08/176784774095146808.jpg!400x300.jpg",
+      "agents": [
+        "吳湘寧",
+        "紀硯中"
+      ],
+      "prices": [
+        798
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19804958.html",
+        "https://sale.591.com.tw/home/house/detail/2/19965414.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅A區"
+      ],
+      "lat": 22.6034661,
+      "lon": 120.3056743,
+      "distance": 2190.2780093254037
+    },
+    {
+      "title": "亞灣｜高樓層大3房｜夢時代好市多｜捷運輕軌宅",
+      "community": "君毅正勤國宅A區",
+      "road": "中華五路947巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 47.88,
+      "mainArea": 28.86,
+      "age": 31,
+      "floor": "11F/12F",
+      "agent": "張善城",
+      "hasPark": false,
+      "totalPrice": 998,
+      "unitPrice": 20.84,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19959691.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/02/177507555068735608.png!400x300.png",
+      "agents": [
+        "張善城",
+        "值先生"
+      ],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19959691.html",
+        "https://sale.591.com.tw/home/house/detail/2/20010398.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅A區"
+      ],
+      "lat": 22.6007477,
+      "lon": 120.3050595,
+      "distance": 2231.590733578554
+    },
+    {
+      "title": "✨哇✨三多商圈✨室內30坪✨景觀大4房✨",
+      "community": "美的皇家",
+      "road": "大禹街",
+      "rooms": "4房2廳2衛",
+      "totalArea": 45.91,
+      "mainArea": 30.36,
+      "age": 36,
+      "floor": "7F/22F",
+      "agent": "陳先生",
+      "hasPark": false,
+      "totalPrice": 798,
+      "unitPrice": 17.38,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20066615.html",
+      "imgSrc": "https://img2.591.com.tw/video/cover/2026-04-20/3047278.png!1000x.water2.png",
+      "agents": [
+        "陳先生",
+        "李沛蕎左營高鐵大樓"
+      ],
+      "prices": [
+        798
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20066615.html",
+        "https://sale.591.com.tw/home/house/detail/2/19943220.html"
+      ],
+      "communityVariants": [
+        "美的皇家"
+      ],
+      "lat": 22.6133802,
+      "lon": 120.3094272,
+      "distance": 2273.783409474573
+    },
+    {
+      "title": "🏠亞灣區｜高樓層低總價明亮三房🏠",
+      "community": "君毅正勤國宅B區",
+      "road": "中華五路969巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.77,
+      "mainArea": 26.63,
+      "age": 31,
+      "floor": "12F/12F",
+      "agent": "周沂臻",
+      "hasPark": false,
+      "totalPrice": 828,
+      "unitPrice": 19.82,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19947608.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/13/177604454132656300.jpg!400x300.jpg",
+      "agents": [
+        "周沂臻",
+        "張家綸",
+        "左先生"
+      ],
+      "prices": [
+        828
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19947608.html",
+        "https://sale.591.com.tw/home/house/detail/2/19563051.html",
+        "https://sale.591.com.tw/home/house/detail/2/19873121.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅B區"
+      ],
+      "lat": 22.6015195,
+      "lon": 120.3053974,
+      "distance": 2198.814694002992
+    },
+    {
+      "title": "亞灣區/高樓層景觀宅/三房+車位",
+      "community": "中山首府大樓",
+      "road": "中山二路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 51.4,
+      "mainArea": 33.07,
+      "age": 28,
+      "floor": "19F/28F",
+      "agent": "林小姐",
+      "hasPark": true,
+      "totalPrice": 1799,
+      "unitPrice": 35,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20077302.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/22/177685120581457404.jpeg!400x300.jpeg",
+      "agents": [
+        "林小姐",
+        "楊全來"
+      ],
+      "prices": [
+        1799
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20077302.html",
+        "https://sale.591.com.tw/home/house/detail/2/20076269.html"
+      ],
+      "communityVariants": [
+        "中山首府大樓"
+      ],
+      "lat": 22.6076137,
+      "lon": 120.3065641,
+      "distance": 2215.087289245899
+    },
+    {
+      "title": "近前鎮漁港佛西街開放格局｜低總價輕鬆入手｜住宅價格店面格局",
+      "community": "佛西街華廈",
+      "road": "佛西街",
+      "rooms": "",
+      "totalArea": 45.9,
+      "mainArea": 0,
+      "age": 34,
+      "floor": "1F/6F",
+      "agent": "吳宥陞",
+      "hasPark": false,
+      "totalPrice": 998,
+      "unitPrice": 21.74,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19957537.html",
+      "imgSrc": "https://img2.591.com.tw/house/2025/10/19/176086289737888907.jpg!400x300.jpg",
+      "agents": [
+        "吳宥陞"
+      ],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19957537.html"
+      ],
+      "communityVariants": [
+        "佛西街華廈"
+      ],
+      "lat": 22.570639,
+      "lon": 120.3216535,
+      "distance": 3383.2229628168775
+    },
+    {
+      "title": "亞灣民權二路紅線獅甲捷運四房格局高樓層景觀宅",
+      "community": "皇家貴賓大廈",
+      "road": "沱江街",
+      "rooms": "4房2廳2衛",
+      "totalArea": 51.22,
+      "mainArea": 30.67,
+      "age": 28,
+      "floor": "24F/27F",
+      "agent": "林淑敏",
+      "hasPark": true,
+      "totalPrice": 1398,
+      "unitPrice": 27.29,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19930719.html",
+      "imgSrc": "https://img2.591.com.tw/video/cover/2026-04-27/3057764.png!1000x.water2.png",
+      "agents": [
+        "林淑敏",
+        "蔡翔宇",
+        "謝先生",
+        "汪湋騰"
+      ],
+      "prices": [
+        1398
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19930719.html",
+        "https://sale.591.com.tw/home/house/detail/2/19924987.html",
+        "https://sale.591.com.tw/home/house/detail/2/19736487.html",
+        "https://sale.591.com.tw/home/house/detail/2/19980770.html"
+      ],
+      "communityVariants": [
+        "皇家貴賓大廈"
+      ],
+      "lat": 22.6081007,
+      "lon": 120.3149393,
+      "distance": 1469.8837147149272
+    },
+    {
+      "title": "🎁專約｜光甲國宅超大室內四房｜高樓層景觀戶🎁",
+      "community": "光華甲區國宅",
+      "road": "嘉陵街",
+      "rooms": "4房2廳2衛",
+      "totalArea": 50,
+      "mainArea": 0,
+      "age": 30,
+      "floor": "10F/16F",
+      "agent": "林承祐",
+      "hasPark": false,
+      "totalPrice": 1068,
+      "unitPrice": 21.36,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20016778.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/18/177650089418134006.jpg!fit.1000x.water2.jpg",
+      "agents": [
+        "林承祐"
+      ],
+      "prices": [
+        1068
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20016778.html"
+      ],
+      "communityVariants": [
+        "光華甲區國宅"
+      ],
+      "lat": 22.6109751,
+      "lon": 120.3150712,
+      "distance": 1660.274736767488
+    },
+    {
+      "title": "【亞灣區*好市多】~正勤國宅~景觀3房",
+      "community": "君毅正勤國宅B區",
+      "road": "中華五路991巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.95,
+      "mainArea": 26.84,
+      "age": 31,
+      "floor": "12F/12F",
+      "agent": "鄭先生",
+      "hasPark": false,
+      "totalPrice": 780,
+      "unitPrice": 18.59,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19971504.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/03/177521000482731103.jpg!400x300.jpg",
+      "agents": [
+        "鄭先生",
+        "馮小姐",
+        "值班人員",
+        "陳小姐(橙橙)",
+        "蔡小姐"
+      ],
+      "prices": [
+        780
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19971504.html",
+        "https://sale.591.com.tw/home/house/detail/2/20107635.html",
+        "https://sale.591.com.tw/home/house/detail/2/19966844.html",
+        "https://sale.591.com.tw/home/house/detail/2/20009427.html",
+        "https://sale.591.com.tw/home/house/detail/2/20081169.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅B區"
+      ],
+      "lat": 22.6019955,
+      "lon": 120.3051222,
+      "distance": 2229.851230236626
+    },
+    {
+      "title": "🌟亞灣獅甲捷運站溫馨4房平車|民權皇家DC👍",
+      "community": "民權皇家DC",
+      "road": "管仲路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 49.6,
+      "mainArea": 36.41,
+      "age": 36,
+      "floor": "11F/16F",
+      "agent": "華夏孟子加盟店",
+      "hasPark": true,
+      "totalPrice": 1438,
+      "unitPrice": 28.99,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20053542.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/17/177641551312239901.jpg!fit.1000x.water2.jpg",
+      "agents": [
+        "華夏孟子加盟店"
+      ],
+      "prices": [
+        1438
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20053542.html"
+      ],
+      "communityVariants": [
+        "民權皇家DC"
+      ],
+      "lat": 22.6063809,
+      "lon": 120.3119946,
+      "distance": 1646.0278936729278
+    },
+    {
+      "title": "夢時代景觀翻新四房平車",
+      "community": "高巢家庭巴黎區大廈",
+      "road": "凱旋四路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 48.3,
+      "mainArea": 27.58,
+      "age": 25,
+      "floor": "10F/14F",
+      "agent": "王若安",
+      "hasPark": true,
+      "totalPrice": 1598,
+      "unitPrice": 33.09,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20085468.html",
+      "imgSrc": "https://img1.591.com.tw/house/2025/07/12/175231632096829907.jpg!400x300.jpg",
+      "agents": [
+        "王若安"
+      ],
+      "prices": [
+        1598
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20085468.html"
+      ],
+      "communityVariants": [
+        "高巢家庭巴黎區大廈"
+      ],
+      "lat": 22.59309,
+      "lon": 120.30735,
+      "distance": 2168.079665017286
+    },
+    {
+      "title": "好房推薦和平二路★漂亮大三房+車位",
+      "community": "和平二路303號",
+      "road": "和平二路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 45.97,
+      "mainArea": 28.94,
+      "age": 31,
+      "floor": "5F/7F",
+      "agent": "洪蔚東",
+      "hasPark": true,
+      "totalPrice": 1298,
+      "unitPrice": 28.24,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20071383.html",
+      "imgSrc": "https://img1.591.com.tw/house/2025/02/09/173908702437219301.jpg!400x300.jpg",
+      "agents": [
+        "洪蔚東",
+        "值班人員",
+        "李冠慶"
+      ],
+      "prices": [
+        1298
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20071383.html",
+        "https://sale.591.com.tw/home/house/detail/2/20031390.html",
+        "https://sale.591.com.tw/home/house/detail/2/19977529.html"
+      ],
+      "communityVariants": [
+        "和平二路303號",
+        "文化凱瑟琳"
+      ],
+      "lat": 22.6108272,
+      "lon": 120.3229513,
+      "distance": 1194.1581665056679
+    },
+    {
+      "title": "草衙店住1+2樓",
+      "community": "國光路149號華廈",
+      "road": "國光路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 45.62,
+      "mainArea": 21.89,
+      "age": 31,
+      "floor": "1F/8F",
+      "agent": "代理人",
+      "hasPark": false,
+      "totalPrice": 1088,
+      "unitPrice": 23.85,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19973650.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/01/05/176759414270952800.jpg!400x300.jpg",
+      "agents": [
+        "代理人"
+      ],
+      "prices": [
+        1088
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19973650.html"
+      ],
+      "communityVariants": [
+        "國光路149號華廈"
+      ],
+      "lat": 22.6147857,
+      "lon": 120.3202998,
+      "distance": 1703.2028150120855
+    },
+    {
+      "title": "【亞灣核心最超值】正勤社區優質大三房",
+      "community": "君毅正勤國宅B區",
+      "road": "中華五路969巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.94,
+      "mainArea": 26.84,
+      "age": 31,
+      "floor": "12F/12F",
+      "agent": "張秀琴",
+      "hasPark": false,
+      "totalPrice": 798,
+      "unitPrice": 19.03,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19829565.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/24/177703835566209300.jpg!400x300.jpg",
+      "agents": [
+        "張秀琴",
+        "施小珍"
+      ],
+      "prices": [
+        798
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19829565.html",
+        "https://sale.591.com.tw/home/house/detail/2/19880111.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅B區"
+      ],
+      "lat": 22.6015195,
+      "lon": 120.3053974,
+      "distance": 2198.814694002992
+    },
+    {
+      "title": "民權DC明亮大四房",
+      "community": "民權皇家DC",
+      "road": "管仲路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 48.46,
+      "mainArea": 37.2,
+      "age": 34,
+      "floor": "13F/16F",
+      "agent": "徐小姐",
+      "hasPark": false,
+      "totalPrice": 1068,
+      "unitPrice": 22.04,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19749755.html",
+      "imgSrc": "https://img1.591.com.tw/house/2023/05/25/168498618138224909.jpg!400x300.jpg",
+      "agents": [
+        "徐小姐"
+      ],
+      "prices": [
+        1068
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19749755.html"
+      ],
+      "communityVariants": [
+        "民權皇家DC"
+      ],
+      "lat": 22.6063809,
+      "lon": 120.3119946,
+      "distance": 1646.0278936729278
+    },
+    {
+      "title": "君毅正勤社區高樓層",
+      "community": "君毅正勤國宅B區",
+      "road": "中華五路969巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.95,
+      "mainArea": 26.84,
+      "age": 31,
+      "floor": "12F/12F",
+      "agent": "徐小姐",
+      "hasPark": false,
+      "totalPrice": 900,
+      "unitPrice": 21.45,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19904988.html",
+      "imgSrc": "https://img2.591.com.tw/house/2025/04/14/174462509215313809.jpg!400x300.jpg",
+      "agents": [
+        "徐小姐"
+      ],
+      "prices": [
+        900
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19904988.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅B區"
+      ],
+      "lat": 22.6015195,
+      "lon": 120.3053974,
+      "distance": 2198.814694002992
+    },
+    {
+      "title": "亞灣區捷運宅｜高樓海景三房含車位",
+      "community": "皇家貴賓大廈",
+      "road": "民權二路220巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 44.27,
+      "mainArea": 26.41,
+      "age": 28,
+      "floor": "24F/27F",
+      "agent": "楊竣評",
+      "hasPark": true,
+      "totalPrice": 1198,
+      "unitPrice": 27.06,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19564497.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/01/19/176879409553729805.jpg!400x300.jpg",
+      "agents": [
+        "楊竣評",
+        "值班專員"
+      ],
+      "prices": [
+        1198
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19564497.html",
+        "https://sale.591.com.tw/home/house/detail/2/19791910.html"
+      ],
+      "communityVariants": [
+        "皇家貴賓大廈"
+      ],
+      "lat": 22.6076889,
+      "lon": 120.3125753,
+      "distance": 1654.3669325466724
+    },
+    {
+      "title": "✨中正高工3房+車位",
+      "community": "光華雙星大樓",
+      "road": "汕頭街",
+      "rooms": "3房2廳2衛",
+      "totalArea": 44.38,
+      "mainArea": 26.15,
+      "age": 30,
+      "floor": "8F/14F",
+      "agent": "值班人員",
+      "hasPark": true,
+      "totalPrice": 980,
+      "unitPrice": 22.08,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19961263.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/02/177510231859161209.jpg!400x300.jpg",
+      "agents": [
+        "值班人員",
+        "楊文聰"
+      ],
+      "prices": [
+        980
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19961263.html",
+        "https://sale.591.com.tw/home/house/detail/2/19871523.html"
+      ],
+      "communityVariants": [
+        "光華雙星大樓"
+      ],
+      "lat": 22.6095067,
+      "lon": 120.3188124,
+      "distance": 1277.759892229011
+    },
+    {
+      "title": "亞灣獅甲🌟一日三市收租自用🌟面寬店面住家",
+      "community": "民權皇家大樓",
+      "road": "民權二路",
+      "rooms": "4房3廳3衛",
+      "totalArea": 50.74,
+      "mainArea": 38.41,
+      "age": 0,
+      "floor": "1~2F/3F",
+      "agent": "葉盈汝",
+      "hasPark": false,
+      "totalPrice": 1680,
+      "unitPrice": 33.11,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19844457.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/14/177345661131250308.jpg!fit.1000x.water2.jpg",
+      "agents": [
+        "葉盈汝"
+      ],
+      "prices": [
+        1680
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19844457.html"
+      ],
+      "communityVariants": [
+        "民權皇家大樓"
+      ],
+      "lat": 22.6085142,
+      "lon": 120.3111623,
+      "distance": 1825.5728136242176
+    },
+    {
+      "title": "《東方黎明》瑞隆商圈核心4房優質宅",
+      "community": "東方黎明大廈",
+      "road": "瑞北路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 50.28,
+      "mainArea": 34.85,
+      "age": 34,
+      "floor": "3F/14F",
+      "agent": "中柏不動產有限公司",
+      "hasPark": false,
+      "totalPrice": 988,
+      "unitPrice": 19.65,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19955308.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/01/04/176751831077613303.jpg!400x300.jpg",
+      "agents": [
+        "中柏不動產有限公司"
+      ],
+      "prices": [
+        988
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19955308.html"
+      ],
+      "communityVariants": [
+        "東方黎明大廈"
+      ],
+      "lat": 22.6089111,
+      "lon": 120.3309527,
+      "distance": 1008.5378455384025
+    },
+    {
+      "title": "【熱門精選】亞洲新灣區｜獅甲捷運站｜景觀高樓3房車位",
+      "community": "皇家貴賓大廈",
+      "road": "民權二路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 44.24,
+      "mainArea": 26.4,
+      "age": 28,
+      "floor": "11F/27F",
+      "agent": "蕭苡亭",
+      "hasPark": true,
+      "totalPrice": 1098,
+      "unitPrice": 24.82,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19922967.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/26/177452222873348908.jpg!400x300.jpg",
+      "agents": [
+        "蕭苡亭"
+      ],
+      "prices": [
+        1098
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19922967.html"
+      ],
+      "communityVariants": [
+        "皇家貴賓大廈"
+      ],
+      "lat": 22.6085142,
+      "lon": 120.3111623,
+      "distance": 1825.5728136242176
+    },
+    {
+      "title": "精品房仲❤️捷運宅｜亞洲新灣區｜高樓層景觀｜兩房平車",
+      "community": "摩天高雄大廈",
+      "road": "新光路",
+      "rooms": "2房1廳1衛",
+      "totalArea": 42.31,
+      "mainArea": 13.97,
+      "age": 27,
+      "floor": "27F/39F",
+      "agent": "黃屏芳",
+      "hasPark": true,
+      "totalPrice": 888,
+      "unitPrice": 20.99,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19850892.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/03/15/177355752624022309.jpg!fit.1000x.water2.jpg",
+      "agents": [
+        "黃屏芳"
+      ],
+      "prices": [
+        888
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19850892.html"
+      ],
+      "communityVariants": [
+        "摩天高雄大廈"
+      ],
+      "lat": 22.6100657,
+      "lon": 120.3018585,
+      "distance": 2764.14543896302
+    },
+    {
+      "title": "雙語學區｜漂亮國宅｜首購首選",
+      "community": "",
+      "road": "廣東三街",
+      "rooms": "3房2廳2衛",
+      "totalArea": 45.26,
+      "mainArea": 27.87,
+      "age": 29,
+      "floor": "7F/15F",
+      "agent": "陳建佑",
+      "hasPark": false,
+      "totalPrice": 638,
+      "unitPrice": 14.1,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20009556.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/10/177579414859087400.jpg!400x300.jpg",
+      "agents": [
+        "陳建佑"
+      ],
+      "prices": [
+        638
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20009556.html"
+      ],
+      "communityVariants": [],
+      "lat": 22.609304,
+      "lon": 120.3198654,
+      "distance": 1193.0896050017911
+    },
+    {
+      "title": "小瑜獨家!捷運宅紅線獅甲站旁｜超大室內30坪｜三房美華廈",
+      "community": "馨華園大廈",
+      "road": "后平路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 42.24,
+      "mainArea": 30.59,
+      "age": 33,
+      "floor": "5F/12F",
+      "agent": "張小瑜",
+      "hasPark": false,
+      "totalPrice": 688,
+      "unitPrice": 16.29,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19804491.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/08/177296567396278007.jpg!400x300.jpg",
+      "agents": [
+        "張小瑜"
+      ],
+      "prices": [
+        688
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19804491.html"
+      ],
+      "communityVariants": [
+        "馨華園大廈"
+      ],
+      "lat": 22.5727645,
+      "lon": 120.3201684,
+      "distance": 3179.111713688791
+    },
+    {
+      "title": "亞洲新灣區✨獅甲捷運✨稀有景觀大三房車位",
+      "community": "皇家貴賓大廈",
+      "road": "民權二路220巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 44.27,
+      "mainArea": 26.41,
+      "age": 28,
+      "floor": "11F/27F",
+      "agent": "🏅林千沛",
+      "hasPark": true,
+      "totalPrice": 1098,
+      "unitPrice": 24.8,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19866100.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/03/31/177494472517628800.jpg!400x300.jpg",
+      "agents": [
+        "🏅林千沛",
+        "張登翔",
+        "何珍妮"
+      ],
+      "prices": [
+        1098
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19866100.html",
+        "https://sale.591.com.tw/home/house/detail/2/19885493.html",
+        "https://sale.591.com.tw/home/house/detail/2/19915526.html"
+      ],
+      "communityVariants": [
+        "皇家貴賓大廈"
+      ],
+      "lat": 22.6076889,
+      "lon": 120.3125753,
+      "distance": 1654.3669325466724
+    },
+    {
+      "title": "⭐謙行推薦⭐【地上權】低總價大坪4房",
+      "community": "民權國宅",
+      "road": "管仲路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 47.75,
+      "mainArea": 32.01,
+      "age": 30,
+      "floor": "15F/15F",
+      "agent": "值班業務",
+      "hasPark": false,
+      "totalPrice": 888,
+      "unitPrice": 18.6,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20013966.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/02/09/177062558812319303.jpeg!400x300.jpeg",
+      "agents": [
+        "值班業務"
+      ],
+      "prices": [
+        888
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20013966.html"
+      ],
+      "communityVariants": [
+        "民權國宅"
+      ],
+      "lat": 22.6063809,
+      "lon": 120.3119946,
+      "distance": 1646.0278936729278
+    },
+    {
+      "title": "🔥亞灣｜高樓層大3房｜夢時代好市多｜捷運輕軌宅🤩",
+      "community": "君毅正勤國宅A區",
+      "road": "中華五路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 47.88,
+      "mainArea": 28.86,
+      "age": 31,
+      "floor": "11F/12F",
+      "agent": "林先生",
+      "hasPark": false,
+      "totalPrice": 998,
+      "unitPrice": 20.84,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19835705.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/13/177333219924786401.jpg!400x300.jpg",
+      "agents": [
+        "林先生"
+      ],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19835705.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅A區"
+      ],
+      "lat": 22.6034661,
+      "lon": 120.3056743,
+      "distance": 2190.2780093254037
+    },
+    {
+      "title": "民權皇家★亞灣獅甲★一日三市收租自用★面寬店面住家",
+      "community": "民權皇家大樓",
+      "road": "民權二路",
+      "rooms": "",
+      "totalArea": 50.74,
+      "mainArea": 38.41,
+      "age": 37,
+      "floor": "2F/15F",
+      "agent": "陳先生",
+      "hasPark": false,
+      "totalPrice": 1680,
+      "unitPrice": 33.11,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19840960.html",
+      "imgSrc": "https://img.youtube.com/vi/OH3BaSY1tAc/hqdefault.jpg",
+      "agents": [
+        "陳先生"
+      ],
+      "prices": [
+        1680
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19840960.html"
+      ],
+      "communityVariants": [
+        "民權皇家大樓"
+      ],
+      "lat": 22.6085142,
+      "lon": 120.3111623,
+      "distance": 1825.5728136242176
+    },
+    {
+      "title": "AI影音講房 12 21.1萬/坪⭐50.57坪/唯一釋出",
+      "community": "光華甲區國宅",
+      "road": "嘉陵街",
+      "rooms": "4房2廳2衛",
+      "totalArea": 50.57,
+      "mainArea": 31.38,
+      "age": 30,
+      "floor": "10F/16F",
+      "agent": "程致慧",
+      "hasPark": false,
+      "totalPrice": 1068,
+      "unitPrice": 21.1,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20023416.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/12/177598925549538005.jpg!1000x.water2.jpg",
+      "agents": [
+        "程致慧"
+      ],
+      "prices": [
+        1068
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20023416.html"
+      ],
+      "communityVariants": [
+        "光華甲區國宅"
+      ],
+      "lat": 22.6109751,
+      "lon": 120.3150712,
+      "distance": 1660.274736767488
+    },
+    {
+      "title": "正勤國宅低總價三房首購成家首選",
+      "community": "君毅正勤國宅B區",
+      "road": "中華五路969巷",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.8,
+      "mainArea": 26.65,
+      "age": 31,
+      "floor": "4F/12F",
+      "agent": "黃清源",
+      "hasPark": false,
+      "totalPrice": 858,
+      "unitPrice": 20.53,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20038105.html",
+      "imgSrc": "https://img2.591.com.tw/house/2025/12/12/176550931243722709.jpg!400x300.jpg",
+      "agents": [
+        "黃清源"
+      ],
+      "prices": [
+        858
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20038105.html"
+      ],
+      "communityVariants": [
+        "君毅正勤國宅B區"
+      ],
+      "lat": 22.6015195,
+      "lon": 120.3053974,
+      "distance": 2198.814694002992
+    },
+    {
+      "title": "🔥籬仔內｜高樓景觀｜大4房平車｜坐北朝南邊間三陽台",
+      "community": "東方黎明大廈",
+      "road": "瑞北路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 50.2,
+      "mainArea": 34.51,
+      "age": 33,
+      "floor": "11F/18F",
+      "agent": "江先生",
+      "hasPark": true,
+      "totalPrice": 1080,
+      "unitPrice": 21.51,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20076775.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/24/177700201379316400.jpg!400x300.jpg",
+      "agents": [
+        "江先生"
+      ],
+      "prices": [
+        1080
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20076775.html"
+      ],
+      "communityVariants": [
+        "東方黎明大廈"
+      ],
+      "lat": 22.6089111,
+      "lon": 120.3309527,
+      "distance": 1008.5378455384025
+    },
+    {
+      "title": "三多捷運景觀高樓・水電全翻新鄰近・鄰近亞灣",
+      "community": "美的皇家",
+      "road": "大禹街",
+      "rooms": "4房2廳2衛",
+      "totalArea": 43.32,
+      "mainArea": 30.5,
+      "age": 35,
+      "floor": "22F/22F",
+      "agent": "張竣翔",
+      "hasPark": false,
+      "totalPrice": 1060,
+      "unitPrice": 24.47,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19479311.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/01/05/176758871665989006.jpg!400x300.jpg",
+      "agents": [
+        "張竣翔"
+      ],
+      "prices": [
+        1060
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19479311.html"
+      ],
+      "communityVariants": [
+        "美的皇家"
+      ],
+      "lat": 22.6133802,
+      "lon": 120.3094272,
+      "distance": 2273.783409474573
+    },
+    {
+      "title": "亞灣三多商圈捷運站黃金1+2+3樓店",
+      "community": "摩天高雄大廈",
+      "road": "新光路",
+      "rooms": "1房2廳2衛",
+      "totalArea": 41.29,
+      "mainArea": 33.96,
+      "age": 27,
+      "floor": "3F/39F",
+      "agent": "值先生",
+      "hasPark": false,
+      "totalPrice": 3480,
+      "unitPrice": 84.28,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19782756.html",
+      "imgSrc": "https://img1.591.com.tw/house/2025/05/22/174788295144083204.jpg!400x300.jpg",
+      "agents": [
+        "值先生"
+      ],
+      "prices": [
+        3480
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19782756.html"
+      ],
+      "communityVariants": [
+        "摩天高雄大廈"
+      ],
+      "lat": 22.6100657,
+      "lon": 120.3018585,
+      "distance": 2764.14543896302
+    },
+    {
+      "title": "勞工公園|近獅甲站面寬1+夾賺錢金店面",
+      "community": "皇家貴賓大廈",
+      "road": "鄭和路",
+      "rooms": "",
+      "totalArea": 41.27,
+      "mainArea": 38.55,
+      "age": 28,
+      "floor": "1F/1F",
+      "agent": "胡嘉真",
+      "hasPark": false,
+      "totalPrice": 1688,
+      "unitPrice": 40.91,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19811201.html",
+      "imgSrc": "https://img1.591.com.tw/house/2025/11/13/176300006358378307.jpg!400x300.jpg",
+      "agents": [
+        "胡嘉真"
+      ],
+      "prices": [
+        1688
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19811201.html"
+      ],
+      "communityVariants": [
+        "皇家貴賓大廈"
+      ],
+      "lat": 22.6086632,
+      "lon": 120.3123121,
+      "distance": 1731.1418152995327
+    },
+    {
+      "title": "✨🍎三多亞灣核心生活圈｜高樓景觀4房｜雙衛浴開窗✨",
+      "community": "光華甲區國宅",
+      "road": "長江街",
+      "rooms": "4房2廳2衛",
+      "totalArea": 50.78,
+      "mainArea": 31.65,
+      "age": 31,
+      "floor": "11F/16F",
+      "agent": "葉小姐",
+      "hasPark": false,
+      "totalPrice": 1148,
+      "unitPrice": 22.61,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19827489.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/11/177322430982845403.jpg!400x300.jpg",
+      "agents": [
+        "葉小姐",
+        "謝宜娣",
+        "劉小姐"
+      ],
+      "prices": [
+        1148
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19827489.html",
+        "https://sale.591.com.tw/home/house/detail/2/19861020.html",
+        "https://sale.591.com.tw/home/house/detail/2/19885704.html"
+      ],
+      "communityVariants": [
+        "光華甲區國宅"
+      ],
+      "lat": 22.6101242,
+      "lon": 120.315285,
+      "distance": 1580.108633248014
+    },
+    {
+      "title": "吳蕙如精選🌿文化中心有電梯時尚全翻新3房車位🌿",
+      "community": "天馬和平二路華廈",
+      "road": "和平二路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 45.97,
+      "mainArea": 28.94,
+      "age": 32,
+      "floor": "10F/15F",
+      "agent": "吳蕙如",
+      "hasPark": true,
+      "totalPrice": 1298,
+      "unitPrice": 28.24,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19861506.html",
+      "imgSrc": "https://img2.591.com.tw/house/2025/12/29/176700519396720706.png!400x300.png",
+      "agents": [
+        "吳蕙如"
+      ],
+      "prices": [
+        1298
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19861506.html"
+      ],
+      "communityVariants": [
+        "天馬和平二路華廈"
+      ],
+      "lat": 22.6108272,
+      "lon": 120.3229513,
+      "distance": 1194.1581665056679
+    },
+    {
+      "title": "【校園芳鄰】樂群國小高樓層視野佳三面採光三房車位",
+      "community": "校園芳鄰大廈",
+      "road": "和平二路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.13,
+      "mainArea": 25.29,
+      "age": 32,
+      "floor": "11F/11F",
+      "agent": "周小姐",
+      "hasPark": true,
+      "totalPrice": 1150,
+      "unitPrice": 27.96,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19919095.html",
+      "imgSrc": "https://img1.591.com.tw/house/2025/09/18/175817149929485700.jpg!400x300.jpg",
+      "agents": [
+        "周小姐"
+      ],
+      "prices": [
+        1150
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19919095.html"
+      ],
+      "communityVariants": [
+        "校園芳鄰大廈"
+      ],
+      "lat": 22.6108272,
+      "lon": 120.3229513,
+      "distance": 1194.1581665056679
+    },
+    {
+      "title": "[專約]兩房價買亞灣三多電梯大四房",
+      "community": "美的皇家",
+      "road": "林森三路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 50.71,
+      "mainArea": 35.62,
+      "age": 36,
+      "floor": "14F/22F",
+      "agent": "張小姐",
+      "hasPark": false,
+      "totalPrice": 1048,
+      "unitPrice": 20.67,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19931974.html",
+      "imgSrc": "https://img1.591.com.tw/video/cover/2026-03-28/3011883.png!1000x.water2.png",
+      "agents": [
+        "張小姐"
+      ],
+      "prices": [
+        1048
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19931974.html"
+      ],
+      "communityVariants": [
+        "美的皇家"
+      ],
+      "lat": 22.6117979,
+      "lon": 120.3077911,
+      "distance": 2309.063959404319
+    },
+    {
+      "title": "瑞隆核心商圈黃金店面1+2樓",
+      "community": "遠境馳名107",
+      "road": "瑞華街",
+      "rooms": "3房2廳2衛",
+      "totalArea": 47.48,
+      "mainArea": 35.2,
+      "age": 29,
+      "floor": "1F/11F",
+      "agent": "台慶北高華夏鑫富",
+      "hasPark": false,
+      "totalPrice": 1698,
+      "unitPrice": 35.76,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19947689.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/03/31/177492741530280704.jpg!400x300.jpg",
+      "agents": [
+        "台慶北高華夏鑫富"
+      ],
+      "prices": [
+        1698
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19947689.html"
+      ],
+      "communityVariants": [
+        "遠境馳名107"
+      ],
+      "lat": 22.6088389,
+      "lon": 120.3364065,
+      "distance": 1339.2192254130537
+    },
+    {
+      "title": "瑞隆核心商圈黃金店面1+2樓",
+      "community": "遠境馳名107",
+      "road": "瑞華街",
+      "rooms": "3房2廳2衛",
+      "totalArea": 47.48,
+      "mainArea": 35.28,
+      "age": 29,
+      "floor": "1F/11F",
+      "agent": "陳玥潔",
+      "hasPark": false,
+      "totalPrice": 1698,
+      "unitPrice": 35.76,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19958894.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/01/177504287588137306.jpg!400x300.jpg",
+      "agents": [
+        "陳玥潔"
+      ],
+      "prices": [
+        1698
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19958894.html"
+      ],
+      "communityVariants": [
+        "遠境馳名107"
+      ],
+      "lat": 22.6088389,
+      "lon": 120.3364065,
+      "distance": 1339.2192254130537
+    },
+    {
+      "title": "專約/大戶人家/三多捷運/邊間高樓三房",
+      "community": "愛瑰蘭大廈",
+      "road": "林森三路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 42.16,
+      "mainArea": 42.16,
+      "age": 46,
+      "floor": "8F/11F",
+      "agent": "洪季凡",
+      "hasPark": false,
+      "totalPrice": 998,
+      "unitPrice": 23.67,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19975164.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/24/177702733849078908.jpg!400x300.jpg",
+      "agents": [
+        "洪季凡"
+      ],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19975164.html"
+      ],
+      "communityVariants": [
+        "愛瑰蘭大廈"
+      ],
+      "lat": 22.6117979,
+      "lon": 120.3077911,
+      "distance": 2309.063959404319
+    },
+    {
+      "title": "獨家專約輕軌凱旋二聖光華商圈透天五套房邀請您來鑑賞",
+      "community": "",
+      "road": "廣東三街152巷",
+      "rooms": "5房1廳5衛",
+      "totalArea": 49.06,
+      "mainArea": 43.27,
+      "age": 39,
+      "floor": "4F/4F",
+      "agent": "徐先生",
+      "hasPark": false,
+      "totalPrice": 2380,
+      "unitPrice": 48.51,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20072208.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/21/177676443093791603.jpg!400x300.jpg",
+      "agents": [
+        "徐先生"
+      ],
+      "prices": [
+        2380
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20072208.html"
+      ],
+      "communityVariants": [],
+      "lat": 22.6111693,
+      "lon": 120.3210374,
+      "distance": 1306.5053972159492
+    },
+    {
+      "title": "文化中心正和平路上7.8米大面寬黃金店面",
+      "community": "日東和平名廈",
+      "road": "和平二路",
+      "rooms": "1房2廳1衛",
+      "totalArea": 42.98,
+      "mainArea": 36,
+      "age": 39,
+      "floor": "1F/12F",
+      "agent": "歐小姐",
+      "hasPark": false,
+      "totalPrice": 1500,
+      "unitPrice": 34.9,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20088000.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/24/177702271934584207.jpg!400x300.jpg",
+      "agents": [
+        "歐小姐"
+      ],
+      "prices": [
+        1500
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20088000.html"
+      ],
+      "communityVariants": [
+        "日東和平名廈"
+      ],
+      "lat": 22.6108272,
+      "lon": 120.3229513,
+      "distance": 1194.1581665056679
+    }
+  ],
+  "failed": [
+    {
+      "title": "",
+      "community": "",
+      "road": "",
+      "rooms": "3房2廳2衛",
+      "totalArea": 42.95,
+      "mainArea": 26.57,
+      "age": 0,
+      "floor": "7F/12F",
+      "agent": "",
+      "hasPark": true,
+      "totalPrice": 1180,
+      "unitPrice": 27.48,
+      "href": "https://sale.591.com.tw/home/house/detail/2/24132273.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/21/177675131729516402.png!400x300.png",
+      "agents": [],
+      "prices": [
+        1180
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/24132273.html"
+      ],
+      "communityVariants": [],
+      "distance": null
+    },
+    {
+      "title": "新中環三面採光4房平車",
+      "community": "新中環",
+      "road": "一心二路",
+      "rooms": "4房2廳2衛",
+      "totalArea": 51.25,
+      "mainArea": 28.88,
+      "age": 27,
+      "floor": "21F/21F",
+      "agent": "何渱庭",
+      "hasPark": true,
+      "totalPrice": 1537,
+      "unitPrice": 29.99,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19928858.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/04/20/177667172914372906.jpg!400x300.jpg",
+      "agents": [
+        "何渱庭",
+        "李美芳",
+        "蔣雨潔",
+        "周憶慶 (溫娣)",
+        "陳經理"
+      ],
+      "prices": [
+        1537
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19928858.html",
+        "https://sale.591.com.tw/home/house/detail/2/19959751.html",
+        "https://sale.591.com.tw/home/house/detail/2/19915107.html",
+        "https://sale.591.com.tw/home/house/detail/2/19671498.html",
+        "https://sale.591.com.tw/home/house/detail/2/19798772.html"
+      ],
+      "communityVariants": [
+        "新中環"
+      ],
+      "distance": null
+    },
+    {
+      "title": "[專約]三多百貨商圈電梯四房",
+      "community": "美的皇家",
+      "road": "二聖二路",
+      "rooms": "4房3廳3衛",
+      "totalArea": 47.29,
+      "mainArea": 33.29,
+      "age": 36,
+      "floor": "4F/22F",
+      "agent": "張經理",
+      "hasPark": false,
+      "totalPrice": 888,
+      "unitPrice": 18.78,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19977758.html",
+      "imgSrc": "https://img2.591.com.tw/video/cover/2026-04-04/3023662.png!1000x.water2.png",
+      "agents": [
+        "張經理",
+        "郭慧靖"
+      ],
+      "prices": [
+        888
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19977758.html",
+        "https://sale.591.com.tw/home/house/detail/2/19900142.html"
+      ],
+      "communityVariants": [
+        "美的皇家"
+      ],
+      "distance": null
+    },
+    {
+      "title": "獨家~三多商圈三面採光三房+平車",
+      "community": "新中環",
+      "road": "一心二路",
+      "rooms": "3房2廳2衛",
+      "totalArea": 48.31,
+      "mainArea": 25.76,
+      "age": 27,
+      "floor": "9F/23F",
+      "agent": "陳芃蓁",
+      "hasPark": true,
+      "totalPrice": 1358,
+      "unitPrice": 28.11,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19909365.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/03/24/177434227882344504.jpg!400x300.jpg",
+      "agents": [
+        "陳芃蓁",
+        "鄭小姐",
+        "李美芳",
+        "高小姐"
+      ],
+      "prices": [
+        1358
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19909365.html",
+        "https://sale.591.com.tw/home/house/detail/2/19998743.html",
+        "https://sale.591.com.tw/home/house/detail/2/19912602.html",
+        "https://sale.591.com.tw/home/house/detail/2/19984830.html"
+      ],
+      "communityVariants": [
+        "新中環"
+      ],
+      "distance": null
+    },
+    {
+      "title": "",
+      "community": "",
+      "road": "",
+      "rooms": "3房2廳2衛",
+      "totalArea": 44.26,
+      "mainArea": 26.4,
+      "age": 0,
+      "floor": "24F/27F",
+      "agent": "",
+      "hasPark": true,
+      "totalPrice": 1198,
+      "unitPrice": 27.07,
+      "href": "https://sale.591.com.tw/home/house/detail/2/24130062.html",
+      "imgSrc": "https://img2.591.com.tw/house/2025/09/05/175704087703699501.jpg!400x300.jpg",
+      "agents": [],
+      "prices": [
+        1198
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/24130062.html"
+      ],
+      "communityVariants": [],
+      "distance": null
+    },
+    {
+      "title": "🎉看屋找我~瑞豐國中4房+雙汽車位+雙機車位",
+      "community": "香榭大道大廈",
+      "road": "二聖路65巷",
+      "rooms": "4房2廳2衛",
+      "totalArea": 47.5,
+      "mainArea": 28.83,
+      "age": 29,
+      "floor": "8F/9F",
+      "agent": "陳小姐",
+      "hasPark": true,
+      "totalPrice": 998,
+      "unitPrice": 21.01,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19913024.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/03/25/177440976859222300.jpg!400x300.jpg",
+      "agents": [
+        "陳小姐",
+        "鄭鈞芷"
+      ],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19913024.html",
+        "https://sale.591.com.tw/home/house/detail/2/19806460.html"
+      ],
+      "communityVariants": [
+        "香榭大道大廈"
+      ],
+      "distance": null
+    },
+    {
+      "title": "萬買44坪｜近SOG捷運邊間明亮三房成家首選",
+      "community": "香港風情畫大樓",
+      "road": "三多三路",
+      "rooms": "4房1廳2衛",
+      "totalArea": 44.48,
+      "mainArea": 32.35,
+      "age": 29,
+      "floor": "4F/19F",
+      "agent": "游先生",
+      "hasPark": false,
+      "totalPrice": 998,
+      "unitPrice": 22.44,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20020272.html",
+      "imgSrc": "https://img2.591.com.tw/house/2023/01/06/167301611145639801.jpg!400x300.jpg",
+      "agents": [
+        "游先生"
+      ],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20020272.html"
+      ],
+      "communityVariants": [
+        "香港風情畫大樓"
+      ],
+      "distance": null
+    },
+    {
+      "title": "",
+      "community": "",
+      "road": "",
+      "rooms": "3房2廳2衛",
+      "totalArea": 44.27,
+      "mainArea": 26.41,
+      "age": 0,
+      "floor": "11F/27F",
+      "agent": "",
+      "hasPark": true,
+      "totalPrice": 1098,
+      "unitPrice": 24.8,
+      "href": "https://sale.591.com.tw/home/house/detail/2/24109476.html",
+      "imgSrc": "https://img2.591.com.tw/house/2026/03/31/177494472517628800.jpg!400x300.jpg",
+      "agents": [],
+      "prices": [
+        1098
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/24109476.html"
+      ],
+      "communityVariants": [],
+      "distance": null
+    },
+    {
+      "title": "待整理前鎮ʕ·͡ˑ·ཻʔ♥︎三房平車",
+      "community": "大暉佛佑路華廈",
+      "road": "",
+      "rooms": "3房2廳2衛",
+      "totalArea": 41.33,
+      "mainArea": 25.59,
+      "age": 34,
+      "floor": "2F/7F",
+      "agent": "",
+      "hasPark": true,
+      "totalPrice": 850,
+      "unitPrice": 20.57,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19874790.html",
+      "imgSrc": "https://img2.591.com.tw/house/2025/06/30/175125240206143607.jpg!400x300.jpg",
+      "agents": [],
+      "prices": [
+        850
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19874790.html"
+      ],
+      "communityVariants": [
+        "大暉佛佑路華廈"
+      ],
+      "distance": null
+    },
+    {
+      "title": "高雄市獅甲捷運{{光甲國宅}}3+1房超級景觀大樓",
+      "community": "光華甲區國宅",
+      "road": "",
+      "rooms": "4房2廳2衛",
+      "totalArea": 50.57,
+      "mainArea": 31.38,
+      "age": 31,
+      "floor": "10F/16F",
+      "agent": "",
+      "hasPark": false,
+      "totalPrice": 1068,
+      "unitPrice": 21.12,
+      "href": "https://sale.591.com.tw/home/house/detail/2/20030638.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/13/177608294923127005.jpg!400x300.jpg",
+      "agents": [],
+      "prices": [
+        1068
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/20030638.html"
+      ],
+      "communityVariants": [
+        "光華甲區國宅"
+      ],
+      "distance": null
+    },
+    {
+      "title": "👉輕軌瑞隆商圈百萬奢華裝潢次高樓四改大二房平車👈",
+      "community": "",
+      "road": "一心一路22巷",
+      "rooms": "2房2廳2衛",
+      "totalArea": 51.03,
+      "mainArea": 29.58,
+      "age": 30,
+      "floor": "5F/6F",
+      "agent": "值班人員",
+      "hasPark": true,
+      "totalPrice": 1438,
+      "unitPrice": 28.18,
+      "href": "https://sale.591.com.tw/home/house/detail/2/19914467.html",
+      "imgSrc": "https://img2.591.com.tw/house/2025/04/24/174548783032987903.jpg!400x300.jpg",
+      "agents": [
+        "值班人員",
+        "品文"
+      ],
+      "prices": [
+        1438
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/19914467.html",
+        "https://sale.591.com.tw/home/house/detail/2/20108002.html"
+      ],
+      "communityVariants": [],
+      "distance": null
+    },
+    {
+      "title": "",
+      "community": "",
+      "road": "",
+      "rooms": "4房2廳2衛",
+      "totalArea": 42.16,
+      "mainArea": 42.16,
+      "age": 0,
+      "floor": "8F/11F",
+      "agent": "",
+      "hasPark": false,
+      "totalPrice": 998,
+      "unitPrice": 23.67,
+      "href": "https://sale.591.com.tw/home/house/detail/2/24130698.html",
+      "imgSrc": "https://img1.591.com.tw/house/2026/04/24/177702733849078908.jpg!400x300.jpg",
+      "agents": [],
+      "prices": [
+        998
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/24130698.html"
+      ],
+      "communityVariants": [],
+      "distance": null
+    },
+    {
+      "title": "",
+      "community": "",
+      "road": "",
+      "rooms": "2房2廳2衛",
+      "totalArea": 51.03,
+      "mainArea": 29.58,
+      "age": 0,
+      "floor": "5F/6F",
+      "agent": "",
+      "hasPark": true,
+      "totalPrice": 1438,
+      "unitPrice": 24.26,
+      "href": "https://sale.591.com.tw/home/house/detail/2/24131021.html",
+      "imgSrc": "https://img1.591.com.tw/house/2025/12/18/176604574893908405.jpg!400x300.jpg",
+      "agents": [],
+      "prices": [
+        1438
+      ],
+      "hrefs": [
+        "https://sale.591.com.tw/home/house/detail/2/24131021.html"
+      ],
+      "communityVariants": [],
+      "distance": null
+    }
+  ]
+}
