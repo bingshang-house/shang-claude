@@ -103,21 +103,24 @@ async function scrape591(env, params, subject) {
   }
 
   const allItems = [];
+  const stages = [];
 
   // 階段 1：同社區（用 community 名搜尋，1 頁就夠 — 一個社區掛賣通常 < 30 筆）
   if (subject.community) {
     const url1 = buildUrl({ keywords: subject.community, useFilter: false });
     const stage1 = await scrapePages(url1, 1, 'same_community');
+    stages.push({ name: '同社區', url: url1, count: stage1.length });
     allItems.push(...stage1);
   }
 
   // 階段 2：鄰近條件（同區 + ±10 坪 / ±5 年）
   const url2 = buildUrl({ useFilter: true });
   const stage2 = await scrapePages(url2, 3, 'nearby');
+  stages.push({ name: '鄰近條件', url: url2, count: stage2.length });
   allItems.push(...stage2);
 
   await browser.close();
-  return allItems.map(x => ({ ...x, source: '591' }));
+  return { items: allItems.map(x => ({ ...x, source: '591' })), stages };
 }
 
 // 在頁面 context 跑的 parser
@@ -282,10 +285,14 @@ export default {
     try {
       // 1. 爬資料（並行多來源）
       const promises = [];
-      if (sources.includes('591')) promises.push(scrape591(env, p, subject).catch(e => { console.error('591 fail', e); return []; }));
+      if (sources.includes('591')) promises.push(
+        scrape591(env, p, subject).catch(e => { console.error('591 fail', e); return { items: [], stages: [] }; })
+      );
       // TODO Phase 1B: rakuya
       const allByPlatform = await Promise.all(promises);
-      const all = allByPlatform.flat();
+      // 各 platform 回傳 { items, stages }，items 攤平、stages 收集
+      const all = allByPlatform.flatMap(x => x.items || []);
+      const platformStages = allByPlatform.flatMap(x => x.stages || []);
 
       // 2. 歸併
       const merged = mergeItems(all);
@@ -340,7 +347,8 @@ export default {
           sameCommunity: sameCommunity.length,
           nearby: nearby.length,
           elapsedMs: Date.now() - start,
-          debugSample,  // 591 第一筆 innerText 樣本（前 350 字）
+          debugSample,            // 591 第一筆 innerText 樣本（前 350 字）
+          stages: platformStages, // 每階段的 URL + 抓到筆數，方便 debug filter / SPA 渲染問題
         },
         sameCommunity: sameCommunity.map(cleanItem),
         nearby: nearby.slice(0, 30).map(cleanItem),  // 鄰近最多顯示 30 筆

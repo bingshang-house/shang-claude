@@ -8518,6 +8518,24 @@ function renderCompetitorResults(data) {
     📈 原始 ${s.rawCount} 筆 → 歸併 ${s.mergedCount} 筆<br>
     🏠 同社區 <strong>${s.sameCommunity}</strong> 筆 ｜ 📍 鄰近條件 <strong>${s.nearby}</strong> 筆 ｜ ⏱ ${(s.elapsedMs/1000).toFixed(1)}s
   `;
+  // debug：顯示每階段 URL + 抓到筆數（任一階段 0 筆就展開）
+  if (s.stages && s.stages.length) {
+    const anyZero = s.stages.some(st => st.count === 0);
+    statsHtml += `
+      <details style="margin-top:8px;font-size:11px;color:#666;" ${anyZero ? 'open' : ''}>
+        <summary style="cursor:pointer;color:#b45309;">🔍 各階段 591 抓取結果（debug）</summary>
+        <div style="background:#fffbeb;padding:8px;border-radius:6px;margin-top:6px;font-size:10px;line-height:1.6;">
+          ${s.stages.map(st => `
+            <div style="margin-bottom:4px;">
+              <strong>${st.name}：${st.count} 筆</strong>
+              <a href="${st.url}" target="_blank" style="color:#0369a1;text-decoration:underline;margin-left:6px;">親自開 591 看 →</a>
+              <div style="word-break:break-all;color:#999;font-size:9px;">${st.url}</div>
+            </div>
+          `).join('')}
+        </div>
+      </details>
+    `;
+  }
   // debug：parser 抓不到關鍵欄位時顯示 591 raw text 樣本
   if (s.debugSample) {
     const anyMissing = (data.sameCommunity || []).concat(data.nearby || []).some(x => !x.community || !x.age);
