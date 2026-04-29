@@ -396,8 +396,8 @@
     .plan-points-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
     .plan-box { border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; }
-    .plan-content { min-height: 140px; display: flex; align-items: center; justify-content: center; background: #FFFBF0; }
-    .plan-content img { max-width: 100%; max-height: 140px; object-fit: contain; display: block; }
+    .plan-content { min-height: 200px; display: flex; align-items: center; justify-content: center; background: #FFFBF0; }
+    .plan-content img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; }
     .plan-content .no-img { color: #7A5500; font-size: 11px; text-align: center; }
     .plan-content .no-img .pi { font-size: 28px; display: block; margin-bottom: 4px; }
 
@@ -954,15 +954,15 @@
       <div class="fg">
         <label>⚠ 帶看注意事項（A4 會用紅字顯示）</label>
         <textarea id="s-viewing-notes" rows="4" placeholder="例：請脫鞋、屋主下午兩點後才在、管委會須事先預約" oninput="updateCard()" style="white-space:pre-wrap;"></textarea>
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <select id="s-viewing-notes-preset" style="flex:1;font-size:12px;" onchange="addViewingNotePreset(this)">
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+          <select id="s-viewing-notes-preset" style="flex:1;min-width:200px;font-size:12px;" onchange="addViewingNotePreset(this)">
             <option value="">📋 常用事項（點選會追加到上方）</option>
-            <option value="房屋老舊，無論已知或未知瑕疪，賣方均不負擔瑕疪擔保責任，由買方自行翻修整新。">房屋老舊免責聲明</option>
-            <option value="地上權向國產署承租，年租金為每年公告地價×3.5%×土地持分比例，本戶為114年，每月約1114元。">地上權租金說明（每月約 1114 元）</option>
-            <option value="地上權存續時間從103/01/16起計70年為止。">地上權存續期間（103/01/16 起 70 年）</option>
           </select>
-          <button type="button" onclick="clearViewingNotes()" style="padding:6px 12px;background:#fff;border:1px solid #CC8F00;color:#CC8F00;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">🗑️ 清空</button>
+          <button type="button" onclick="promptAddNotePreset()" title="把上方文字加入自訂預設清單" style="padding:6px 10px;background:#fff;border:1px solid #CC8F00;color:#CC8F00;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">➕ 加入</button>
+          <button type="button" onclick="toggleNotePresetMgr()" title="管理自訂事項（編輯／刪除）" style="padding:6px 10px;background:#fff;border:1px solid #CC8F00;color:#CC8F00;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">✏️ 管理</button>
+          <button type="button" onclick="clearViewingNotes()" style="padding:6px 10px;background:#fff;border:1px solid #CC8F00;color:#CC8F00;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">🗑️ 清空</button>
         </div>
+        <div id="note-preset-mgr" style="display:none;margin-top:6px;padding:8px;background:#FFF8E0;border:1px solid #E8E0CC;border-radius:4px;"></div>
       </div>
 
       <div class="fg">
@@ -1407,7 +1407,7 @@
         <div class="surr-box">
           <div class="section-bar bar-green amenity-bar">
             <span>▌ 周遭機能分析</span>
-            <label class="amenity-print-toggle" title="勾選時列印會包含周遭機能分析（節省版面可不印）"><input type="checkbox" id="s-print-amenity" checked oninput="toggleAmenityPrint()">列印含此清單</label>
+            <label class="amenity-print-toggle" title="勾選時列印會包含周遭機能分析（節省版面可不印）"><input type="checkbox" id="s-print-amenity" oninput="toggleAmenityPrint()">列印含此清單</label>
           </div>
           <div class="surr-grid">
             <div class="surr-item">
@@ -1443,7 +1443,7 @@
         <section class="hazard-page" id="out-hazard-page">
           <div class="hz-page-header">
             <span>300m 內重要設施提醒</span>
-            <label class="hz-print-toggle" title="勾選時列印會包含 300m 內重要設施清單"><input type="checkbox" id="s-print-hazard" checked oninput="toggleHazardPrint()">列印含此清單</label>
+            <label class="hz-print-toggle" title="勾選時列印會包含 300m 內重要設施清單"><input type="checkbox" id="s-print-hazard" oninput="toggleHazardPrint()">列印含此清單</label>
           </div>
           <div class="hz-page-body" id="out-hazard-body"></div>
           <div class="hz-page-note">本清單依 Google Maps 300 公尺內查詢結果；距離為直線距離；實地請現場查核。</div>
@@ -4354,6 +4354,117 @@
     updateCard();
   }
 
+  // ===== 帶看注意事項：內建 + 自訂 預設 =====
+  const NOTE_PRESETS_KEY = 'house_viewing_note_presets';
+  const NOTE_PRESETS_BUILTIN = [
+    { label: '房屋老舊免責聲明', value: '房屋老舊，無論已知或未知瑕疪，賣方均不負擔瑕疪擔保責任，由買方自行翻修整新。' },
+    { label: '地上權租金說明（每月約 1114 元）', value: '地上權向國產署承租，年租金為每年公告地價×3.5%×土地持分比例，本戶為114年，每月約1114元。' },
+    { label: '地上權存續期間（103/01/16 起 70 年）', value: '地上權存續時間從103/01/16起計70年為止。' }
+  ];
+  function loadCustomNotePresets() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(NOTE_PRESETS_KEY) || '[]');
+      return Array.isArray(arr) ? arr.filter(x => x && typeof x.value === 'string') : [];
+    } catch { return []; }
+  }
+  function saveCustomNotePresets(list) {
+    localStorage.setItem(NOTE_PRESETS_KEY, JSON.stringify(list));
+  }
+  function renderNotePresetSelect() {
+    const sel = document.getElementById('s-viewing-notes-preset');
+    if (!sel) return;
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = '📋 常用事項（點選會追加到上方）';
+    sel.appendChild(ph);
+    const g1 = document.createElement('optgroup'); g1.label = '內建';
+    NOTE_PRESETS_BUILTIN.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.value; o.textContent = p.label;
+      g1.appendChild(o);
+    });
+    sel.appendChild(g1);
+    const custom = loadCustomNotePresets();
+    if (custom.length) {
+      const g2 = document.createElement('optgroup'); g2.label = '🌟 我的自訂';
+      custom.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.value;
+        o.textContent = c.label || (c.value.length > 24 ? c.value.slice(0, 24) + '…' : c.value);
+        g2.appendChild(o);
+      });
+      sel.appendChild(g2);
+    }
+  }
+  function promptAddNotePreset() {
+    const ta = document.getElementById('s-viewing-notes');
+    const cur = (ta?.value || '').trim();
+    const value = window.prompt('要加入「我的自訂」清單的事項內容：', cur);
+    if (value === null) return;
+    const v = value.trim();
+    if (!v) { alert('內容不可空白'); return; }
+    const labelDefault = v.length > 20 ? v.slice(0, 20) + '…' : v;
+    const label = window.prompt('在下拉清單顯示的簡短標籤（選填，直接按確定使用預設）：', labelDefault);
+    if (label === null) return;
+    const list = loadCustomNotePresets();
+    list.push({ label: label.trim(), value: v });
+    saveCustomNotePresets(list);
+    renderNotePresetSelect();
+    if (document.getElementById('note-preset-mgr')?.style.display !== 'none') renderNotePresetMgr();
+  }
+  function toggleNotePresetMgr() {
+    const box = document.getElementById('note-preset-mgr');
+    if (!box) return;
+    const open = box.style.display === 'none';
+    box.style.display = open ? 'block' : 'none';
+    if (open) renderNotePresetMgr();
+  }
+  function renderNotePresetMgr() {
+    const box = document.getElementById('note-preset-mgr');
+    if (!box) return;
+    const list = loadCustomNotePresets();
+    const head = '<div style="font-size:11px;color:#7A5500;font-weight:600;margin-bottom:6px;">我的自訂事項（內建 3 條為固定，無法刪除）：</div>';
+    if (!list.length) {
+      box.innerHTML = head + '<div style="font-size:11px;color:#999;">目前沒有自訂事項。先在上方輸入內容，再按「➕ 加入」。</div>';
+      return;
+    }
+    box.innerHTML = head + list.map((c, i) => `
+      <div style="display:flex;gap:4px;align-items:flex-start;margin-bottom:4px;font-size:11px;">
+        <div style="flex:1;background:#fff;padding:4px 6px;border-radius:3px;border:1px solid #eee;min-width:0;">
+          <div style="color:#7A5500;font-weight:600;">${escH(c.label || '(無標籤)')}</div>
+          <div style="color:#555;margin-top:2px;white-space:pre-wrap;word-break:break-word;">${escH(c.value)}</div>
+        </div>
+        <button type="button" onclick="editNotePreset(${i})" title="編輯" style="padding:2px 6px;font-size:10px;background:#fff;border:1px solid #CC8F00;color:#CC8F00;border-radius:3px;cursor:pointer;white-space:nowrap;">✏️</button>
+        <button type="button" onclick="deleteNotePreset(${i})" title="刪除" style="padding:2px 6px;font-size:10px;background:#fff;border:1px solid #c00;color:#c00;border-radius:3px;cursor:pointer;white-space:nowrap;">❌</button>
+      </div>
+    `).join('');
+  }
+  function editNotePreset(i) {
+    const list = loadCustomNotePresets();
+    if (i < 0 || i >= list.length) return;
+    const cur = list[i];
+    const newValue = window.prompt('編輯事項內容：', cur.value);
+    if (newValue === null) return;
+    const v = newValue.trim();
+    if (!v) { alert('內容不可空白'); return; }
+    const newLabel = window.prompt('編輯標籤：', cur.label || '');
+    if (newLabel === null) return;
+    list[i] = { label: newLabel.trim(), value: v };
+    saveCustomNotePresets(list);
+    renderNotePresetSelect();
+    renderNotePresetMgr();
+  }
+  function deleteNotePreset(i) {
+    const list = loadCustomNotePresets();
+    if (i < 0 || i >= list.length) return;
+    const tag = list[i].label || (list[i].value.length > 20 ? list[i].value.slice(0, 20) + '…' : list[i].value);
+    if (!confirm(`確定刪除「${tag}」？`)) return;
+    list.splice(i, 1);
+    saveCustomNotePresets(list);
+    renderNotePresetSelect();
+    renderNotePresetMgr();
+  }
+
 
   // ===== 夥伴資訊 localStorage =====
   const PARTNER_KEY = 'house_partner_info';
@@ -5418,7 +5529,7 @@ ${clone.outerHTML}
 
       // ============ 嫌惡設施頁（決策 1a 自然 2 頁）============
       // 在此插入分頁符（row break），讓嫌惡頁獨立到第 2 頁列印
-      const hazardInclude = document.getElementById('s-print-hazard')?.checked !== false;
+      const hazardInclude = document.getElementById('s-print-hazard')?.checked === true;
       const hasHazard = typeof _hazardResults !== 'undefined' && _hazardResults && _hazardResults.length > 0;
       if (hazardInclude && hasHazard) {
         // 強制分頁：在當前 row 之前加分頁符
@@ -7244,6 +7355,9 @@ ${factsText}
     }
   })();
   updateCard();
+  toggleAmenityPrint();
+  toggleHazardPrint();
+  renderNotePresetSelect();
   updateApiStatus();
   updateGeminiUsageBadge();
 
