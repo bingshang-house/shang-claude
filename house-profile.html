@@ -1641,6 +1641,51 @@
     if (m) return { district: m[1] + m[2], address: (m[3] || '').trim() };
     return { district: '', address: String(s || '').trim() };
   }
+  // ===== MOI_WFS_001 地籍圖 vector polygon（屏東/外縣市用，每筆 1 元，localStorage 7 天快取）=====
+  // 走 URBAN_PROXY 的 /moi-wfs，worker 端 OAuth2 換 token + retry，前端只管組參數
+  async function _fetchMoiPolygon(ld, scno, po) {
+    if (!ld || !scno || !po) return null;
+    const cacheKey = 'moi_poly_' + ld + scno + po;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const obj = JSON.parse(cached);
+        // 7 天內快取直接用，超過重抓（NLSC 文件說 3 日更新）
+        if (Date.now() - (obj.t || 0) < 7 * 24 * 3600 * 1000 && Array.isArray(obj.ring) && obj.ring.length >= 3) {
+          return obj.ring;
+        }
+      } catch (e) {}
+    }
+    const url = URBAN_PROXY + '/moi-wfs?ld=' + encodeURIComponent(ld) + '&sec=' + encodeURIComponent(scno) + '&no=' + encodeURIComponent(po);
+    try {
+      const r = await fetch(url);
+      if (!r.ok) { console.warn('MOI WFS', r.status); return null; }
+      const xml = await r.text();
+      // ServiceException → 失敗
+      if (xml.includes('ServiceException')) {
+        console.warn('MOI WFS error:', xml.slice(0, 300));
+        return null;
+      }
+      // 抓 gml:posList — 「x1 y1 x2 y2 ...」空白分隔，2 個一組成 [x,y]
+      const m = xml.match(/<gml:posList[^>]*>([\s\S]*?)<\/gml:posList>/);
+      if (!m) return null;
+      const nums = m[1].trim().split(/\s+/).map(parseFloat).filter(n => isFinite(n));
+      if (nums.length < 6) return null;  // 至少 3 個點 = 6 數字
+      const ring = [];
+      for (let i = 0; i < nums.length - 1; i += 2) ring.push([nums[i], nums[i+1]]);
+      // 確保閉合 ring
+      if (ring.length >= 3) {
+        const first = ring[0], last = ring[ring.length - 1];
+        if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
+      }
+      try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), ring })); } catch (e) {}
+      return ring;
+    } catch (e) {
+      console.warn('MOI WFS fetch failed', e);
+      return null;
+    }
+  }
+
   // EPSG:3826 TWD97 TM2 zone 121 → WGS84（給高雄 polygon 重心轉 lat/lng 用，inverse Transverse Mercator）
   function _twd97_3826_to_wgs84(x, y) {
     const a = 6378137.0, f = 1/298.257222101;
@@ -4449,6 +4494,16 @@
           }
         });
       }
+
+      // MOI_WFS_001 vector polygon：拿到後寫進 _landData[idx].polygon，updateCadastralMap 自動進 vector 路徑
+      // 每筆 1 元，localStorage 7 天快取去重複扣費
+      _fetchMoiPolygon(sectInfo.office, sect4, landno8).then(ring => {
+        if (ring && ring.length >= 3 && _landData[idx]) {
+          _landData[idx].polygon = ring;
+          try { updateCadastralMap(); } catch (e) {}
+          try { updateCard(); } catch (e) {}
+        }
+      });
 
       let msg = finalZone ? `✓ ${finalZone}` : '✓ 已查';
       if (finalUse) msg += ` / ${finalUse}`;
