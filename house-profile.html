@@ -4031,14 +4031,17 @@
     if ((!city || city === '屏東縣' || city === 'T') && urbanPlanName) {
       const plan = d.pingdong_urban_plans?.[urbanPlanName];
       if (plan?.zones) {
-        const zone = plan.zones[zoneName] || plan.zones['住宅區'];
+        const resolvedZone = plan.zones[zoneName] ? zoneName : (plan.zones['住宅區'] ? '住宅區' : null);
+        const zone = plan.zones[resolvedZone];
         if (zone && zone[0]) {
           const main = zone[0];
           const alts = zone.slice(1);
           return {
             bcr: main.bcr, far: main.far,
             source: '屏東都市計畫表',
-            sourceLabel: `${urbanPlanName} ${zoneName || '住宅區'}`,
+            sourceLabel: `${urbanPlanName} ${resolvedZone}`,
+            urbanPlanName,
+            zoneName: resolvedZone,
             subtype: main.subtype || null,
             alts: alts.length ? alts : null,
           };
@@ -4221,6 +4224,9 @@
       e.far = r.far + '%';
       e.bcrFarSource = r.sourceLabel;
       e.bcrFarExceptions = r.exceptions;
+      // 同步「使用分區」「都市計畫」欄位
+      if (r.urbanPlanName) e.urbanPlan = r.urbanPlanName;
+      if (r.zoneName) e.zone = r.zoneName;
     });
     cancelBcrFarEdit();
     try { updateCard(); } catch (err) {}
@@ -4308,6 +4314,9 @@
         _landData[idx].bcrFarSource = ratio.sourceLabel;
         _landData[idx].bcrFarAlts = ratio.alts;
         _landData[idx].bcrFarExceptions = ratio.exceptions;
+        // 走屏東都市計畫路徑時，回頭同步寫「都市計畫」「使用分區」欄位
+        if (ratio.urbanPlanName) _landData[idx].urbanPlan = ratio.urbanPlanName;
+        if (ratio.zoneName) _landData[idx].zone = ratio.zoneName;
         // 自動推時記錄候選清單，供 inline 編輯器用
         const distPlans = getDistMainPlans(_landData[idx].distName);
         if (distPlans.length) _landData[idx].bcrFarPlanCandidates = distPlans;
