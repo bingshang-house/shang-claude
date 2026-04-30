@@ -632,6 +632,23 @@
       .env-risk-page.has-hits.print-include { display: block !important; }
     }
 
+    /* 建蔽容積 inline 編輯器（td-bcr-far 旁 ✏️ 展開） */
+    .bcr-edit-btn { background: none; border: none; cursor: pointer; padding: 0 4px; font-size: 12px; color: #CC8F00; vertical-align: middle; opacity: 0.5; transition: opacity 0.15s; }
+    .bcr-edit-btn:hover { opacity: 1; }
+    @media print { .bcr-edit-btn { display: none !important; } }
+    .bcr-far-editor { display: none; margin-top: 6px; padding: 8px 10px; background: #FFFBF0; border: 1px solid #CC8F00; border-radius: 4px; font-size: 11.5px; line-height: 1.7; }
+    .bcr-far-editor.open { display: block; }
+    .bcr-far-editor .bfe-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+    .bcr-far-editor label { color: #7A5500; font-weight: 600; font-size: 11px; }
+    .bcr-far-editor select { padding: 3px 6px; font-size: 11.5px; border: 1px solid #CC8F00; border-radius: 3px; background: #fff; max-width: 180px; }
+    .bcr-far-editor .bfe-result { padding: 6px 8px; background: #FFF8E0; border-radius: 3px; color: #b91c1c; font-weight: 700; font-size: 12px; margin-top: 4px; }
+    .bcr-far-editor .bfe-actions { display: flex; gap: 6px; margin-top: 6px; }
+    .bcr-far-editor .bfe-actions button { padding: 4px 12px; font-size: 11.5px; border: 1px solid #CC8F00; border-radius: 3px; cursor: pointer; }
+    .bcr-far-editor .bfe-apply { background: #CC8F00; color: #fff; }
+    .bcr-far-editor .bfe-apply:hover { background: #A87500; }
+    .bcr-far-editor .bfe-cancel { background: #fff; color: #7A5500; }
+    @media print { .bcr-far-editor { display: none !important; } }
+
     /* 土地履歷（NLSC LandUsePointYears 全國通用，A4 最底部，螢幕命中即顯示，列印預設隱藏） */
     .land-history-page { display: none; margin: 10px 0 0; border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; background: #fff; }
     .land-history-page.has-hits { display: block; }
@@ -1335,7 +1352,7 @@
               </tr>
               <tr>
                 <td class="key">公告現值</td><td class="val" id="td-pub-val">－</td>
-                <td class="key">建蔽容積</td><td class="val" id="td-bcr-far">－</td>
+                <td class="key">建蔽容積</td><td class="val" id="td-bcr-far"><span id="td-bcr-far-disp">－</span><button class="bcr-edit-btn" onclick="toggleBcrFarEdit()" title="改用對照表 / 切換都市計畫或非都市用地別">✏️</button><div id="bcr-far-editor" class="bcr-far-editor"></div></td>
               </tr>
               <tr>
                 <td class="key">都市計畫</td><td class="val" id="td-urban-plan">－</td>
@@ -3973,6 +3990,242 @@
     return null;
   }
 
+  // ===== 分區建蔽容積對照表（zoning-data.json 全縣市共用） =====
+  // 法規兩份（非都市土地 §9 + 農舍 §5/§8）全國通用；屏東 29 都市計畫表為屏東專用。
+  let _zoningData = null;
+  let _zoningDataPromise = null;
+  function loadZoningData() {
+    if (_zoningData) return Promise.resolve(_zoningData);
+    if (_zoningDataPromise) return _zoningDataPromise;
+    _zoningDataPromise = fetch('zoning-data.json')
+      .then(r => r.json())
+      .then(d => { _zoningData = d; return d; })
+      .catch(e => { console.warn('zoning-data 載入失敗', e); _zoningDataPromise = null; return null; });
+    return _zoningDataPromise;
+  }
+  // 預載（背景，loading 不 block UI）
+  loadZoningData();
+
+  // 對表查 BCR/FAR：input 多源（都市計畫名+分區、或非都市用地類別、或鄉鎮 fallback）
+  // 回 { bcr, far, source, sourceLabel, exceptions?, subtype?, alts? } 或 null
+  function lookupZoningRatio(opts) {
+    const d = _zoningData;
+    if (!d) return null;
+    const { city, distName, urbanPlanName, zoneName, useType } = opts || {};
+
+    // 1. 非都市建築用地（§9，全國通用，最優先）
+    if (useType) {
+      const key = d.use_type_to_non_urban_key?.[useType] || useType;
+      const item = d.non_urban_use_types?.[key];
+      if (item && typeof item.bcr === 'number') {
+        return {
+          bcr: item.bcr, far: item.far,
+          source: '§9',
+          sourceLabel: `非都市土地 ${key}`,
+          exceptions: item.exceptions || [],
+        };
+      }
+    }
+
+    // 2. 屏東都市計畫
+    if ((!city || city === '屏東縣' || city === 'T') && urbanPlanName) {
+      const plan = d.pingdong_urban_plans?.[urbanPlanName];
+      if (plan?.zones) {
+        const zone = plan.zones[zoneName] || plan.zones['住宅區'];
+        if (zone && zone[0]) {
+          const main = zone[0];
+          const alts = zone.slice(1);
+          return {
+            bcr: main.bcr, far: main.far,
+            source: '屏東都市計畫表',
+            sourceLabel: `${urbanPlanName} ${zoneName || '住宅區'}`,
+            subtype: main.subtype || null,
+            alts: alts.length ? alts : null,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  // distName → 該鄉鎮的主都市計畫候選清單（多計畫時陣列）
+  function getDistMainPlans(distName) {
+    return _zoningData?.pingdong_dist_to_main_plan?.[distName] || [];
+  }
+
+  // 用 entry 推 BCR/FAR：先非都市（用地類別）→ 再屏東都市計畫（鄉鎮推）
+  function autoLookupZoningRatio(entry) {
+    if (!entry) return null;
+    const useType = entry.nonUrbanUse || entry.aa12;  // NLSC AA12 / nluz nonUrbanUse
+    if (useType && /[甲乙丙丁]種建築用地|窯業用地|交通用地|遊憩用地|殯葬用地|特定目的事業用地/.test(useType)) {
+      const r = lookupZoningRatio({ useType });
+      if (r) return r;
+    }
+    const distName = entry.distName;
+    if (!distName) return null;
+    const plans = getDistMainPlans(distName);
+    if (!plans.length) return null;
+    // 預設取第一個（多計畫時為最大面積那個），分區預設「住宅區」
+    return lookupZoningRatio({ urbanPlanName: plans[0], zoneName: entry.zone && /住|商|工|保存|文教|行政/.test(entry.zone) ? entry.zone : '住宅區' });
+  }
+
+  // ===== 建蔽容積 inline 編輯器（套用對照表） =====
+  let _bcrEditOpen = false;
+
+  function toggleBcrFarEdit() {
+    const ed = document.getElementById('bcr-far-editor');
+    if (!ed) return;
+    if (_bcrEditOpen) { ed.classList.remove('open'); _bcrEditOpen = false; return; }
+    renderBcrFarEditor();
+    ed.classList.add('open');
+    _bcrEditOpen = true;
+  }
+
+  function cancelBcrFarEdit() {
+    const ed = document.getElementById('bcr-far-editor');
+    if (ed) ed.classList.remove('open');
+    _bcrEditOpen = false;
+  }
+
+  // 渲染 inline 編輯器：依當前案類型（屏東都市、非都市建築用地）給合適下拉
+  async function renderBcrFarEditor() {
+    const ed = document.getElementById('bcr-far-editor');
+    if (!ed) return;
+    await loadZoningData();
+    if (!_zoningData) { ed.innerHTML = '⚠ 對照表載入失敗'; return; }
+    const entries = Object.values(_landData || {});
+    const first = entries[0] || {};
+    const isPingdong = first.county === 'T';
+    // 預設類型：屏東 → 都市計畫；其他 → 非都市建築用地
+    const defaultType = isPingdong ? 'urban' : 'non_urban';
+
+    ed.innerHTML = `
+      <div class="bfe-row">
+        <label>類型</label>
+        <select id="bfe-type">
+          <option value="urban" ${defaultType==='urban'?'selected':''}>屏東都市計畫</option>
+          <option value="non_urban" ${defaultType==='non_urban'?'selected':''}>非都市建築用地（§9 全國）</option>
+        </select>
+      </div>
+      <div class="bfe-row" id="bfe-urban-row">
+        <label>都計</label>
+        <select id="bfe-plan"></select>
+        <label>分區</label>
+        <select id="bfe-zone"></select>
+      </div>
+      <div class="bfe-row" id="bfe-nonurban-row" style="display:none;">
+        <label>用地別</label>
+        <select id="bfe-usetype"></select>
+      </div>
+      <div class="bfe-result" id="bfe-result">－</div>
+      <div class="bfe-actions">
+        <button class="bfe-apply" onclick="applyBcrFarEdit()">套用全部地號</button>
+        <button class="bfe-cancel" onclick="cancelBcrFarEdit()">取消</button>
+      </div>
+    `;
+    // 填都市計畫下拉
+    const planSel = document.getElementById('bfe-plan');
+    Object.keys(_zoningData.pingdong_urban_plans).forEach(k => {
+      if (k.startsWith('_')) return;
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = k;
+      planSel.appendChild(opt);
+    });
+    // 預選賞哥案地對應
+    const candidates = first.bcrFarPlanCandidates || [];
+    if (candidates[0]) planSel.value = candidates[0];
+    else if (first.distName) {
+      const cands = _zoningData.pingdong_dist_to_main_plan?.[first.distName];
+      if (cands?.[0]) planSel.value = cands[0];
+    }
+    // 填非都市用地下拉
+    const useSel = document.getElementById('bfe-usetype');
+    Object.keys(_zoningData.non_urban_use_types).forEach(k => {
+      if (k.startsWith('_')) return;
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = k;
+      useSel.appendChild(opt);
+    });
+    if (first.nonUrbanUse && _zoningData.non_urban_use_types[first.nonUrbanUse]) {
+      useSel.value = first.nonUrbanUse;
+    }
+    // type 切換顯示
+    const typeSel = document.getElementById('bfe-type');
+    typeSel.addEventListener('change', () => {
+      document.getElementById('bfe-urban-row').style.display    = typeSel.value === 'urban'     ? '' : 'none';
+      document.getElementById('bfe-nonurban-row').style.display = typeSel.value === 'non_urban' ? '' : 'none';
+      refillBfeZones();
+      updateBfeResult();
+    });
+    document.getElementById('bfe-urban-row').style.display    = defaultType === 'urban' ? '' : 'none';
+    document.getElementById('bfe-nonurban-row').style.display = defaultType === 'non_urban' ? '' : 'none';
+    planSel.addEventListener('change', () => { refillBfeZones(); updateBfeResult(); });
+    useSel.addEventListener('change', updateBfeResult);
+    refillBfeZones();
+    document.getElementById('bfe-zone')?.addEventListener('change', updateBfeResult);
+    updateBfeResult();
+  }
+
+  function refillBfeZones() {
+    const planSel = document.getElementById('bfe-plan');
+    const zoneSel = document.getElementById('bfe-zone');
+    if (!planSel || !zoneSel) return;
+    zoneSel.innerHTML = '';
+    const planName = planSel.value;
+    const plan = _zoningData?.pingdong_urban_plans?.[planName];
+    if (!plan?.zones) return;
+    Object.keys(plan.zones).forEach(z => {
+      const opt = document.createElement('option');
+      opt.value = z; opt.textContent = z;
+      zoneSel.appendChild(opt);
+    });
+    // 預選住宅區
+    if (plan.zones['住宅區']) zoneSel.value = '住宅區';
+  }
+
+  function updateBfeResult() {
+    const result = document.getElementById('bfe-result');
+    if (!result) return;
+    const type = document.getElementById('bfe-type')?.value;
+    let r = null;
+    if (type === 'urban') {
+      const planName = document.getElementById('bfe-plan')?.value;
+      const zoneName = document.getElementById('bfe-zone')?.value;
+      r = lookupZoningRatio({ urbanPlanName: planName, zoneName });
+    } else {
+      const useType = document.getElementById('bfe-usetype')?.value;
+      r = lookupZoningRatio({ useType });
+    }
+    if (r) {
+      result.innerHTML = `建蔽率 <b>${r.bcr}%</b>　容積率 <b>${r.far}%</b>　<span style="color:#888;font-size:10.5px;font-weight:400;">(${r.sourceLabel})</span>`;
+    } else {
+      result.textContent = '－';
+    }
+  }
+
+  function applyBcrFarEdit() {
+    const type = document.getElementById('bfe-type')?.value;
+    let r = null, sourceLabel = '';
+    if (type === 'urban') {
+      const planName = document.getElementById('bfe-plan')?.value;
+      const zoneName = document.getElementById('bfe-zone')?.value;
+      r = lookupZoningRatio({ urbanPlanName: planName, zoneName });
+    } else {
+      const useType = document.getElementById('bfe-usetype')?.value;
+      r = lookupZoningRatio({ useType });
+    }
+    if (!r) { alert('找不到對應的建蔽容積'); return; }
+    // 套到全部 _landData entries
+    Object.values(_landData || {}).forEach(e => {
+      e.bcr = r.bcr + '%';
+      e.far = r.far + '%';
+      e.bcrFarSource = r.sourceLabel;
+      e.bcrFarExceptions = r.exceptions;
+    });
+    cancelBcrFarEdit();
+    try { updateCard(); } catch (err) {}
+  }
+
   // EPSG:3857 Web Mercator → WGS84 (lon/lat) 簡單公式，給屏東 nluz cx3857/cy3857 用
   function _epsg3857ToWgs84(x, y) {
     const lon = x * 180 / 20037508.342789244;
@@ -4045,6 +4298,20 @@
       _landData[idx].nonUrbanUse  = finalUse;
       _landData[idx].fud          = fud?.fud || '';
       _landData[idx].nlscSect     = { sect4, office: sectInfo.office, sectName: sectInfo.sectstr, county: 'T', landno8 };
+
+      // 對表查建蔽容積（屏東都市計畫 or 非都市建築用地）
+      await loadZoningData();
+      const ratio = autoLookupZoningRatio(_landData[idx]);
+      if (ratio) {
+        _landData[idx].bcr = ratio.bcr + '%';
+        _landData[idx].far = ratio.far + '%';
+        _landData[idx].bcrFarSource = ratio.sourceLabel;
+        _landData[idx].bcrFarAlts = ratio.alts;
+        _landData[idx].bcrFarExceptions = ratio.exceptions;
+        // 自動推時記錄候選清單，供 inline 編輯器用
+        const distPlans = getDistMainPlans(_landData[idx].distName);
+        if (distPlans.length) _landData[idx].bcrFarPlanCandidates = distPlans;
+      }
       if (fud?.cx) _landData[idx].cx3857 = fud.cx; // EPSG:3857 Web Mercator（跟高雄 3826 不同投影）
       if (fud?.cy) _landData[idx].cy3857 = fud.cy;
       if (survey) _landData[idx].survey = survey;
@@ -4401,6 +4668,21 @@
       _landData[idx].detailPlan = detailPlan;
       _landData[idx].bcr        = bcr;
       _landData[idx].far        = far;
+
+      // 高雄非都市土地 fallback：KCG 都計查不到 BCR/FAR 但 gisdawh 回 AA12 用地別 → 對 §9 表
+      if ((!bcr || !far) && enrichEarly) {
+        const aa12 = enrichEarly.aa12;
+        if (aa12 && /[甲乙丙丁]種建築用地|窯業用地|交通用地|遊憩用地|殯葬用地|特定目的事業用地/.test(aa12)) {
+          await loadZoningData();
+          const r = lookupZoningRatio({ useType: aa12 });
+          if (r) {
+            _landData[idx].bcr = r.bcr + '%';
+            _landData[idx].far = r.far + '%';
+            _landData[idx].bcrFarSource = r.sourceLabel;
+            _landData[idx].bcrFarExceptions = r.exceptions;
+          }
+        }
+      }
 
       // NLSC 地籍圖 sectcode（讓地號可點擊開地籍圖）
       _landData[idx].nlscSect = await fetchNlscSect(data.distName, sectName);
@@ -5125,10 +5407,18 @@
       if (!e.pubVal && !e.pubPrice) return '';
       return `現值 ${(e.pubVal||0).toLocaleString()} 元/m²　地價 ${(e.pubPrice||0).toLocaleString()} 元/m²`;
     }));
-    setHtml('td-bcr-far', perLand(landEntries, e => {
-      if (!e.bcr && !e.far) return '';
-      return `建蔽率 ${e.bcr||'－'}　容積率 ${e.far||'－'}`;
-    }));
+    setHtml('td-bcr-far-disp', perLand(landEntries, e => {
+      if (!e.bcr && !e.far) {
+        // 沒對到建蔽容積但是農牧/林業/養殖用地 → 顯示農舍提示
+        if (e.nonUrbanUse && /農牧用地|林業用地|養殖用地/.test(e.nonUrbanUse)) {
+          return `<span style="color:#92400e;font-size:11px;">📜 ${e.nonUrbanUse}：建築面積 ≤ 耕地 10% / 最大基層 330m²（個別農舍 §5）</span>`;
+        }
+        return '';
+      }
+      const main = `建蔽率 ${e.bcr||'－'}　容積率 ${e.far||'－'}`;
+      const src  = e.bcrFarSource ? ` <span style="font-size:9.5px;color:#888;">(${e.bcrFarSource})</span>` : '';
+      return main + src;
+    }, '', { allowHtml: true }));
     // 都計 / 細部計畫：同段大多相同，維持取第一個有值的即可
     const firstPlan = landEntries.find(e => e.urbanPlan || e.detailPlan);
     setText('td-urban-plan', firstPlan?.urbanPlan || '－');
