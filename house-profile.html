@@ -2455,6 +2455,26 @@
       catch (e) { console.error('[dispatch building]', bno, e); errors.push({ file: { name: bno }, error: e.message }); }
     }
 
+    // 階段 C2：跨 entry 補洞（dispatch 順序若 0036 在 0034 前處理，內部繼承不到 → 全處理完後再掃一次）
+    // distName 還是空的 entry → 從同 sectName 已有 distName 的 entry 繼承，並重觸 queryZoning
+    {
+      const sectKey = (loNo) => {
+        const m = String(loNo || '').match(/^(.+?段(?:.+?小段)?)/);
+        return m ? m[1] : '';
+      };
+      for (const [k, e] of Object.entries(_landData)) {
+        if (!e || !e.loNo || e.distName) continue;
+        const sk = sectKey(e.loNo);
+        if (!sk) continue;
+        const donor = Object.values(_landData).find(x => x && x.distName && sectKey(x.loNo) === sk);
+        if (!donor) continue;
+        e.distName = donor.distName;
+        if (!e.county) e.county = donor.county;
+        if (!e.countyName) e.countyName = donor.countyName;
+        try { queryZoning(parseInt(k, 10)); } catch (er) { console.warn('queryZoning retry', er); }
+      }
+    }
+
     // 階段 D：總結
     if (progEl) {
       const parts = [];
@@ -2514,6 +2534,17 @@
           county: p.county, countyName: p.countyName,
           prevYearROC: p.prevYearROC, prevMonth: p.prevMonth, prevValue: p.prevValue };
         firstFile = r.file;
+      } else {
+        // 第一份缺的欄位用後續 PDF 補（PDF.js 排版差異會讓某份解析失敗）
+        if (!basic.distName && p.distName) basic.distName = p.distName;
+        if (!basic.county && p.county) basic.county = p.county;
+        if (!basic.countyName && p.countyName) basic.countyName = p.countyName;
+        if (!basic.fullArea && p.fullArea) basic.fullArea = p.fullArea;
+        if (basic.prevYearROC == null && p.prevYearROC != null) {
+          basic.prevYearROC = p.prevYearROC;
+          basic.prevMonth = p.prevMonth;
+          basic.prevValue = p.prevValue;
+        }
       }
       for (const o of (p.owners || [])) {
         const key = `${o.regOrder}|${o.name}`;
@@ -2524,6 +2555,24 @@
         if (!mortByKey[m.regOrder]) mortByKey[m.regOrder] = m;
       }
     }
+    // 跨 group 兜底：basic.distName 還是空 → 從 _landData 同 sectName 已成功的 entry 繼承
+    if (!basic.distName && basic.loNo) {
+      const sectM = String(basic.loNo).match(/^(.+?段(?:.+?小段)?)/);
+      const sk = sectM ? sectM[1] : '';
+      if (sk) {
+        const donor = Object.values(_landData).find(x => {
+          if (!x || !x.distName || !x.loNo) return false;
+          const dm = String(x.loNo).match(/^(.+?段(?:.+?小段)?)/);
+          return dm && dm[1] === sk;
+        });
+        if (donor) {
+          basic.distName = donor.distName;
+          if (!basic.county) basic.county = donor.county;
+          if (!basic.countyName) basic.countyName = donor.countyName;
+        }
+      }
+    }
+
     const owners = Object.values(ownersByKey);
     const ownerNamesSet = new Set(owners.map(o => o.name));
     // 用合併後的 owners 重新對應 obligorNames（單份 PDF 內 owners 不全，targetOrders 對不到）
