@@ -4239,11 +4239,14 @@
     return [lon, lat];
   }
 
-  // NLSC LandUsePointYears 歷年國土利用調查（全國通用、CORS=*、免 token）
+  // NLSC LandUsePointYears 歷年國土利用調查（全國通用、需 Referer，走 worker proxy）
   // 回傳 [{year:'82', month:'', name:'純住宅'}, ...] 由舊到新
+  // ⚠ 直接 fetch 會被 NLSC 擋（PERMISSION DENIED 404）— 此 endpoint 看 Referer，瀏覽器自動帶
+  // GitHub Pages 的 referer NLSC 不認，必須走 kcg-urban-proxy 帶 NLSC 自家 Referer
   async function _fetchLandUseHistory(lon, lat) {
     if (!isFinite(lon) || !isFinite(lat)) return null;
-    const url = `https://api.nlsc.gov.tw/other/LandUsePointYears/0/${lon}/${lat}/4326`;
+    const apiUrl = `https://api.nlsc.gov.tw/other/LandUsePointYears/0/${lon}/${lat}/4326`;
+    const url = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
     try {
       const r = await fetch(url);
       if (!r.ok) return null;
