@@ -3421,9 +3421,11 @@
 
   // NLSC qryTileMapIndex 該地號著色 PNG（屏東/外縣市無 vector polygon 時 fallback）
   // 異步生成需 retry：第一次回 [{msg:"影像產置中"}]，~800ms 後 OK
+  // ⚠ landmaps.nlsc.gov.tw 看 Referer，瀏覽器 fetch 不能設 → 必走 URBAN_PROXY worker
   async function _fetchCadastralColored(office, sect4, landno8) {
     if (!office || !sect4 || !landno8) return null;
-    const url = `https://landmaps.nlsc.gov.tw/S_Maps/qryTileMapIndex?type=2&flag=2&office=${office}&sect=${sect4}&landno=${landno8}&alpah=0.5f&imgflag=1`;
+    const apiUrl = `https://landmaps.nlsc.gov.tw/S_Maps/qryTileMapIndex?type=2&flag=2&office=${office}&sect=${sect4}&landno=${landno8}&alpah=0.5f&imgflag=1`;
+    const url = `${URBAN_PROXY}/?url=${encodeURIComponent(apiUrl)}`;
     for (let i = 0; i < 6; i++) {
       try {
         const r = await fetch(url);
