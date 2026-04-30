@@ -9780,6 +9780,14 @@ ${factsText}
     } else {
       state.deed = window.deed || {};
     }
+    // 格局圖（用戶手動上傳，只存在 DOM img.src，要單獨序列化）
+    const planImg = document.querySelector('#planPreview img');
+    if (planImg && planImg.src && planImg.src.startsWith('data:')) {
+      state.planImage = {
+        dataUrl: planImg.src,
+        name: document.getElementById('planName')?.textContent || '',
+      };
+    }
     return state;
   }
   function deserializeFormState(data) {
@@ -9800,6 +9808,13 @@ ${factsText}
     } else {
       if (data.deed) window.deed = data.deed;
       if (typeof window.updateCard === 'function') window.updateCard();
+    }
+    // 還原格局圖（如果有）
+    if (data.planImage && data.planImage.dataUrl) {
+      const preview = document.getElementById('planPreview');
+      if (preview) preview.innerHTML = `<img src="${data.planImage.dataUrl}" alt="格局圖">`;
+      const nameEl = document.getElementById('planName');
+      if (nameEl && data.planImage.name) nameEl.textContent = data.planImage.name;
     }
   }
 
