@@ -3307,18 +3307,24 @@
   }
 
   // 屏東混合模式渲染：NLSC DMAPS 圖磚當背景 + MOI vector polygon overlay（含邊長 + 高亮）
+  // 多筆連續地：mergeLandPolygons 合併共邊→外輪廓畫邊長；entries 各自中心畫地號 label
   async function _renderHybridCadastral(entries, container) {
     container.innerHTML = '<div class="map-placeholder"><span style="font-size:28px">🗺️</span><span>地籍圖載入中…</span></div>';
-    const e = entries[0];  // 屏東先支援單筆（多筆延伸時再做）
-    const ring = e.polygon;
-    const result = await _composeNlscDmapsBg(ring, null);
+    const valid = entries.filter(e => e.polygon && e.polygon.length >= 3);
+    if (!valid.length) { container.innerHTML = `<div class="map-placeholder">地籍渲染失敗</div>`; return; }
+    // 所有 ring 的點 concat → 餵 _composeNlscDmapsBg 算 bbox（內部只看 bbox）
+    const allPoints = valid.flatMap(e => e.polygon);
+    const result = await _composeNlscDmapsBg(allPoints, null);
+    // 合併連續地（共邊消失，外輪廓變一塊或多塊）
+    const { polys } = mergeLandPolygons(valid);
+    const drawPolys = polys && polys.length ? polys : valid.map(e => e.polygon);
     if (!result || !result.bgDataUrl) {
-      // 背景失敗 → 退純 vector
-      container.innerHTML = renderCadastralSvg([ring], [{ ring, cadaText: landShortLabel(e) }], null) || `<div class="map-placeholder">地籍渲染失敗</div>`;
+      // 背景失敗 → 退純 vector（多筆走 renderCadastralSvg 主流程）
+      const selfEntries = valid.map(e => ({ ring: e.polygon, cadaText: landShortLabel(e) }));
+      container.innerHTML = renderCadastralSvg(drawPolys, selfEntries, null) || `<div class="map-placeholder">地籍渲染失敗</div>`;
       return;
     }
     const { bgDataUrl, bbox3826 } = result;
-    // 用 SVG 套疊背景圖 + 自家 polygon
     const VB_W = 1200, VB_H = 900;
     const w = bbox3826.maxX - bbox3826.minX;
     const h = bbox3826.maxY - bbox3826.minY;
@@ -3331,42 +3337,45 @@
     const ty = (y) => (bbox3826.maxY - y) * scale + offsetY;  // y 翻轉
     const styleEdge = `font:700 20px 'PingFang TC',sans-serif;stroke-width:4;paint-order:stroke;`;
     const styleLabel = `font:800 26px 'PingFang TC',sans-serif;stroke-width:4;paint-order:stroke;`;
-    // polygon path
-    const pathD = ring.map(([x, y], i) => (i === 0 ? 'M' : 'L') + tx(x) + ' ' + ty(y)).join(' ') + ' Z';
-    // 邊長
-    let edges = '';
-    // 簡化 ring（同 renderCadastralSvg 邏輯）
-    let useRing = ring;
-    if (window.turf && ring.length >= 8) {
-      try {
-        const closed = [...ring];
-        if (closed[0][0] !== closed[closed.length-1][0] || closed[0][1] !== closed[closed.length-1][1]) closed.push([closed[0][0], closed[0][1]]);
-        useRing = window.turf.simplify(window.turf.polygon([closed]), { tolerance: 1.5, highQuality: true, mutate: false }).geometry.coordinates[0];
-      } catch (er) {}
+    // 對每塊合併後外輪廓：path + 簡化 + 邊長
+    let polygonPaths = '', edges = '';
+    for (const ring of drawPolys) {
+      if (!ring || ring.length < 3) continue;
+      const pathD = ring.map(([x, y], i) => (i === 0 ? 'M' : 'L') + tx(x) + ' ' + ty(y)).join(' ') + ' Z';
+      polygonPaths += `<path d="${pathD}" fill="rgba(255,183,0,0.35)" stroke="#CC8F00" stroke-width="2.5" stroke-linejoin="round"/>`;
+      let useRing = ring;
+      if (window.turf && ring.length >= 8) {
+        try {
+          const closed = [...ring];
+          if (closed[0][0] !== closed[closed.length-1][0] || closed[0][1] !== closed[closed.length-1][1]) closed.push([closed[0][0], closed[0][1]]);
+          useRing = window.turf.simplify(window.turf.polygon([closed]), { tolerance: 1.5, highQuality: true, mutate: false }).geometry.coordinates[0];
+        } catch (er) {}
+      }
+      for (let i = 0; i < useRing.length; i++) {
+        const a = useRing[i], b = useRing[(i+1) % useRing.length];
+        if (a[0] === b[0] && a[1] === b[1]) continue;
+        const dist = Math.hypot(b[0]-a[0], b[1]-a[1]);
+        if (dist < 3) continue;
+        const mx = (a[0]+b[0])/2, my = (a[1]+b[1])/2;
+        edges += `<text x="${tx(mx)}" y="${ty(my)}" text-anchor="middle" dominant-baseline="middle" fill="#B91C1C" stroke="#FFF8E0" style="${styleEdge}">${dist.toFixed(1)}m</text>`;
+      }
     }
-    for (let i = 0; i < useRing.length; i++) {
-      const a = useRing[i], b = useRing[(i+1) % useRing.length];
-      if (a[0] === b[0] && a[1] === b[1]) continue;
-      const dist = Math.hypot(b[0]-a[0], b[1]-a[1]);
-      if (dist < 3) continue;
-      const mx = (a[0]+b[0])/2, my = (a[1]+b[1])/2;
-      edges += `<text x="${tx(mx)}" y="${ty(my)}" text-anchor="middle" dominant-baseline="middle" fill="#B91C1C" stroke="#FFF8E0" style="${styleEdge}">${dist.toFixed(1)}m</text>`;
+    // 每筆原始 entry 各自中心放地號 label
+    let centers = '';
+    for (const e of valid) {
+      const r = e.polygon;
+      const cx = r.reduce((s,p)=>s+p[0],0)/r.length;
+      const cy = r.reduce((s,p)=>s+p[1],0)/r.length;
+      const cadaText = landShortLabel(e);
+      if (!cadaText) continue;
+      centers += `<text x="${tx(cx)}" y="${ty(cy)}" text-anchor="middle" dominant-baseline="middle" fill="#7A5500" stroke="#FFF8E0" style="${styleLabel}">${escH(cadaText)}</text>`;
     }
-    // 地號中心 label
-    const cx = ring.reduce((s,p)=>s+p[0],0)/ring.length;
-    const cy = ring.reduce((s,p)=>s+p[1],0)/ring.length;
-    const cadaText = landShortLabel(e);
-    const center = cadaText
-      ? `<text x="${tx(cx)}" y="${ty(cy)}" text-anchor="middle" dominant-baseline="middle" fill="#7A5500" stroke="#FFF8E0" style="${styleLabel}">${escH(cadaText)}</text>`
-      : '';
-    // 加 polygon path（自家高亮）+ pathD
-    const polygonPath = `<path d="${pathD}" fill="rgba(255,183,0,0.35)" stroke="#CC8F00" stroke-width="2.5" stroke-linejoin="round"/>`;
     container.innerHTML = `
       <svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block;background:#FFF8E0;">
         <image href="${bgDataUrl}" x="${offsetX}" y="${offsetY}" width="${usedW}" height="${usedH}" preserveAspectRatio="none"/>
-        ${polygonPath}
+        ${polygonPaths}
         ${edges}
-        ${center}
+        ${centers}
       </svg>`;
   }
 
@@ -3638,9 +3647,9 @@
       return;
     }
     // 屏東/外縣市混合模式：MOI polygon + NLSC DMAPS 圖磚當背景（有鄰地視覺 + 地號 label）
-    // 判斷：所有 entries 都有 nlscSect（= 屏東 dispatcher 路徑）→ 走 hybrid（單筆優先）
+    // 判斷：所有 entries 都有 nlscSect（= 屏東 dispatcher 路徑）→ 走 hybrid（單筆/多筆通吃，多筆 mergeLandPolygons 合併共邊）
     const allFromNlsc = entries.every(e => e.nlscSect?.office);
-    if (allFromNlsc && entries.length === 1) {
+    if (allFromNlsc) {
       _renderHybridCadastral(entries, container);
       return;
     }
