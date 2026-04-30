@@ -1626,7 +1626,7 @@
   })();
 
   // ===== 土地案件專用模式（全域）=====
-  // 沒建物只有土地的案件：合成 deed.address，讓 Google Maps 定位 / 周邊機能 / 嫌惡查核全自動相容
+  // 沒建物只有土地的案件：合成 deed.{district,address}，讓 Google Maps 定位 / 周邊機能 / 嫌惡查核全自動相容
   function isLandOnlyMode() {
     const cb = document.getElementById('cs-land-only-mode');
     return !!(cb && cb.checked);
@@ -1635,12 +1635,20 @@
     const el = document.getElementById('cs-land-only-addr');
     return (el?.value || '').trim();
   }
-  // fallback：縣市 + 鄉鎮 + 段地號（loNo 已含段名）
-  function buildLandFallbackAddr() {
+  // 拆「縣市 + 鄉鎮區 + 路名門牌」三段；拆不出就 district='' / address=全字串
+  function splitTwAddress(s) {
+    const m = String(s || '').match(/^(.+?[縣市])(.+?(?:區|鄉|鎮|市))(.*)$/);
+    if (m) return { district: m[1] + m[2], address: (m[3] || '').trim() };
+    return { district: '', address: String(s || '').trim() };
+  }
+  // fallback：用土地第一筆的 countyName+distName 當 district，loNo 當 address
+  function buildLandFallbackDeed() {
     const first = Object.values(_landData || {}).find(e => e && e.loNo);
-    if (!first) return '';
-    const parts = [first.countyName || '', first.distName || '', first.loNo || ''].filter(Boolean);
-    return parts.join('');
+    if (!first) return null;
+    const district = (first.countyName || '') + (first.distName || '');
+    const address = first.loNo || '';
+    if (!district && !address) return null;
+    return { district, address };
   }
   function onLandOnlyModeChange() {
     const on = isLandOnlyMode();
@@ -1661,8 +1669,18 @@
     if (first) { deed = first; return; }
     // 土地案件專用：用輸入地址 / 土地段地號 fallback 合成 deed
     if (isLandOnlyMode()) {
-      const addr = getLandOnlyAddr() || buildLandFallbackAddr();
-      deed = addr ? { address: addr, district: '' } : {};
+      const inp = getLandOnlyAddr();
+      if (inp) {
+        const sp = splitTwAddress(inp);
+        // 拆不出 district 時用土地縣市鄉鎮補（讓 d.district && d.address 條件成立）
+        if (!sp.district) {
+          const fb = buildLandFallbackDeed();
+          if (fb?.district) sp.district = fb.district;
+        }
+        deed = (sp.district || sp.address) ? sp : {};
+      } else {
+        deed = buildLandFallbackDeed() || {};
+      }
       return;
     }
     deed = {};
