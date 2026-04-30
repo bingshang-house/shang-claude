@@ -964,6 +964,19 @@
         onchange="batchDeedDispatch(this.files);this.value=''">
       <div id="batch-deed-progress" style="display:none;font-size:12px;color:#7A5500;margin-bottom:10px;padding:8px 12px;background:#FFFCF5;border-radius:6px;border:1px solid #E8E0CC;"></div>
 
+      <!-- 土地案件專用模式（全域）：勾選後沒有建物也能定位 Google Maps -->
+      <div id="land-only-box" style="background:#FFFCF5;border:1px solid #E8D5A8;border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#7A5500;cursor:pointer;margin-bottom:0;">
+          <input type="checkbox" id="cs-land-only-mode" style="width:auto;margin:0;" onchange="onLandOnlyModeChange()">
+          🌾 土地案件專用（無建物）
+        </label>
+        <div id="land-only-addr-row" style="display:none;margin-top:8px;">
+          <label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">大略地址（給 Google Maps 定位用）</label>
+          <input type="text" id="cs-land-only-addr" placeholder="例：高雄市前鎮區中山二路 91 號" style="font-size:13px;width:100%;" oninput="onLandOnlyAddrChange()">
+          <div style="font-size:10.5px;color:#888;margin-top:4px;line-height:1.5;">留空時自動用「縣市 + 鄉鎮 + 段地號」大略定位（精度較低）</div>
+        </div>
+      </div>
+
       <div class="form-sep">建物資訊</div>
       <div id="building-entries"></div>
       <button class="btn-sm" onclick="addBuildingEntry()" style="margin-bottom:6px;padding:8px 12px;background:#fff;border:2px solid #CC8F00;color:#CC8F00;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;width:100%;letter-spacing:1px;">＋ 新增建物筆</button>
@@ -1612,11 +1625,47 @@
       `製表日期：${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
   })();
 
+  // ===== 土地案件專用模式（全域）=====
+  // 沒建物只有土地的案件：合成 deed.address，讓 Google Maps 定位 / 周邊機能 / 嫌惡查核全自動相容
+  function isLandOnlyMode() {
+    const cb = document.getElementById('cs-land-only-mode');
+    return !!(cb && cb.checked);
+  }
+  function getLandOnlyAddr() {
+    const el = document.getElementById('cs-land-only-addr');
+    return (el?.value || '').trim();
+  }
+  // fallback：縣市 + 鄉鎮 + 段地號（loNo 已含段名）
+  function buildLandFallbackAddr() {
+    const first = Object.values(_landData || {}).find(e => e && e.loNo);
+    if (!first) return '';
+    const parts = [first.countyName || '', first.distName || '', first.loNo || ''].filter(Boolean);
+    return parts.join('');
+  }
+  function onLandOnlyModeChange() {
+    const on = isLandOnlyMode();
+    const row = document.getElementById('land-only-addr-row');
+    if (row) row.style.display = on ? '' : 'none';
+    syncDeedAlias();
+    updateCard();
+  }
+  function onLandOnlyAddrChange() {
+    syncDeedAlias();
+    updateCard();
+  }
+
   // ===== Building Entries (多筆建物) =====
   function syncDeedAlias() {
     // 把 deed 指向「第 1 筆已解析成功的建物」，讓下游讀點相容
     const first = Object.values(_buildingData).find(e => e && e.address);
-    deed = first || {};
+    if (first) { deed = first; return; }
+    // 土地案件專用：用輸入地址 / 土地段地號 fallback 合成 deed
+    if (isLandOnlyMode()) {
+      const addr = getLandOnlyAddr() || buildLandFallbackAddr();
+      deed = addr ? { address: addr, district: '' } : {};
+      return;
+    }
+    deed = {};
   }
 
   function addBuildingEntry(preset) {
@@ -5193,6 +5242,8 @@
 
   // ===== Update Card =====
   function updateCard() {
+    // 土地案件專用模式下，每次 render 前刷新 deed alias（建物優先，無建物用合成地址）
+    try { syncDeedAlias(); } catch (e) {}
     // 訴求重點不自動填模板，留給 AI 或使用者手動輸入
     const d = deed;
     const price       = parseFloat(document.getElementById('s-price').value) || 0;
