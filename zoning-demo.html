@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分區建蔽容積查詢 demo - 賞哥</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: #f4ecd8; color: #333; line-height: 1.6; }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 20px 16px 40px; }
+
+  h1 { color: #7A5500; font-size: 22px; margin: 0 0 4px; letter-spacing: 1px; }
+  .subtitle { color: #888; font-size: 13px; margin-bottom: 16px; }
+  .source { font-size: 11px; color: #888; margin-bottom: 20px; padding: 8px 12px; background: #FFFBF0; border-left: 3px solid #FFB700; border-radius: 4px; }
+
+  /* 三 tab 切換 */
+  .tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 2px solid #CC8F00; }
+  .tab { flex: 1; padding: 10px 4px; text-align: center; cursor: pointer; font-size: 14px; font-weight: 600; color: #7A5500; background: #FFF8E0; border: 1px solid #E8E0CC; border-bottom: none; border-radius: 6px 6px 0 0; user-select: none; transition: all 0.15s; }
+  .tab:hover { background: #FFEFC2; }
+  .tab.active { background: #CC8F00; color: #fff; }
+
+  .panel { display: none; background: #fff; padding: 16px; border: 1px solid #E8E0CC; border-top: none; border-radius: 0 0 6px 6px; margin-bottom: 14px; }
+  .panel.active { display: block; }
+
+  /* 下拉群 */
+  .field-row { margin-bottom: 12px; }
+  .field-row label { display: block; font-size: 12px; color: #7A5500; font-weight: 600; margin-bottom: 4px; }
+  .field-row select { width: 100%; padding: 8px 10px; font-size: 14px; border: 1px solid #CC8F00; border-radius: 4px; background: #FFFBF0; color: #333; }
+
+  /* 結果區 */
+  .result-box { margin-top: 16px; padding: 14px 16px; background: linear-gradient(135deg, #FFF8E0, #FFFBF0); border: 1px solid #FFB700; border-radius: 6px; }
+  .result-empty { color: #aaa; font-size: 13px; text-align: center; padding: 20px; }
+
+  .result-main { display: flex; gap: 16px; align-items: baseline; padding: 4px 0; }
+  .result-cell { flex: 1; }
+  .result-label { font-size: 11px; color: #7A5500; font-weight: 600; }
+  .result-value { font-size: 28px; color: #b91c1c; font-weight: 800; font-family: 'Helvetica', sans-serif; line-height: 1.2; }
+  .result-value .unit { font-size: 14px; font-weight: 600; color: #92400e; margin-left: 2px; }
+
+  .result-alt { margin-top: 8px; padding: 6px 10px; background: rgba(255, 183, 0, 0.12); border-radius: 4px; font-size: 12px; color: #555; }
+  .result-alt .alt-label { font-weight: 600; color: #7A5500; margin-right: 4px; }
+  .result-alt .alt-cond { color: #888; font-size: 11px; }
+
+  .result-note { margin-top: 8px; font-size: 11px; color: #666; padding-top: 8px; border-top: 1px dashed #E8E0CC; }
+  .result-note .note-bullet { color: #CC8F00; margin-right: 4px; }
+
+  .result-meta { margin-top: 6px; font-size: 10.5px; color: #999; }
+
+  /* 對照全表 */
+  .full-table-wrap { margin-top: 14px; }
+  .full-table-toggle { font-size: 12px; color: #7A5500; cursor: pointer; user-select: none; padding: 4px 0; display: inline-block; }
+  .full-table-toggle:hover { text-decoration: underline; }
+  .full-table { display: none; max-height: 360px; overflow: auto; border: 1px solid #E8E0CC; border-radius: 4px; background: #fff; margin-top: 6px; }
+  .full-table.visible { display: block; }
+  .full-table table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .full-table th { background: #CC8F00; color: #fff; padding: 6px 8px; text-align: left; position: sticky; top: 0; }
+  .full-table td { padding: 4px 8px; border-bottom: 1px solid #F5EFD8; }
+  .full-table tr:hover td { background: #FFFBF0; }
+  .full-table .num { color: #b91c1c; font-weight: 700; font-family: 'Helvetica', sans-serif; }
+
+  /* 法規版 */
+  .law-card { padding: 12px 14px; margin-bottom: 10px; background: #FFFBF0; border: 1px solid #E8E0CC; border-radius: 6px; }
+  .law-card-title { font-weight: 700; color: #7A5500; font-size: 14px; margin-bottom: 4px; }
+  .law-card-source { font-size: 10.5px; color: #888; margin-bottom: 8px; }
+  .law-row { display: flex; gap: 12px; padding: 4px 0; font-size: 12.5px; }
+  .law-row .law-name { min-width: 140px; color: #555; }
+  .law-row .law-num { color: #b91c1c; font-weight: 700; }
+  .law-card-note { font-size: 11px; color: #666; padding-top: 6px; border-top: 1px dashed #E8E0CC; margin-top: 6px; }
+
+  .loading { text-align: center; padding: 40px; color: #888; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📐 分區建蔽容積查詢</h1>
+  <div class="subtitle">屏東 29 個都市計畫 + 非都市土地 + 農舍法規對照</div>
+  <div class="source" id="source-line">資料載入中...</div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="urban">都市計畫</div>
+    <div class="tab" data-tab="nonurban">非都市建築用地</div>
+    <div class="tab" data-tab="farmhouse">農舍</div>
+  </div>
+
+  <!-- 都市計畫 -->
+  <div class="panel active" id="panel-urban">
+    <div class="field-row">
+      <label>都市計畫</label>
+      <select id="urban-plan-sel"></select>
+    </div>
+    <div class="field-row">
+      <label>使用分區</label>
+      <select id="urban-zone-sel"></select>
+    </div>
+    <div id="urban-result" class="result-box"></div>
+    <div class="full-table-wrap">
+      <span class="full-table-toggle" onclick="toggleFullTable()">▾ 看屏東全縣 29 都市計畫對照表</span>
+      <div class="full-table" id="full-table"></div>
+    </div>
+  </div>
+
+  <!-- 非都市土地 -->
+  <div class="panel" id="panel-nonurban">
+    <div class="field-row">
+      <label>使用地類別</label>
+      <select id="nonurban-sel"></select>
+    </div>
+    <div id="nonurban-result" class="result-box"></div>
+  </div>
+
+  <!-- 農舍 -->
+  <div class="panel" id="panel-farmhouse">
+    <div class="field-row">
+      <label>農舍類型</label>
+      <select id="farmhouse-sel">
+        <option value="individual_outside_urban">個別農舍（非都市土地內）</option>
+        <option value="village_general">集村農舍（一般地）</option>
+        <option value="village_slope">集村農舍（山坡地）</option>
+      </select>
+    </div>
+    <div id="farmhouse-result" class="result-box"></div>
+  </div>
+</div>
+
+<script>
+  let DATA = null;
+
+  // tab 切換
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+    });
+  });
+
+  function toggleFullTable() {
+    const t = document.getElementById('full-table');
+    const tog = document.querySelector('.full-table-toggle');
+    if (t.classList.contains('visible')) {
+      t.classList.remove('visible');
+      tog.innerHTML = '▾ 看屏東全縣 29 都市計畫對照表';
+    } else {
+      t.classList.add('visible');
+      tog.innerHTML = '▴ 收起對照表';
+      renderFullTable();
+    }
+  }
+
+  // 顯示一筆 zone 的結果（urban 用）
+  function renderUrbanResult() {
+    const planSel = document.getElementById('urban-plan-sel');
+    const zoneSel = document.getElementById('urban-zone-sel');
+    const result  = document.getElementById('urban-result');
+    const planName = planSel.value;
+    const zoneName = zoneSel.value;
+    if (!planName || !zoneName) {
+      result.innerHTML = '<div class="result-empty">請選擇都市計畫 + 使用分區</div>';
+      return;
+    }
+    const plan = DATA.pingdong_urban_plans[planName];
+    if (!plan) return;
+    const zoneArr = plan.zones[zoneName];
+    if (!zoneArr || !zoneArr.length) {
+      result.innerHTML = `<div class="result-empty">${planName} 無「${zoneName}」資料</div>`;
+      return;
+    }
+    const main = zoneArr[0];
+    const alts = zoneArr.slice(1);
+    let html = '';
+    // 主規
+    html += `<div class="result-main">
+      <div class="result-cell">
+        <div class="result-label">建蔽率</div>
+        <div class="result-value">${main.bcr}<span class="unit">%</span></div>
+      </div>
+      <div class="result-cell">
+        <div class="result-label">容積率</div>
+        <div class="result-value">${main.far}<span class="unit">%</span></div>
+      </div>
+    </div>`;
+    if (main.subtype) {
+      html += `<div class="result-meta">分類：${main.subtype}</div>`;
+    }
+    // 條件式 / 子分類 alt
+    alts.forEach(a => {
+      const sub = a.subtype ? `${a.subtype}：` : '';
+      const cond = a.condition ? `<span class="alt-cond">（${a.condition}）</span>` : '';
+      const bcr = a.bcr === '_todo' ? '?' : a.bcr;
+      const far = a.far === '_todo' ? '?' : a.far;
+      html += `<div class="result-alt"><span class="alt-label">${sub}</span>建蔽 ${bcr}% / 容積 ${far}% ${cond}</div>`;
+    });
+    // 備註
+    const notes = [];
+    if (plan.area_ha) notes.push(`計畫面積 ${plan.area_ha} 公頃`);
+    if (plan.amend_date) notes.push(`修訂 ${plan.amend_date}`);
+    if (plan.remark) notes.push(plan.remark);
+    if (main._special) notes.push(main._special);
+    if (main._note) notes.push(main._note);
+    if (main.height_note) notes.push(`高度限制：${main.height_note}`);
+    if (notes.length) {
+      html += `<div class="result-note">${notes.map(n => `<div><span class="note-bullet">▸</span>${n}</div>`).join('')}</div>`;
+    }
+    result.innerHTML = html;
+  }
+
+  function refillUrbanZones() {
+    const planSel = document.getElementById('urban-plan-sel');
+    const zoneSel = document.getElementById('urban-zone-sel');
+    const planName = planSel.value;
+    zoneSel.innerHTML = '';
+    if (!planName || !DATA?.pingdong_urban_plans?.[planName]) return;
+    const zones = DATA.pingdong_urban_plans[planName].zones || {};
+    Object.keys(zones).forEach(z => {
+      const opt = document.createElement('option');
+      opt.value = z;
+      opt.textContent = z;
+      zoneSel.appendChild(opt);
+    });
+    renderUrbanResult();
+  }
+
+  function renderFullTable() {
+    const wrap = document.getElementById('full-table');
+    const cols = ['住宅區', '商業區', '工業區', '保存區', '文教區'];
+    let html = '<table><thead><tr><th>都市計畫</th>';
+    cols.forEach(c => html += `<th>${c}</th>`);
+    html += '</tr></thead><tbody>';
+    Object.entries(DATA.pingdong_urban_plans).forEach(([planName, plan]) => {
+      if (planName.startsWith('_')) return;
+      html += `<tr><td>${planName}</td>`;
+      cols.forEach(c => {
+        const arr = plan.zones?.[c];
+        if (!arr || !arr.length) {
+          html += '<td>－</td>';
+        } else {
+          const main = arr[0];
+          const altCount = arr.length - 1;
+          html += `<td><span class="num">${main.bcr}/${main.far}</span>${altCount ? `<span style="color:#888;font-size:10px;">+${altCount}</span>` : ''}</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  function renderNonUrban() {
+    const sel = document.getElementById('nonurban-sel');
+    const result = document.getElementById('nonurban-result');
+    const k = sel.value;
+    if (!k) return;
+    const item = DATA.non_urban_use_types[k];
+    if (!item) return;
+    let html = `<div class="result-main">
+      <div class="result-cell">
+        <div class="result-label">建蔽率</div>
+        <div class="result-value">${item.bcr}<span class="unit">%</span></div>
+      </div>
+      <div class="result-cell">
+        <div class="result-label">容積率</div>
+        <div class="result-value">${item.far}<span class="unit">%</span></div>
+      </div>
+    </div>`;
+    if (item.exceptions && item.exceptions.length) {
+      html += `<div class="result-note">${item.exceptions.map(e => `<div><span class="note-bullet">⚠</span>${e}</div>`).join('')}</div>`;
+    }
+    html += `<div class="result-meta">資料來源：非都市土地使用管制規則 §9</div>`;
+    result.innerHTML = html;
+  }
+
+  function renderFarmhouse() {
+    const sel = document.getElementById('farmhouse-sel');
+    const result = document.getElementById('farmhouse-result');
+    const k = sel.value;
+    if (!k) return;
+    const item = DATA.agri_house[k];
+    if (!item) return;
+    let html = '';
+    if (k === 'individual_outside_urban') {
+      html += `<div class="result-main">
+        <div class="result-cell">
+          <div class="result-label">建蔽率（耕地之比）</div>
+          <div class="result-value">${item.bcr_pct_of_farmland}<span class="unit">%</span></div>
+        </div>
+        <div class="result-cell">
+          <div class="result-label">最大基層面積</div>
+          <div class="result-value" style="font-size:22px;">${item.max_base_area_m2}<span class="unit">m²</span></div>
+        </div>
+      </div>`;
+      html += `<div class="result-note">
+        <div><span class="note-bullet">▸</span>總樓地板面積 ≤ ${item.total_floor_area_max_m2} m²</div>
+        <div><span class="note-bullet">▸</span>高度 ≤ ${item.height_max_floors} 層樓 且 ≤ ${item.height_max_m} m</div>
+        <div><span class="note-bullet">▸</span>${item.備註}</div>
+      </div>`;
+    } else {
+      html += `<div class="result-main">
+        <div class="result-cell">
+          <div class="result-label">建蔽率</div>
+          <div class="result-value">${item.bcr}<span class="unit">%</span></div>
+        </div>
+        <div class="result-cell">
+          <div class="result-label">容積率</div>
+          <div class="result-value">${item.far}<span class="unit">%</span></div>
+        </div>
+      </div>`;
+      if (item.備註) {
+        html += `<div class="result-note"><div><span class="note-bullet">▸</span>${item.備註}</div></div>`;
+      }
+    }
+    html += `<div class="result-meta">資料來源：${item._source}</div>`;
+    result.innerHTML = html;
+  }
+
+  // 初始化
+  fetch('zoning-data.json')
+    .then(r => r.json())
+    .then(data => {
+      DATA = data;
+      // 來源線
+      document.getElementById('source-line').textContent = `資料源：${data._meta.sources.map(s => s.name).join(' / ')}（版本 ${data._meta.version}）`;
+
+      // 都市計畫下拉填值
+      const planSel = document.getElementById('urban-plan-sel');
+      Object.keys(data.pingdong_urban_plans).forEach(k => {
+        if (k.startsWith('_')) return;
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = k;
+        planSel.appendChild(opt);
+      });
+      // 預設選林邊（賞哥眼前 0756-0001 案）
+      planSel.value = '林邊都市計畫';
+      planSel.addEventListener('change', refillUrbanZones);
+      document.getElementById('urban-zone-sel').addEventListener('change', renderUrbanResult);
+      refillUrbanZones();
+
+      // 非都市下拉
+      const nuSel = document.getElementById('nonurban-sel');
+      Object.keys(data.non_urban_use_types).forEach(k => {
+        if (k.startsWith('_')) return;
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = k;
+        nuSel.appendChild(opt);
+      });
+      nuSel.addEventListener('change', renderNonUrban);
+      renderNonUrban();
+
+      // 農舍下拉
+      document.getElementById('farmhouse-sel').addEventListener('change', renderFarmhouse);
+      renderFarmhouse();
+    })
+    .catch(e => {
+      document.getElementById('source-line').textContent = '資料載入失敗：' + e.message;
+    });
+</script>
+</body>
+</html>
