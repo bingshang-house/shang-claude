@@ -86,3 +86,22 @@
 
 ### 詳細規則
 跨 session 的專案記憶存在 `C:\Users\user\.claude\projects\C--Users-user-Downloads-housedata-agent\memory\`，MEMORY.md 是索引，含 PDF 解析、GIS 查詢、buildmis API、UI 設計、API 金鑰等檔案。
+
+## 動 worker / 部署前必 grep memory（防失憶）
+
+改 `workers/*` / `cf-workers/*` 任何 .js 或執行 `wrangler deploy` **之前**，**先 grep 看有無相關 feedback**：
+
+```bash
+# 範例：要改 nluz / 任何 puppeteer / page.evaluate 相關
+grep -l "puppeteer\|page.evaluate\|wrangler\|esbuild\|nluz\|token gating" \
+  C:/Users/user/.claude/projects/C--Users-user-Downloads-housedata-agent/memory/feedback_*.md
+```
+
+命中的檔案**先 Read 過再動手**。常踩的坑：
+- `feedback_nluz_token_gating.md` — nluz/luz puppeteer-internal session 終極解
+- `feedback_esbuild_pageEvaluate_quirk.md` — wrangler 編譯 evaluate callback 撞 __name
+- `feedback_cloudflare_workers_quirks.md` — CF Workers 通用坑（fetch strip cookie、522 retry 等）
+- `feedback_wrangler_deploy_after_commit.md` — commit + push ≠ Worker 上線
+- `feedback_browser_forbidden_headers.md` — 瀏覽器不能設 Referer/UA → 必走 worker proxy
+
+**Why**：2026-04-30 session 18 撞同樣坑兩次（fetch token / esbuild __name），都是因為 MEMORY.md 索引看到但個別 .md 沒讀。失憶根因 = trigger 不夠強。
