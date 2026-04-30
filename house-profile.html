@@ -3240,6 +3240,134 @@
     return `<a href="${url}" target="_blank" rel="noopener" title="點擊開啟 NLSC 地籍圖（開啟後需先關閉法律聲明 popup 才看得到著色）" style="color:#7A5500;text-decoration:underline;font-weight:600;">${txt}</a>`;
   }
 
+  // ===== NLSC DMAPS 圖磚合成（屏東混合模式背景）=====
+  // 給定 EPSG:3826 polygon ring，回傳 { bgDataUrl, bbox3826 } — bg 是 NLSC DMAPS 圖磚 PNG（含鄰地+地號 label）
+  async function _composeNlscDmapsBg(ring3826, paddingMeters) {
+    if (!ring3826 || ring3826.length < 3) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const [x, y] of ring3826) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+    const pad = paddingMeters || Math.max(maxX - minX, maxY - minY) * 0.6 + 15;
+    minX -= pad; maxX += pad; minY -= pad; maxY += pad;
+    // EPSG:3826 → WGS84
+    const [lonW, latS] = _twd97_3826_to_wgs84(minX, minY);
+    const [lonE, latN] = _twd97_3826_to_wgs84(maxX, maxY);
+    // 估 zoom：自動選讓 bbox 落在 1.5~3 個 tile 寬的 zoom（資訊密度高，地號 label 看得到）
+    const TILE = 256;
+    let zoom = 20;
+    const N = () => Math.pow(2, zoom);
+    const lonToTileXf = (lon) => (lon + 180) / 360 * N();
+    const latToTileYf = (lat) => (1 - Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 * N();
+    const widthInTiles = () => lonToTileXf(lonE) - lonToTileXf(lonW);
+    while (widthInTiles() > 4 && zoom > 16) zoom--;
+    while (widthInTiles() < 1 && zoom < 21) zoom++;
+    const txWf = lonToTileXf(lonW), txEf = lonToTileXf(lonE);
+    const tyNf = latToTileYf(latN), tySf = latToTileYf(latS);
+    const txW = Math.floor(txWf), txE = Math.floor(txEf);
+    const tyN = Math.floor(tyNf), tyS = Math.floor(tySf);
+    const cols = txE - txW + 1, rows = tyS - tyN + 1;
+    // 合成大 canvas（先把所有 tile 畫進去）
+    const big = document.createElement('canvas');
+    big.width = cols * TILE; big.height = rows * TILE;
+    const bigCtx = big.getContext('2d');
+    bigCtx.fillStyle = '#FFF8E0';
+    bigCtx.fillRect(0, 0, big.width, big.height);
+    const tasks = [];
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const tx = txW + i, ty = tyN + j;
+        const url = 'https://landmaps.nlsc.gov.tw/S_Maps/wmts/DMAPS/default/EPSG:3857/' + zoom + '/' + ty + '/' + tx;
+        tasks.push(new Promise(resolve => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => { bigCtx.drawImage(img, i * TILE, j * TILE); resolve(); };
+          img.onerror = () => resolve();
+          img.src = url;
+        }));
+      }
+    }
+    await Promise.all(tasks);
+    // 裁切到精確 bbox（去掉 tile 多餘邊）
+    const cropX = (txWf - txW) * TILE;
+    const cropY = (tyNf - tyN) * TILE;
+    const cropW = (txEf - txWf) * TILE;
+    const cropH = (tySf - tyNf) * TILE;
+    const finalC = document.createElement('canvas');
+    finalC.width = Math.max(1, Math.round(cropW));
+    finalC.height = Math.max(1, Math.round(cropH));
+    finalC.getContext('2d').drawImage(big, -cropX, -cropY);
+    return {
+      bgDataUrl: finalC.toDataURL('image/png'),
+      bbox3826: { minX, minY, maxX, maxY },
+    };
+  }
+
+  // 屏東混合模式渲染：NLSC DMAPS 圖磚當背景 + MOI vector polygon overlay（含邊長 + 高亮）
+  async function _renderHybridCadastral(entries, container) {
+    container.innerHTML = '<div class="map-placeholder"><span style="font-size:28px">🗺️</span><span>地籍圖載入中…</span></div>';
+    const e = entries[0];  // 屏東先支援單筆（多筆延伸時再做）
+    const ring = e.polygon;
+    const result = await _composeNlscDmapsBg(ring, null);
+    if (!result || !result.bgDataUrl) {
+      // 背景失敗 → 退純 vector
+      container.innerHTML = renderCadastralSvg([ring], [{ ring, cadaText: landShortLabel(e) }], null) || `<div class="map-placeholder">地籍渲染失敗</div>`;
+      return;
+    }
+    const { bgDataUrl, bbox3826 } = result;
+    // 用 SVG 套疊背景圖 + 自家 polygon
+    const VB_W = 1200, VB_H = 900;
+    const w = bbox3826.maxX - bbox3826.minX;
+    const h = bbox3826.maxY - bbox3826.minY;
+    if (w <= 0 || h <= 0) return;
+    const scale = Math.min(VB_W / w, VB_H / h);
+    const usedW = w * scale, usedH = h * scale;
+    const offsetX = (VB_W - usedW) / 2;
+    const offsetY = (VB_H - usedH) / 2;
+    const tx = (x) => (x - bbox3826.minX) * scale + offsetX;
+    const ty = (y) => (bbox3826.maxY - y) * scale + offsetY;  // y 翻轉
+    const styleEdge = `font:700 20px 'PingFang TC',sans-serif;stroke-width:4;paint-order:stroke;`;
+    const styleLabel = `font:800 26px 'PingFang TC',sans-serif;stroke-width:4;paint-order:stroke;`;
+    // polygon path
+    const pathD = ring.map(([x, y], i) => (i === 0 ? 'M' : 'L') + tx(x) + ' ' + ty(y)).join(' ') + ' Z';
+    // 邊長
+    let edges = '';
+    // 簡化 ring（同 renderCadastralSvg 邏輯）
+    let useRing = ring;
+    if (window.turf && ring.length >= 8) {
+      try {
+        const closed = [...ring];
+        if (closed[0][0] !== closed[closed.length-1][0] || closed[0][1] !== closed[closed.length-1][1]) closed.push([closed[0][0], closed[0][1]]);
+        useRing = window.turf.simplify(window.turf.polygon([closed]), { tolerance: 1.5, highQuality: true, mutate: false }).geometry.coordinates[0];
+      } catch (er) {}
+    }
+    for (let i = 0; i < useRing.length; i++) {
+      const a = useRing[i], b = useRing[(i+1) % useRing.length];
+      if (a[0] === b[0] && a[1] === b[1]) continue;
+      const dist = Math.hypot(b[0]-a[0], b[1]-a[1]);
+      if (dist < 3) continue;
+      const mx = (a[0]+b[0])/2, my = (a[1]+b[1])/2;
+      edges += `<text x="${tx(mx)}" y="${ty(my)}" text-anchor="middle" dominant-baseline="middle" fill="#B91C1C" stroke="#FFF8E0" style="${styleEdge}">${dist.toFixed(1)}m</text>`;
+    }
+    // 地號中心 label
+    const cx = ring.reduce((s,p)=>s+p[0],0)/ring.length;
+    const cy = ring.reduce((s,p)=>s+p[1],0)/ring.length;
+    const cadaText = landShortLabel(e);
+    const center = cadaText
+      ? `<text x="${tx(cx)}" y="${ty(cy)}" text-anchor="middle" dominant-baseline="middle" fill="#7A5500" stroke="#FFF8E0" style="${styleLabel}">${escH(cadaText)}</text>`
+      : '';
+    // 加 polygon path（自家高亮）+ pathD
+    const polygonPath = `<path d="${pathD}" fill="rgba(255,183,0,0.35)" stroke="#CC8F00" stroke-width="2.5" stroke-linejoin="round"/>`;
+    container.innerHTML = `
+      <svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block;background:#FFF8E0;">
+        <image href="${bgDataUrl}" x="${offsetX}" y="${offsetY}" width="${usedW}" height="${usedH}" preserveAspectRatio="none"/>
+        ${polygonPath}
+        ${edges}
+        ${center}
+      </svg>`;
+  }
+
   // ===== 地籍圖 SVG 渲染（含邊長標註，多筆相鄰自動合併 + 周邊鄰地） =====
   // 座標 EPSG:3826 TWD97 TM2（公尺），座標先 pre-scale 到固定 viewBox 避免 SVG font-size 被 scale
   // selfPolys:   union 後的 polygon rings（畫 highlight 填色 + 邊長）
@@ -3505,6 +3633,13 @@
         return;
       }
       container.innerHTML = `<div class="map-placeholder"><span style="font-size:28px">📐</span><span>上傳土地謄本後自動帶入</span></div>`;
+      return;
+    }
+    // 屏東/外縣市混合模式：MOI polygon + NLSC DMAPS 圖磚當背景（有鄰地視覺 + 地號 label）
+    // 判斷：所有 entries 都有 nlscSect（= 屏東 dispatcher 路徑）→ 走 hybrid（單筆優先）
+    const allFromNlsc = entries.every(e => e.nlscSect?.office);
+    if (allFromNlsc && entries.length === 1) {
+      _renderHybridCadastral(entries, container);
       return;
     }
     const { polys } = mergeLandPolygons(entries);
