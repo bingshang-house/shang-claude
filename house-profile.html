@@ -3407,13 +3407,15 @@
       return;
     }
     // 多筆並排 grid（最多 2 欄；單筆滿版）
+    // NLSC qryTileMapIndex 回 PNG 固定 45×82 px，img 強制撐滿可用框（aspect-ratio 居中）、image-rendering:pixelated 維持像素邊緣
     const cols = Math.min(valid.length, 2);
     container.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px;width:100%;height:100%;padding:4px;box-sizing:border-box;background:#FFF8E0;">
         ${valid.map(e => `
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;">
-            <img src="data:image/png;base64,${e.coloredPng.image}" alt="${e.loNo}" style="max-width:100%;max-height:calc(100% - 18px);object-fit:contain;border:1px solid #DDC;border-radius:2px;background:#fff;">
-            <div style="font-size:10.5px;color:#7A5500;margin-top:2px;font-weight:600;">${e.loNo}</div>
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:0;padding:4px;box-sizing:border-box;">
+            <img src="data:image/png;base64,${e.coloredPng.image}" alt="${e.loNo}"
+              style="flex:1;min-height:0;width:100%;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;border:1px solid #DDC;border-radius:2px;background:#fff;">
+            <div style="font-size:11px;color:#7A5500;margin-top:4px;font-weight:600;flex-shrink:0;">${e.loNo}</div>
           </div>
         `).join('')}
       </div>`;
