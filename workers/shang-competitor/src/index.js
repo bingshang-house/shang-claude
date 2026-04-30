@@ -282,8 +282,15 @@ function mergeKey(item) {
   const fl = livingFloor(item.floor);
   // 用 totalArea 不 fallback mainArea（591 列表 totalArea 100% 有值，mainArea 偶爾為 0）
   const area = Math.round((item.totalArea || 0) * 2) / 2;
-  // 不放 price 進 key：同社區 + 同路 + 同樓層 + 同坪數 99% 是同戶不同仲介
-  // 仲介議價空間 10-50 萬常見，把 price 進 key 會分到不同 bucket 漏歸併
+  // 優先用 lat/lng round 0.0001（約 11m）+ floor + area 當 key
+  // 仲介行銷話術 community（「亞灣 XX 三多 XX」「諾貝爾全新整理」）會把同物件拆群，geo 才是真信號
+  if (item._lat && item._lng) {
+    const lat = Math.round(item._lat * 10000) / 10000;
+    const lng = Math.round(item._lng * 10000) / 10000;
+    return `geo:${lat}|${lng}|${fl}|${area}`;
+  }
+  // 無 geo（same_community 階段沒 geocode）→ fall back community + road + floor + area
+  // 不放 price：仲介議價空間 10-50 萬常見，price 進 key 會分到不同 bucket 漏歸併
   const road = normRoadForMerge(item.road);
   const comm = normCommunityForMerge(item.community);
   return `${comm}|${road}|${fl}|${area}`;
@@ -1220,14 +1227,15 @@ export default {
       // 1.2 client-side params 過濾（591 URL filter 對 mainArea / keyword 不全支援，worker 補強）
       // 同社區保留不過濾（信任 keyword + 同社區常會超出條件範圍正常，例如同社區大小坪都有）
       const passParamsFilter = (item) => {
-        if (p.mainAreaMin != null && (item.mainArea || 0) < p.mainAreaMin) return false;
-        if (p.mainAreaMax != null && (item.mainArea || 9999) > p.mainAreaMax) return false;
-        if (p.totalAreaMin != null && (item.totalArea || 0) < p.totalAreaMin) return false;
-        if (p.totalAreaMax != null && (item.totalArea || 9999) > p.totalAreaMax) return false;
-        if (p.priceMin != null && (item.totalPrice || 0) < p.priceMin) return false;
-        if (p.priceMax != null && (item.totalPrice || 9999999) > p.priceMax) return false;
-        if (p.ageMin != null && (item.age || 0) < p.ageMin) return false;
-        if (p.ageMax != null && (item.age || 9999) > p.ageMax) return false;
+        // 欄位 parse 失敗 (=0) 不套 filter — 給容錯，不然 591 列表 age/mainArea 偶爾抓不到會被誤排
+        if (p.mainAreaMin != null && item.mainArea > 0 && item.mainArea < p.mainAreaMin) return false;
+        if (p.mainAreaMax != null && item.mainArea > 0 && item.mainArea > p.mainAreaMax) return false;
+        if (p.totalAreaMin != null && item.totalArea > 0 && item.totalArea < p.totalAreaMin) return false;
+        if (p.totalAreaMax != null && item.totalArea > 0 && item.totalArea > p.totalAreaMax) return false;
+        if (p.priceMin != null && item.totalPrice > 0 && item.totalPrice < p.priceMin) return false;
+        if (p.priceMax != null && item.totalPrice > 0 && item.totalPrice > p.priceMax) return false;
+        if (p.ageMin != null && item.age > 0 && item.age < p.ageMin) return false;
+        if (p.ageMax != null && item.age > 0 && item.age > p.ageMax) return false;
         if (p.keyword) {
           const blob = `${item.community || ''} ${item.title || ''} ${item.road || ''}`;
           if (!blob.includes(p.keyword)) return false;
@@ -1250,26 +1258,28 @@ export default {
         // 並行 geocode 每筆 nearby item（same_community 不算）
         const nearbyItems = all.filter(x => x.matchType !== 'same_community');
         geoStats.total = nearbyItems.length;
-        const distances = await Promise.all(nearbyItems.map(async (item) => {
+        const geoResults = await Promise.all(nearbyItems.map(async (item) => {
           const { loc, hitLevel } = await geocodeItemMultiTry(env, item);
           if (hitLevel === 1) geoStats.hitL1++;
           else if (hitLevel === 2) geoStats.hitL2++;
           else if (hitLevel === 3) geoStats.hitL3++;
           if (!loc) return null;
-          return haversineKm(subjectLoc, loc);
+          return { d: haversineKm(subjectLoc, loc), loc };
         }));
-        // mark item with distance + filter
+        // mark item with distance + lat/lng + filter
         // 統一邏輯（賞哥 2026-04-29 確認）：自動 / 手選都套 maxDistanceKm 過濾、ungeocoded 都排除
         const survivors = [];
         for (let i = 0; i < nearbyItems.length; i++) {
           const item = nearbyItems[i];
-          const d = distances[i];
-          if (d == null) {
+          const r = geoResults[i];
+          if (!r) {
             geoStats.ungeocoded++;
-            // 不 push → 排除
           } else {
-            item._distanceKm = Math.round(d * 100) / 100;
-            if (d <= maxDistanceKm) { survivors.push(item); geoStats.kept++; }
+            item._distanceKm = Math.round(r.d * 100) / 100;
+            // 把 lat/lng 寫進 item 給 mergeKey 用（同經緯度 = 同建物，最穩 dedupe key）
+            item._lat = r.loc.lat;
+            item._lng = r.loc.lng;
+            if (r.d <= maxDistanceKm) { survivors.push(item); geoStats.kept++; }
             else geoStats.dropped++;
           }
         }
