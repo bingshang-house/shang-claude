@@ -96,6 +96,7 @@
     <div id="urban-result" class="result-box"></div>
     <div class="full-table-wrap">
       <span class="full-table-toggle" onclick="toggleFullTable()">▾ 看屏東全縣 29 都市計畫對照表</span>
+      <span class="full-table-toggle" id="cols-toggle" style="display:none;margin-left:14px;" onclick="toggleColsMode()">⊕ 顯示全部 14 分區</span>
       <div class="full-table" id="full-table"></div>
     </div>
   </div>
@@ -136,17 +137,29 @@
     });
   });
 
+  let _colsAll = false;
+
   function toggleFullTable() {
     const t = document.getElementById('full-table');
-    const tog = document.querySelector('.full-table-toggle');
+    const tog = document.querySelectorAll('.full-table-toggle')[0];
+    const colsTog = document.getElementById('cols-toggle');
     if (t.classList.contains('visible')) {
       t.classList.remove('visible');
       tog.innerHTML = '▾ 看屏東全縣 29 都市計畫對照表';
+      colsTog.style.display = 'none';
     } else {
       t.classList.add('visible');
       tog.innerHTML = '▴ 收起對照表';
+      colsTog.style.display = 'inline-block';
       renderFullTable();
     }
+  }
+
+  function toggleColsMode() {
+    _colsAll = !_colsAll;
+    const colsTog = document.getElementById('cols-toggle');
+    colsTog.innerHTML = _colsAll ? '⊖ 只看核心 5 分區' : '⊕ 顯示全部 14 分區';
+    renderFullTable();
   }
 
   // 顯示一筆 zone 的結果（urban 用）
@@ -224,7 +237,9 @@
 
   function renderFullTable() {
     const wrap = document.getElementById('full-table');
-    const cols = ['住宅區', '商業區', '工業區', '保存區', '文教區'];
+    const cols = _colsAll
+      ? ['住宅區','商業區','工業區','保存區','文教區','行政區','電力專用區','電信專用區','農會專用區','倉儲區','綜合濱海遊憩區','露營區','污水處理設施專用區','候船區']
+      : ['住宅區', '商業區', '工業區', '保存區', '文教區'];
     let html = '<table><thead><tr><th>都市計畫</th>';
     cols.forEach(c => html += `<th>${c}</th>`);
     html += '</tr></thead><tbody>';
