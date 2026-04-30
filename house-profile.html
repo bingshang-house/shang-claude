@@ -3264,11 +3264,73 @@
     return m[2] && m[2] !== '0' ? `${parseInt(m[1])}-${m[2]}` : `${parseInt(m[1])}`;
   }
 
+  // 屏東/外縣市 NLSC raster 著色 PNG 渲染（無邊長，多筆並排）
+  // entries 都應有 nlscSect.{office,sect4,landno8}
+  async function _renderNlscRasterCadastral(entries, container) {
+    // 第一次先顯示 loading（避免 placeholder 閃過）
+    if (entries.some(e => !e.coloredPng)) {
+      container.innerHTML = `<div class="map-placeholder"><span style="font-size:28px">📐</span><span>NLSC 著色圖載入中…</span></div>`;
+    }
+    // 並行 fetch 沒 cache 的；有 cache 直接用
+    await Promise.all(entries.map(async e => {
+      if (e.coloredPng) return;
+      const png = await _fetchCadastralColored(e.nlscSect.office, e.nlscSect.sect4, e.nlscSect.landno8);
+      if (png) e.coloredPng = png;
+    }));
+    const valid = entries.filter(e => e.coloredPng);
+    if (!valid.length) {
+      container.innerHTML = `<div class="map-placeholder"><span style="font-size:28px">📐</span><span>NLSC 著色圖暫不可用</span></div>`;
+      return;
+    }
+    // 多筆並排 grid（最多 2 欄；單筆滿版）
+    const cols = Math.min(valid.length, 2);
+    container.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px;width:100%;height:100%;padding:4px;box-sizing:border-box;background:#FFF8E0;">
+        ${valid.map(e => `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;">
+            <img src="data:image/png;base64,${e.coloredPng.image}" alt="${e.loNo}" style="max-width:100%;max-height:calc(100% - 18px);object-fit:contain;border:1px solid #DDC;border-radius:2px;background:#fff;">
+            <div style="font-size:10.5px;color:#7A5500;margin-top:2px;font-weight:600;">${e.loNo}</div>
+          </div>
+        `).join('')}
+      </div>`;
+  }
+
+  // NLSC qryTileMapIndex 該地號著色 PNG（屏東/外縣市無 vector polygon 時 fallback）
+  // 異步生成需 retry：第一次回 [{msg:"影像產置中"}]，~800ms 後 OK
+  async function _fetchCadastralColored(office, sect4, landno8) {
+    if (!office || !sect4 || !landno8) return null;
+    const url = `https://landmaps.nlsc.gov.tw/S_Maps/qryTileMapIndex?type=2&flag=2&office=${office}&sect=${sect4}&landno=${landno8}&alpah=0.5f&imgflag=1`;
+    for (let i = 0; i < 6; i++) {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) { await new Promise(f => setTimeout(f, 800)); continue; }
+        const data = await r.json();
+        if (data?.[0]?.msg?.includes('產置中')) {
+          await new Promise(f => setTimeout(f, 800));
+          continue;
+        }
+        const meta = data?.[1];
+        if (meta?.image) return meta; // {image, lx, ly, rx, ry}
+        return null;
+      } catch (e) {
+        await new Promise(f => setTimeout(f, 800));
+      }
+    }
+    return null;
+  }
+
   function updateCadastralMap() {
     const container = document.getElementById('out-cadastral');
     if (!container) return;
-    const entries = Object.values(_landData || {}).filter(e => e.polygon && e.polygon.length >= 3);
+    const all = Object.values(_landData || {});
+    const entries = all.filter(e => e.polygon && e.polygon.length >= 3);
     if (!entries.length) {
+      // 屏東/外縣市 fallback：NLSC raster 著色 PNG（無 polygon vector，不能算邊長但有圖看）
+      const withNlsc = all.filter(e => e.nlscSect?.office && e.nlscSect?.sect4 && e.nlscSect?.landno8 && e.loNo);
+      if (withNlsc.length) {
+        _renderNlscRasterCadastral(withNlsc, container);
+        return;
+      }
       container.innerHTML = `<div class="map-placeholder"><span style="font-size:28px">📐</span><span>上傳土地謄本後自動帶入</span></div>`;
       return;
     }
@@ -3982,7 +4044,7 @@
       _landData[idx].nonUrbanZone = finalZone;
       _landData[idx].nonUrbanUse  = finalUse;
       _landData[idx].fud          = fud?.fud || '';
-      _landData[idx].nlscSect     = { sect4, office: sectInfo.office, sectName: sectInfo.sectstr, county: 'T' };
+      _landData[idx].nlscSect     = { sect4, office: sectInfo.office, sectName: sectInfo.sectstr, county: 'T', landno8 };
       if (fud?.cx) _landData[idx].cx3857 = fud.cx; // EPSG:3857 Web Mercator（跟高雄 3826 不同投影）
       if (fud?.cy) _landData[idx].cy3857 = fud.cy;
       if (survey) _landData[idx].survey = survey;
