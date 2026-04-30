@@ -970,57 +970,17 @@ async function checkAuth(env, request, body) {
 }
 
 // ============ 屏東 nluz FUD 查詢 ============
-// nluz.nlma.gov.tw 是 ArcGIS Server + token gating。
-// 流程：puppeteer 進 default.aspx 拿 token → KV cache 23hr → POST SEARCHCADA 拿 FUD
-// 第一次查詢 ~5-10s（puppeteer），後續 cache hit ~300ms（直接 fetch）
-// 從 default.aspx HTML 抽 token（多種格式都試）
-function _extractTokenFromHTML(html) {
-  if (!html || html.length < 500) return null;
-  // 觀察：token 是 base64-ish 結尾常 ..，長度 60+
-  const patterns = [
-    /["']([A-Za-z0-9_\-]{60,}\.\.[\w\-\.]*)["']/,  // ArcGIS token 結尾常 ..
-    /token['"]?\s*[:=]\s*['"]([A-Za-z0-9_\-\.]{60,})['"]/i,
-    /TOKEN\s*=\s*['"]([A-Za-z0-9_\-\.]{60,})['"]/,
-  ];
-  for (const re of patterns) {
-    const m = html.match(re);
-    if (m && m[1]) return m[1];
-  }
-  return null;
-}
-
-// 試 worker fetch 拿 token（不用 puppeteer，避免 Browser Rendering 429）
-async function _tryFetchTokenViaHttp() {
-  try {
-    const r = await fetch('https://nluz.nlma.gov.tw/ex3smap/default.aspx?CN=屏東縣&version=報部版', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-        'Referer': 'https://nluz.nlma.gov.tw/ex3s/web.aspx',
-      },
-    });
-    if (!r.ok) return null;
-    const html = await r.text();
-    return _extractTokenFromHTML(html);
-  } catch {
-    return null;
-  }
-}
-
+// nluz.nlma.gov.tw = ArcGIS Server + token gating。
+// 唯一可行流程：puppeteer 開 default.aspx → IdentityManager.credentials 拿 token → POST SEARCHCADA
+// fetch + UA + Referer 拿 token 路徑被 server TLS fingerprint 擋（只回 267 byte「無資料」），不再嘗試
+// 詳見 memory feedback_nluz_token_gating.md
 async function getNluzToken(env, forceRefresh = false) {
   const KEY = 'nluz_token_T';
   if (!forceRefresh) {
     const cached = await env.GEOCACHE.get(KEY);
     if (cached) return cached;
   }
-  // 路徑 1：worker fetch 拿（最快，不撞 Browser Rendering rate limit）
-  const httpToken = await _tryFetchTokenViaHttp();
-  if (httpToken) {
-    await env.GEOCACHE.put(KEY, httpToken, { expirationTtl: 23 * 3600 });
-    return httpToken;
-  }
-  // 路徑 2：puppeteer fallback（撞 429 時 retry 5s/10s）
+  // puppeteer：撞 Browser Rendering 429 時 retry 5s / 10s
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt) await new Promise(r => setTimeout(r, 5000 * attempt));
