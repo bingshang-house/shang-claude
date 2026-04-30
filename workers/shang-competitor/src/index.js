@@ -49,6 +49,55 @@ const ADJACENT_DISTRICTS = {
 // 建物型態 → 591 shape 參數
 const SHAPE_MAP = { '公寓': 1, '電梯大樓': 2, '大樓': 2, '透天厝': 3, '透天': 3, '別墅': 4 };
 
+// 591 產品別 → vertical config（2026-04-30 Playwright probe）
+// 住宅類三種共用 sale.591；店面/辦公/廠房共用 business.591；土地用 land.591
+// 參數名差異：sale 用 regionid/price/area/mainarea/houseage；business+land 用 region/sale_price/acreage
+const PRODUCT_VERTICAL = {
+  apartment: { domain: 'sale.591.com.tw',     path: '/',     shape: 1, regionParam: 'regionid', priceParam: 'price',      areaParam: 'area',    mainAreaParam: 'mainarea', landAreaParam: null,      ageParam: 'houseage', extra: { shType: 'list' }, parseSelector: '.ware-item' },
+  dalou:     { domain: 'sale.591.com.tw',     path: '/',     shape: 2, regionParam: 'regionid', priceParam: 'price',      areaParam: 'area',    mainAreaParam: 'mainarea', landAreaParam: null,      ageParam: 'houseage', extra: { shType: 'list' }, parseSelector: '.ware-item' },
+  townhouse: { domain: 'sale.591.com.tw',     path: '/',     shape: 3, regionParam: 'regionid', priceParam: 'price',      areaParam: 'area',    mainAreaParam: 'mainarea', landAreaParam: null,      ageParam: 'houseage', extra: { shType: 'list' }, parseSelector: '.ware-item' },
+  store:     { domain: 'business.591.com.tw', path: '/list', kind: 5,  regionParam: 'region',   priceParam: 'sale_price', areaParam: 'acreage', mainAreaParam: null,       landAreaParam: null,      ageParam: null,       extra: { type: 2 },        parseSelector: '.item' },
+  office:    { domain: 'business.591.com.tw', path: '/list', kind: 6,  regionParam: 'region',   priceParam: 'sale_price', areaParam: 'acreage', mainAreaParam: null,       landAreaParam: null,      ageParam: null,       extra: { type: 2 },        parseSelector: '.item' },
+  factory:   { domain: 'business.591.com.tw', path: '/list', kind: 7,  regionParam: 'region',   priceParam: 'sale_price', areaParam: 'acreage', mainAreaParam: null,       landAreaParam: null,      ageParam: null,       extra: { type: 2 },        parseSelector: '.item' },
+  land:      { domain: 'land.591.com.tw',     path: '/list', kind: 11, regionParam: 'region',   priceParam: 'sale_price', areaParam: null,      mainAreaParam: null,       landAreaParam: 'acreage', ageParam: null,       extra: { type: 2 },        parseSelector: '.item' },
+};
+
+// shape → productType 反查（自動模式從 buildingType 推）
+const SHAPE_TO_PRODUCT = { 1: 'apartment', 2: 'dalou', 3: 'townhouse', 4: 'townhouse' };
+
+// 依 productType + section + params 組 591 search URL
+function buildSearchUrl(productType, sectionId, params, opts = {}) {
+  const cfg = PRODUCT_VERTICAL[productType];
+  if (!cfg) return null;
+  const url = new URL(cfg.path, 'https://' + cfg.domain);
+  url.searchParams.set(cfg.regionParam, '17'); // 高雄
+  if (cfg.shape) url.searchParams.set('shape', String(cfg.shape));
+  if (cfg.kind != null) url.searchParams.set('kind', String(cfg.kind));
+  if (cfg.extra) for (const [k, v] of Object.entries(cfg.extra)) url.searchParams.set(k, String(v));
+  if (sectionId) url.searchParams.set('section', String(sectionId));
+  if (cfg.priceParam && (params.priceMin || params.priceMax)) {
+    url.searchParams.set(cfg.priceParam, `${params.priceMin || 0}_${params.priceMax || 999999}`);
+  }
+  // 總坪 / 建坪（business 沒有「總坪」概念，acreage 是建坪 → fallback 用 mainArea）
+  if (cfg.areaParam) {
+    const lo = params.totalAreaMin ?? params.mainAreaMin;
+    const hi = params.totalAreaMax ?? params.mainAreaMax;
+    if (lo != null || hi != null) url.searchParams.set(cfg.areaParam, `${Math.floor(lo || 0)}_${Math.ceil(hi || 999)}`);
+  }
+  if (cfg.mainAreaParam && (params.mainAreaMin != null || params.mainAreaMax != null)) {
+    url.searchParams.set(cfg.mainAreaParam, `${Math.floor(params.mainAreaMin || 0)}_${Math.ceil(params.mainAreaMax || 999)}`);
+  }
+  if (cfg.landAreaParam && (params.landAreaMin != null || params.landAreaMax != null)) {
+    url.searchParams.set(cfg.landAreaParam, `${Math.floor(params.landAreaMin || 0)}_${Math.ceil(params.landAreaMax || 999)}`);
+  }
+  if (cfg.ageParam && (params.ageMin != null || params.ageMax != null)) {
+    url.searchParams.set(cfg.ageParam, `${params.ageMin ?? 0}_${params.ageMax ?? 99}`);
+  }
+  if (opts.firstRow != null) url.searchParams.set('firstRow', String(opts.firstRow));
+  if (opts.keywords) url.searchParams.set('keywords', opts.keywords);
+  return url.toString();
+}
+
 // ============ 高雄市區 zipcode 對照（信義/樂屋）============
 // 中華郵政公開靜態資料；信義 URL slug `{zip}-zip`
 const KAOHSIUNG_ZIPS = {
@@ -274,29 +323,17 @@ async function scrape591(env, params, subject, opts = {}) {
 
   const shape = SHAPE_MAP[subject.buildingType?.replace(/\s/g, '')] || 2;
 
-  const ageMin = params.ageMin ?? 0;
-  const ageMax = params.ageMax ?? 99;
-  const areaMin = params.totalAreaMin ?? 0;
-  const areaMax = params.totalAreaMax ?? 999;
+  // 產品別決議：params.productType 優先（用戶手選），其次 buildingType 反查 shape→productType
+  const productType = params.productType || SHAPE_TO_PRODUCT[shape] || 'dalou';
+  const verticalCfg = PRODUCT_VERTICAL[productType] || PRODUCT_VERTICAL.dalou;
+  // 非住宅類（business / land）跳過「同社區」階段（沒有社區概念）
+  const skipCommunityStage = productType === 'land' || productType === 'store' || productType === 'office' || productType === 'factory';
+  _debugInfo.productType = productType;
 
   function buildUrl({ keywords, useFilter, firstRow = 0, sectionOverride }) {
-    let u = `https://sale.591.com.tw/?regionid=17&shape=${shape}&firstRow=${firstRow}&shType=list`;
     const sectionToUse = sectionOverride !== undefined ? sectionOverride : section;
-    if (useFilter) {
-      u += `&houseage=${ageMin}_${ageMax}&area=${Math.floor(areaMin)}_${Math.ceil(areaMax)}`;
-      if (sectionToUse) u += `&section=${sectionToUse}`;
-      if (params.priceMin || params.priceMax) {
-        u += `&price=${params.priceMin || 0}_${params.priceMax || 999999}`;
-      }
-      // 591 主建坪 filter（Playwright 實測 URL 參數叫 mainarea，2026-04-29）
-      if (params.mainAreaMin != null || params.mainAreaMax != null) {
-        u += `&mainarea=${Math.floor(params.mainAreaMin || 0)}_${Math.ceil(params.mainAreaMax || 999)}`;
-      }
-    } else if (sectionToUse) {
-      u += `&section=${sectionToUse}`;
-    }
-    if (keywords) u += `&keywords=${encodeURIComponent(keywords)}`;
-    return u;
+    const filterParams = useFilter ? params : {};
+    return buildSearchUrl(productType, sectionToUse, filterParams, { firstRow, keywords });
   }
 
   const browser = await puppeteer.launch(env.MYBROWSER);
@@ -329,26 +366,28 @@ async function scrape591(env, params, subject, opts = {}) {
         console.warn(`[${matchType}] goto timeout, fallback to selector wait:`, gotoErr.message);
       }
       // race waitForSelector vs timeout，看到卡片就動手（591 有些頁 navigation 永遠不 done）
+      const waitSel = verticalCfg.parseSelector + ', .no-result';
       try {
-        await page.waitForSelector('.ware-item, .no-result', { timeout: 15000 });
+        await page.waitForSelector(waitSel, { timeout: 15000 });
       } catch (_) { /* 沒等到也不放棄，evaluate 看實況 */ }
       // 補一波 retry（591 SPA hydrate 偶爾再慢一點）
       let cardCount = 0;
+      const sel = verticalCfg.parseSelector;
       for (let retry = 0; retry < 4; retry++) {
-        cardCount = await page.evaluate(() => document.querySelectorAll('.ware-item').length).catch(() => 0);
+        cardCount = await page.evaluate((s) => document.querySelectorAll(s).length, sel).catch(() => 0);
         if (cardCount > 0) break;
         await new Promise(r => setTimeout(r, 1000));
       }
       for (let p = 0; p < maxPages; p++) {
-        const pageItems = await page.evaluate(parseListPage).catch(() => []);
+        const pageItems = await page.evaluate(parseListPage, sel).catch(() => []);
         if (!pageItems.length) {
           if (p === 0) {
-            pageDebug = await page.evaluate(() => ({
-              cardCount: document.querySelectorAll('.ware-item').length,
+            pageDebug = await page.evaluate((s) => ({
+              cardCount: document.querySelectorAll(s).length,
               bodyTextStart: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 600),
               title: document.title,
               url: location.href,
-            })).catch(e => ({ error: String(e), cardCount: 0 }));
+            }), sel).catch(e => ({ error: String(e), cardCount: 0 }));
           }
           break;
         }
@@ -376,8 +415,8 @@ async function scrape591(env, params, subject, opts = {}) {
   // === 並行：階段 1 keyword + 階段 2 每相鄰區獨立 page ===
   const tasks = [];
 
-  // 階段 1：同社區 keyword（不限區）
-  if (subject.community) {
+  // 階段 1：同社區 keyword（不限區）— 土地/店面/辦公/廠房 跳過（沒社區概念）
+  if (subject.community && !skipCommunityStage) {
     const u = buildUrl({ keywords: subject.community, useFilter: false, sectionOverride: '' });
     tasks.push(
       scrapeOneUrl(u, 1, 'same_community').then(r => ({
@@ -834,12 +873,52 @@ function parseRakuyaPage() {
 
 // 在頁面 context 跑的 parser
 // v2.1: 591 SPA layout 變動 → community/age/district 加多重 fallback + DOM selector
-function parseListPage() {
-  const cards = document.querySelectorAll('.ware-item');
+function parseListPage(selector) {
+  selector = selector || '.ware-item';
+  const isSale = selector === '.ware-item';
+  const cards = document.querySelectorAll(selector);
   const out = [];
   cards.forEach((c, idx) => {
     const t = (c.innerText || '').replace(/\s+/g, ' ').trim();
-    if (!t || !/電梯大樓|公寓|透天厝|別墅/.test(t)) return;
+    if (!t) return;
+
+    // land.591 + business.591 parser（.item selector）
+    if (!isSale) {
+      const link = c.querySelector('a[href*="/sale/"], a[href*="/buy/"], a[href*="/item/"], a[href*="/detail/"], a[href]');
+      const href = link ? link.href.split('#')[0].split('?')[0] : '';
+      const img = c.querySelector('img');
+      const imgSrc = img ? (img.dataset.src || img.src || '') : '';
+      const totalArea = parseFloat((t.match(/(\d+(?:\.\d+)?)\s*坪/) || [])[1] || 0);
+      // 591 black 字格式「4,620萬 70.06萬/坪」
+      const totalPriceMatch = t.match(/([\d,]+(?:\.\d+)?)\s*萬\s+[\d.]+\s*萬\/坪/);
+      const totalPrice = totalPriceMatch ? parseFloat(totalPriceMatch[1].replace(/,/g, '')) : 0;
+      const unitPrice = parseFloat((t.match(/([\d.]+)\s*萬\/坪/) || [])[1] || 0);
+      const distM = t.match(/([一-鿿]{1,3}區)[\-\s]+([一-鿿\w\d]{1,15}?)(?:\s|$|距)/);
+      const district = distM ? distM[1] : '';
+      const road = distM ? distM[2] : '';
+      // 標題：在「坪」之前的字段（去掉「精選/置頂/地號已核實」等前綴 tag）
+      let title = '';
+      const tm = t.match(/^(?:精選\s*|置頂\s*|地號已核實\s*|NEW\s*|\d+\s*)*(.+?)\s+\d+(?:\.\d+)?\s*坪/);
+      if (tm) title = tm[1].trim();
+      const agent = (t.match(/仲介\s*[^\d\s]*?(\S+?)\s*\d+\s*人瀏覽/) || [])[1] || '';
+
+      if (!totalArea || totalArea < 1) return;
+      if (!totalPrice || totalPrice < 50) return;
+      if (!href) return;
+
+      const item = {
+        title, community: '', road, district,
+        rooms: '',
+        totalArea, mainArea: 0, age: 0, floor: '',
+        agent, hasPark: false, totalPrice, unitPrice, href, imgSrc,
+      };
+      if (idx < 2) item._raw = t.slice(0, 350);
+      out.push(item);
+      return;
+    }
+
+    // isSale ↓ 住宅 sale.591 原有邏輯
+    if (!/電梯大樓|公寓|透天厝|別墅/.test(t)) return;
     const link = c.querySelector('a[href*="/home/house/detail/"]');
     const href = link ? link.href.split('#')[0].split('?')[0] : '';
     const img = c.querySelector('img');
