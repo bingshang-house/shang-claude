@@ -11,6 +11,11 @@ browser = { binding = "MYBROWSER" }
 binding = "GEOCACHE"
 id = "43dade7042dd4a229deb251ffa4eeabe"
 
+# KV：競品物件快取（GHA cron 每小時抓 591/sinyi/rakuya 寫入；worker /search 讀取）
+[[kv_namespaces]]
+binding = "COMPETITOR_DATA"
+id = "a33b8106323041a4b56d8b7970e6c5cd"
+
 # 環境變數（部署後 wrangler secret put）
 # - GOOGLE_MAPS_API_KEY：Google Maps Geocoding API key
 # - WHITELIST_WORKER_URL：shang-whitelist worker 的網址（驗證夥伴 email）

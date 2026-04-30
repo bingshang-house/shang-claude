@@ -1238,22 +1238,69 @@ export default {
         if (set.size) nearbyDistricts = [...set];
       }
 
-      // 1. 爬資料（並行多來源；591/sinyi 各自 launch browser 並行不衝突）
-      const promises = [];
-      if (sources.includes('591')) promises.push(
-        scrape591(env, p, subject, { nearbyDistricts }).catch(e => { console.error('591 fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
-      );
-      if (sources.includes('sinyi')) promises.push(
-        scrapeSinyi(env, p, subject, { nearbyDistricts }).catch(e => { console.error('sinyi fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
-      );
-      if (sources.includes('rakuya')) promises.push(
-        scrapeRakuya(env, p, subject, { nearbyDistricts }).catch(e => { console.error('rakuya fail', e); return { items: [], stages: [], _debugInfo: { error: String(e) } }; })
-      );
-      const allByPlatform = await Promise.all(promises);
-      // 各 platform 回傳 { items, stages, _debugInfo }，items 攤平、stages 收集
-      const all = allByPlatform.flatMap(x => x.items || []);
-      const platformStages = allByPlatform.flatMap(x => x.stages || []);
-      const platformDebug = allByPlatform.find(x => x._debugInfo)?._debugInfo || null;
+      // 1. 從 KV 讀取（GHA cron 每小時抓三家寫入 COMPETITOR_DATA namespace）
+      // 不再 cloud puppeteer 爬蟲，避免 CF Challenge 擋樂屋 + Browser Rendering quota 問題
+      const productType = p.productType || SHAPE_TO_PRODUCT[SHAPE_MAP[subject.buildingType?.replace(/\s/g, '')] || 2] || 'dalou';
+      const districts = (nearbyDistricts && nearbyDistricts.length) ? nearbyDistricts : ['前鎮區'];
+      const all = [];
+      const platformStages = [];
+      for (const dist of districts) {
+        const section = KAOHSIUNG_SECTIONS[dist];
+        const zip = KAOHSIUNG_ZIPS[dist];
+        if (sources.includes('591') && section) {
+          const data = await env.COMPETITOR_DATA.get(`591:${productType}:${section}`, 'json').catch(() => null);
+          if (data) {
+            data.forEach(x => { x.matchType = 'nearby'; x._homeDistrict = dist; });
+            all.push(...data);
+            platformStages.push({ name: `591 ${productType} ${dist}`, count: data.length, kvKey: `591:${productType}:${section}` });
+          } else {
+            platformStages.push({ name: `591 ${productType} ${dist}`, count: 0, kvKey: `591:${productType}:${section}`, miss: true });
+          }
+        }
+        if (sources.includes('sinyi') && zip) {
+          const data = await env.COMPETITOR_DATA.get(`sinyi:${zip}`, 'json').catch(() => null);
+          if (data) {
+            data.forEach(x => { x.matchType = 'nearby'; x._homeDistrict = dist; });
+            all.push(...data);
+            platformStages.push({ name: `sinyi ${dist}`, count: data.length, kvKey: `sinyi:${zip}` });
+          } else {
+            platformStages.push({ name: `sinyi ${dist}`, count: 0, kvKey: `sinyi:${zip}`, miss: true });
+          }
+        }
+        if (sources.includes('rakuya') && zip) {
+          const data = await env.COMPETITOR_DATA.get(`rakuya:${zip}`, 'json').catch(() => null);
+          if (data) {
+            // rakuya KV 含全 productType，filter
+            const filtered = data.filter(x => x.productType === productType);
+            filtered.forEach(x => { x.matchType = 'nearby'; x._homeDistrict = dist; });
+            all.push(...filtered);
+            platformStages.push({ name: `rakuya ${dist}`, count: filtered.length, kvKey: `rakuya:${zip}`, totalInKv: data.length });
+          } else {
+            platformStages.push({ name: `rakuya ${dist}`, count: 0, kvKey: `rakuya:${zip}`, miss: true });
+          }
+        }
+      }
+      // 同社區判斷：community 名 fuzzy match → upgrade matchType
+      if (subject.community) {
+        for (const item of all) {
+          if (isSameCommunity(item.community, subject.community)) {
+            item.matchType = 'same_community';
+          }
+        }
+      }
+      // KV 上次抓取時間
+      const kvMeta = await env.COMPETITOR_DATA.get('_meta:lastRun', 'json').catch(() => null);
+      const platformDebug = {
+        receivedAddress: subject.address || '(空)',
+        receivedCommunity: subject.community || '(空)',
+        receivedBuildingType: subject.buildingType || '(空)',
+        productType,
+        finalDistrict: districts[0],
+        adjacentList: districts,
+        sourceMode: 'kv-cache',
+        kvLastRun: kvMeta?.time || null,
+        kvElapsedSec: kvMeta?.elapsedSec,
+      };
 
       // 1.2 client-side params 過濾（591 URL filter 對 mainArea / keyword 不全支援，worker 補強）
       // 同社區保留不過濾（信任 keyword + 同社區常會超出條件範圍正常，例如同社區大小坪都有）
