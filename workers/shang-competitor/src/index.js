@@ -1338,7 +1338,11 @@ export default {
         if (reallySame) {
           sameCommunity.push({ ...item, matchType: 'same_community' });
         } else {
-          nearby.push({ ...item, matchType: 'nearby' });
+          // 降回 nearby 時補套 client filter — 591 keyword 模糊匹配抓進的物件原 matchType=same_community 跳過 filter
+          // 名字判斷不一致改 nearby 後要重新驗條件，避免 3.7 億 / 623 坪 這種異常物件 escape
+          if (passParamsFilter(item)) {
+            nearby.push({ ...item, matchType: 'nearby' });
+          }
         }
       }
 
