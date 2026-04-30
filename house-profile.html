@@ -632,6 +632,25 @@
       .env-risk-page.has-hits.print-include { display: block !important; }
     }
 
+    /* 土地履歷（NLSC LandUsePointYears 全國通用，A4 最底部，螢幕命中即顯示，列印預設隱藏） */
+    .land-history-page { display: none; margin: 10px 0 0; border: 1px solid #E8E0CC; border-radius: 4px; overflow: hidden; background: #fff; }
+    .land-history-page.has-hits { display: block; }
+    .land-history-header { background: #A87500; color: #fff; padding: 7px 14px; font-size: 13px; font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; justify-content: space-between; }
+    .land-history-header .lh-print-toggle { font-size: 11px; font-weight: 500; color: #fff; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+    .land-history-header .lh-print-toggle input { accent-color: #FFB700; }
+    .land-history-body { padding: 8px 14px; }
+    .land-history-row { padding: 4px 4px 6px; font-size: 11.5px; color: #333; line-height: 1.7; border-bottom: 1px dashed #F5EFD8; }
+    .land-history-row:last-child { border-bottom: none; }
+    .land-history-row .lh-loNo { font-weight: 700; color: #7A5500; margin-right: 6px; }
+    .land-history-row .lh-track { color: #555; }
+    .land-history-row .lh-arrow { color: #CC8F00; margin: 0 2px; }
+    .land-history-note { font-size: 10px; color: #888; padding: 6px 14px 8px; border-top: 1px dashed #E8E0CC; background: #FFFBF0; }
+    @media print {
+      .land-history-page.has-hits { display: none; }
+      .land-history-page.has-hits.print-include { display: block !important; break-inside: avoid; page-break-inside: avoid; }
+      .land-history-header .lh-print-toggle { display: none !important; }
+    }
+
     /* ===== 土地增值稅試算 ===== */
     .land-tax-section { margin: 14px 0 6px; border: 1px solid #E8E0CC; border-radius: 6px; background: #FFFBF0; }
     .land-tax-head { display: flex; justify-content: space-between; align-items: center; }
@@ -1525,6 +1544,16 @@
           </div>
           <div class="hz-page-body" id="out-hazard-body"></div>
           <div class="hz-page-note">本清單依 Google Maps 300 公尺內查詢結果；距離為直線距離；實地請現場查核。</div>
+        </section>
+
+        <!-- 土地履歷（NLSC LandUsePointYears 全國通用，預設不列印需勾 toggle） -->
+        <section class="land-history-page" id="out-land-history-page">
+          <div class="land-history-header">
+            <span>📜 土地履歷（歷年國土利用調查）</span>
+            <label class="lh-print-toggle" title="勾選時列印會包含土地履歷"><input type="checkbox" id="s-print-land-history" oninput="toggleLandHistoryPrint()">列印含此清單</label>
+          </div>
+          <div class="land-history-body" id="out-land-history-body"></div>
+          <div class="land-history-note">資料來源：內政部國土測繪中心 國土利用調查歷年成果（民國 82 年起，每 4-5 年調查一次）。</div>
         </section>
 
       </div>
@@ -3882,6 +3911,37 @@
     return null;
   }
 
+  // EPSG:3857 Web Mercator → WGS84 (lon/lat) 簡單公式，給屏東 nluz cx3857/cy3857 用
+  function _epsg3857ToWgs84(x, y) {
+    const lon = x * 180 / 20037508.342789244;
+    const lat = Math.atan(Math.exp(y * Math.PI / 20037508.342789244)) * 360 / Math.PI - 90;
+    return [lon, lat];
+  }
+
+  // NLSC LandUsePointYears 歷年國土利用調查（全國通用、CORS=*、免 token）
+  // 回傳 [{year:'82', month:'', name:'純住宅'}, ...] 由舊到新
+  async function _fetchLandUseHistory(lon, lat) {
+    if (!isFinite(lon) || !isFinite(lat)) return null;
+    const url = `https://api.nlsc.gov.tw/other/LandUsePointYears/0/${lon}/${lat}/4326`;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const xml = await r.text();
+      const items = [...xml.matchAll(/<ITEM>([\s\S]*?)<\/ITEM>/g)].map(m => {
+        const seg = m[1];
+        const yr  = seg.match(/<YEAR>(\d+)<\/YEAR>/)?.[1] || '';
+        const mo  = seg.match(/<LMONTH>(\d+)<\/LMONTH>/)?.[1] || '';
+        const nm  = seg.match(/<NAME>([^<]+)<\/NAME>/)?.[1] || '';
+        return yr ? { year: yr, month: mo, name: nm.trim() } : null;
+      }).filter(Boolean);
+      // XML 預設新到舊，反轉成舊到新（民國 82 → 現在）方便畫時間軸
+      return items.sort((a,b) => parseInt(a.year) - parseInt(b.year));
+    } catch (e) {
+      console.warn('LandUsePointYears 失敗', e);
+      return null;
+    }
+  }
+
   // 屏東 zoning dispatcher（對齊既有 _landData[idx] 欄位）
   async function queryZoningPingdong(idx) {
     const data = _landData[idx];
@@ -3926,6 +3986,17 @@
       if (fud?.cx) _landData[idx].cx3857 = fud.cx; // EPSG:3857 Web Mercator（跟高雄 3826 不同投影）
       if (fud?.cy) _landData[idx].cy3857 = fud.cy;
       if (survey) _landData[idx].survey = survey;
+
+      // 土地履歷：NLSC LandUsePointYears（用 cx3857/cy3857 → WGS84）
+      if (fud?.cx && fud?.cy) {
+        const [lon, lat] = _epsg3857ToWgs84(fud.cx, fud.cy);
+        _fetchLandUseHistory(lon, lat).then(history => {
+          if (history && history.length) {
+            _landData[idx].landUseHistory = history;
+            renderLandHistoryA4();
+          }
+        });
+      }
 
       let msg = finalZone ? `✓ ${finalZone}` : '✓ 已查';
       if (finalUse) msg += ` / ${finalUse}`;
@@ -4075,6 +4146,37 @@
     if (!page || !chk) return;
     if (chk.checked) page.classList.add('print-include');
     else page.classList.remove('print-include');
+  }
+
+  // 土地履歷列印 toggle（跟 env-risk-page 一致：螢幕命中即顯示，列印需勾選）
+  function toggleLandHistoryPrint() {
+    const chk  = document.getElementById('s-print-land-history');
+    const page = document.getElementById('out-land-history-page');
+    if (!page || !chk) return;
+    if (chk.checked) page.classList.add('print-include');
+    else page.classList.remove('print-include');
+  }
+
+  // 收集所有 _landData 的 landUseHistory，A4 最底部呈現（每筆地號一行時間軸）
+  function renderLandHistoryA4() {
+    const page = document.getElementById('out-land-history-page');
+    const body = document.getElementById('out-land-history-body');
+    if (!page || !body) return;
+    const entries = Object.values(_landData || {}).filter(e => Array.isArray(e?.landUseHistory) && e.landUseHistory.length);
+    if (!entries.length) {
+      body.innerHTML = '';
+      page.classList.remove('has-hits');
+      page.classList.remove('print-include');
+      return;
+    }
+    body.innerHTML = entries.map(e => {
+      const track = e.landUseHistory.map(h =>
+        `${h.year}年${h.month ? '/' + h.month : ''}${h.name}`
+      ).join('<span class="lh-arrow">→</span>');
+      const loNo = e.loNo || '（地號）';
+      return `<div class="land-history-row"><span class="lh-loNo">${loNo}</span><span class="lh-track">${track}</span></div>`;
+    }).join('');
+    page.classList.add('has-hits');
   }
   async function renderEnvRisksA4(idx, cx, cy) {
     const page = document.getElementById('out-env-risk-page');

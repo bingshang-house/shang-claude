@@ -7,6 +7,8 @@ package-lock.json
 .claude/
 .playwright-mcp/
 .tmp/
+.probe-tmp/
+*.har
 
 # 環境變數（API 金鑰等）
 .env
