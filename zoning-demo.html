@@ -236,9 +236,14 @@
         if (!arr || !arr.length) {
           html += '<td>－</td>';
         } else {
-          const main = arr[0];
-          const altCount = arr.length - 1;
-          html += `<td><span class="num">${main.bcr}/${main.far}</span>${altCount ? `<span style="color:#888;font-size:10px;">+${altCount}</span>` : ''}</td>`;
+          const lines = arr.map(item => {
+            const bcr = item.bcr === '_todo' ? '?' : item.bcr;
+            const far = (item.far === '_todo' || item.far == null) ? '?' : item.far;
+            const sub = item.subtype ? `<span style="color:#7A5500;font-size:10.5px;">${item.subtype}</span> ` : '';
+            const cond = item.condition ? `<span style="color:#888;font-size:10px;display:block;">（${item.condition}）</span>` : '';
+            return `<div style="line-height:1.5;">${sub}<span class="num">${bcr}/${far}</span>${cond}</div>`;
+          }).join('');
+          html += `<td>${lines}</td>`;
         }
       });
       html += '</tr>';
