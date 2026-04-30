@@ -282,10 +282,11 @@ function mergeKey(item) {
   const fl = livingFloor(item.floor);
   // 用 totalArea 不 fallback mainArea（591 列表 totalArea 100% 有值，mainArea 偶爾為 0）
   const area = Math.round((item.totalArea || 0) * 2) / 2;
-  const price = Math.round((item.totalPrice || 0) / 10) * 10;
+  // 不放 price 進 key：同社區 + 同路 + 同樓層 + 同坪數 99% 是同戶不同仲介
+  // 仲介議價空間 10-50 萬常見，把 price 進 key 會分到不同 bucket 漏歸併
   const road = normRoadForMerge(item.road);
   const comm = normCommunityForMerge(item.community);
-  return `${comm}|${road}|${fl}|${area}|${price}`;
+  return `${comm}|${road}|${fl}|${area}`;
 }
 
 // ============ 591 爬蟲（雙階段 + Browser Rendering）============
