@@ -970,17 +970,16 @@ async function checkAuth(env, request, body) {
 }
 
 // ============ 屏東 nluz FUD 查詢 ============
-// nluz.nlma.gov.tw = ArcGIS Server + token gating。
-// 唯一可行流程：puppeteer 開 default.aspx → IdentityManager.credentials 拿 token → POST SEARCHCADA
-// fetch + UA + Referer 拿 token 路徑被 server TLS fingerprint 擋（只回 267 byte「無資料」），不再嘗試
-// 詳見 memory feedback_nluz_token_gating.md
-async function getNluzToken(env, forceRefresh = false) {
-  const KEY = 'nluz_token_T';
-  if (!forceRefresh) {
-    const cached = await env.GEOCACHE.get(KEY);
-    if (cached) return cached;
-  }
-  // puppeteer：撞 Browser Rendering 429 時 retry 5s / 10s
+// nluz.nlma.gov.tw = ArcGIS Server + token gating + session cookie 雙重認證。
+// SEARCHCADA endpoint 必須在 puppeteer page session 內 fetch（cookie + token 同源），
+// worker 自己 fetch 即使帶 token 也回 IIS 404（server 認不出 session）。
+// 流程：puppeteer launch → goto default.aspx → IdentityManager 拿 token → 同 page fetch SEARCHCADA → close
+// 不 cache token（token 綁 session、跨 session 失效）。每次查詢 ~5-10 秒。
+async function fetchNluzFud(env, sect6, landno8) {
+  // 注入用：sect6/landno8 為 worker 端可信值（屏東 dispatcher 構造），以 JSON.stringify 安全嵌入字串模板
+  const sect6Lit = JSON.stringify(sect6);
+  const landno8Lit = JSON.stringify(landno8);
+
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt) await new Promise(r => setTimeout(r, 5000 * attempt));
@@ -991,22 +990,53 @@ async function getNluzToken(env, forceRefresh = false) {
         await page.goto('https://nluz.nlma.gov.tw/ex3smap/default.aspx?CN=屏東縣&version=報部版', {
           waitUntil: 'networkidle0', timeout: 30000,
         });
-        const token = await page.evaluate(() => new Promise((resolve) => {
-          const start = Date.now();
-          const tryGet = () => {
-            if (Date.now() - start > 15000) return resolve(null);
+        // 用 string 形式 evaluate 繞過 esbuild keepNames 對 callback 的 __name wrap
+        const result = await page.evaluate(`new Promise(function(resolve, reject){
+          var start = Date.now();
+          function tryGet(){
+            if (Date.now() - start > 15000) return reject(new Error('timeout waiting for IdentityManager'));
             if (!window.require) return setTimeout(tryGet, 500);
-            window.require(['esri/identity/IdentityManager'], (IM) => {
-              const cred = IM.credentials.find(c => c.server.includes('nluzmap'));
-              if (cred?.token) resolve(cred.token);
-              else setTimeout(tryGet, 500);
+            window.require(['esri/identity/IdentityManager'], function(IM){
+              var cred = IM.credentials.find(function(c){ return c.server && c.server.indexOf('nluzmap') >= 0; });
+              if (!cred || !cred.token) return setTimeout(tryGet, 500);
+              // 同 page session 內 fetch（自動帶 cookie + 同源 token），這是 server 接受的唯一形式
+              fetch('https://nluz.nlma.gov.tw/ex3smap/ex_data?CMD=SEARCHCADA&TOKEN=' + encodeURIComponent(cred.token), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'VAL1=' + encodeURIComponent(${sect6Lit}) + '&VAL2=' + encodeURIComponent(${landno8Lit})
+              })
+              .then(function(r){ return r.text().then(function(t){ return { status: r.status, text: t }; }); })
+              .then(function(o){
+                if (o.status !== 200) return resolve({ _httpError: o.status, _raw: o.text.slice(0, 300) });
+                try { resolve(JSON.parse(o.text)); }
+                catch(e){ resolve({ _parseError: true, _raw: o.text.slice(0, 300) }); }
+              })
+              .catch(function(e){ reject(e); });
             });
-          };
+          }
           tryGet();
-        }));
-        if (!token) throw new Error('no token from nluz IdentityManager');
-        await env.GEOCACHE.put(KEY, token, { expirationTtl: 23 * 3600 });
-        return token;
+        })`);
+        if (result?._httpError || result?._parseError) {
+          console.log('SEARCHCADA fail:', JSON.stringify(result).slice(0, 400));
+          return null;
+        }
+        if (!result || result.STATUS !== 1 || !result.features?.[0]) {
+          console.log('SEARCHCADA empty:', JSON.stringify(result).slice(0, 300));
+          return null;
+        }
+        const f = result.features[0];
+        const a = f.attributes || {};
+        return {
+          fud: a['國土功能分區'] || '',
+          nonUrbanZone: a['原使用分區'] || '',
+          nonUrbanUse: a['原使用地'] || '',
+          landUse: a['使用地'] || '',
+          townName: a['鄉鎮市區'] || '',
+          sectName: a['地段'] || '',
+          landNo: a['地號'] || '',
+          cx: f.geometry?.x ?? null,  // EPSG:3857
+          cy: f.geometry?.y ?? null,
+        };
       } finally {
         try { await browser.close(); } catch {}
       }
@@ -1016,45 +1046,7 @@ async function getNluzToken(env, forceRefresh = false) {
       if (!msg.includes('429') && !msg.includes('Rate limit') && !msg.includes('Unable to create')) throw e;
     }
   }
-  throw lastErr || new Error('getNluzToken exhausted retries');
-}
-
-async function postNluzSearchcada(token, sect6, landno8) {
-  const r = await fetch(`https://nluz.nlma.gov.tw/ex3smap/ex_data?CMD=SEARCHCADA&TOKEN=${encodeURIComponent(token)}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Referer': 'https://nluz.nlma.gov.tw/ex3smap/default.aspx',
-    },
-    body: `VAL1=${encodeURIComponent(sect6)}&VAL2=${encodeURIComponent(landno8)}`,
-  });
-  if (!r.ok) return null;
-  const text = await r.text();
-  try { return JSON.parse(text); } catch { return null; }
-}
-
-async function fetchNluzFud(env, sect6, landno8) {
-  let token = await getNluzToken(env);
-  let json = await postNluzSearchcada(token, sect6, landno8);
-  // token 過期或失敗 → 強制刷新一次
-  if (!json || json.STATUS !== 1) {
-    token = await getNluzToken(env, true);
-    json = await postNluzSearchcada(token, sect6, landno8);
-  }
-  if (!json || !json.features?.[0]) return null;
-  const f = json.features[0];
-  const a = f.attributes || {};
-  return {
-    fud: a['國土功能分區'] || '',
-    nonUrbanZone: a['原使用分區'] || '',
-    nonUrbanUse: a['原使用地'] || '',
-    landUse: a['使用地'] || '',
-    townName: a['鄉鎮市區'] || '',
-    sectName: a['地段'] || '',
-    landNo: a['地號'] || '',
-    cx: f.geometry?.x ?? null,  // EPSG:3857
-    cy: f.geometry?.y ?? null,
-  };
+  throw lastErr || new Error('fetchNluzFud exhausted retries');
 }
 
 // ============ Main handler ============
