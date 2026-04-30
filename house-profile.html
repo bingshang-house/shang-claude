@@ -1641,14 +1641,54 @@
     if (m) return { district: m[1] + m[2], address: (m[3] || '').trim() };
     return { district: '', address: String(s || '').trim() };
   }
-  // fallback：用土地第一筆的 countyName+distName 當 district，loNo 當 address
+  // EPSG:3826 TWD97 TM2 zone 121 → WGS84（給高雄 polygon 重心轉 lat/lng 用，inverse Transverse Mercator）
+  function _twd97_3826_to_wgs84(x, y) {
+    const a = 6378137.0, f = 1/298.257222101;
+    const k0 = 0.9999, lon0 = 121 * Math.PI / 180;
+    const false_e = 250000;
+    const e2 = f * (2 - f);
+    const e2_1 = e2 / (1 - e2);
+    const M = y / k0;
+    const mu = M / (a * (1 - e2/4 - 3*e2*e2/64 - 5*e2*e2*e2/256));
+    const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+    const phi1 = mu + (3*e1/2 - 27*e1*e1*e1/32) * Math.sin(2*mu)
+              + (21*e1*e1/16 - 55*e1*e1*e1*e1/32) * Math.sin(4*mu)
+              + (151*e1*e1*e1/96) * Math.sin(6*mu);
+    const cosPhi1 = Math.cos(phi1), sinPhi1 = Math.sin(phi1), tanPhi1 = Math.tan(phi1);
+    const C1 = e2_1 * cosPhi1 * cosPhi1;
+    const T1 = tanPhi1 * tanPhi1;
+    const N1 = a / Math.sqrt(1 - e2 * sinPhi1 * sinPhi1);
+    const R1 = a * (1 - e2) / Math.pow(1 - e2 * sinPhi1 * sinPhi1, 1.5);
+    const D = (x - false_e) / (N1 * k0);
+    const lat = phi1 - (N1 * tanPhi1 / R1) * (D*D/2
+              - (5 + 3*T1 + 10*C1 - 4*C1*C1 - 9*e2_1) * Math.pow(D,4) / 24
+              + (61 + 90*T1 + 298*C1 + 45*T1*T1 - 252*e2_1 - 3*C1*C1) * Math.pow(D,6) / 720);
+    const lon = lon0 + (D - (1 + 2*T1 + C1) * Math.pow(D,3)/6
+              + (5 - 2*C1 + 28*T1 - 3*C1*C1 + 8*e2_1 + 24*T1*T1) * Math.pow(D,5)/120) / cosPhi1;
+    return [lon * 180 / Math.PI, lat * 180 / Math.PI];
+  }
+  // fallback：用土地第一筆的 countyName+distName 當 district、loNo 當 address，並算 lat/lng 給 iframe 精準定位
   function buildLandFallbackDeed() {
     const first = Object.values(_landData || {}).find(e => e && e.loNo);
     if (!first) return null;
     const district = (first.countyName || '') + (first.distName || '');
     const address = first.loNo || '';
     if (!district && !address) return null;
-    return { district, address };
+    const out = { district, address };
+    // 屏東：cx3857/cy3857（EPSG:3857 Web Mercator）
+    if (first.cx3857 && first.cy3857) {
+      const [lng, lat] = _epsg3857ToWgs84(first.cx3857, first.cy3857);
+      if (isFinite(lat) && isFinite(lng)) { out.lat = lat; out.lng = lng; }
+    }
+    // 高雄：polygon ring（EPSG:3826 TWD97 TM2）→ 算重心轉 WGS84
+    else if (Array.isArray(first.polygon) && first.polygon.length >= 3) {
+      const r = first.polygon;
+      const cx = r.reduce((s,p)=>s+p[0],0)/r.length;
+      const cy = r.reduce((s,p)=>s+p[1],0)/r.length;
+      const [lng, lat] = _twd97_3826_to_wgs84(cx, cy);
+      if (isFinite(lat) && isFinite(lng)) { out.lat = lat; out.lng = lng; }
+    }
+    return out;
   }
   function onLandOnlyModeChange() {
     const on = isLandOnlyMode();
@@ -5685,9 +5725,16 @@
     // Map
     const mapDiv = document.getElementById('out-map');
     if (d.district && d.address) {
-      const street = d.address.replace(/[一二三四五六七八九十]+樓.*$/, '').replace(/\d+樓.*$/, '').trim();
-      const q = encodeURIComponent(`${d.district}${street}`);
-      mapDiv.innerHTML = `<iframe src="https://maps.google.com/maps?q=${q}&output=embed&z=16"
+      // 優先用合成 deed 帶來的 lat/lng（土地案件專用模式 + 屏東 cx3857 / 高雄 polygon 重心算出來的精準座標）
+      let q, zoom = 16;
+      if (isFinite(d.lat) && isFinite(d.lng)) {
+        q = `${d.lat},${d.lng}`;
+        zoom = 18;
+      } else {
+        const street = d.address.replace(/[一二三四五六七八九十]+樓.*$/, '').replace(/\d+樓.*$/, '').trim();
+        q = `${d.district}${street}`;
+      }
+      mapDiv.innerHTML = `<iframe src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed&z=${zoom}"
         allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"
         style="width:100%;height:208px;border:none;display:block;"></iframe>`;
     }
