@@ -5726,17 +5726,25 @@
     const mapDiv = document.getElementById('out-map');
     if (d.district && d.address) {
       // 優先用合成 deed 帶來的 lat/lng（土地案件專用模式 + 屏東 cx3857 / 高雄 polygon 重心算出來的精準座標）
-      let q, zoom = 16;
+      let q, zoom = 16, openUrl;
       if (isFinite(d.lat) && isFinite(d.lng)) {
         q = `${d.lat},${d.lng}`;
         zoom = 18;
+        // Google Maps URL API：保證新分頁打開會 pin（iframe 內建 link 不一定）
+        openUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
       } else {
         const street = d.address.replace(/[一二三四五六七八九十]+樓.*$/, '').replace(/\d+樓.*$/, '').trim();
         q = `${d.district}${street}`;
+        openUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
       }
-      mapDiv.innerHTML = `<iframe src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed&z=${zoom}"
-        allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"
-        style="width:100%;height:208px;border:none;display:block;"></iframe>`;
+      mapDiv.innerHTML = `
+        <div style="position:relative;width:100%;height:208px;">
+          <iframe src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed&z=${zoom}"
+            allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+            style="width:100%;height:100%;border:none;display:block;"></iframe>
+          <a href="${openUrl}" target="_blank" rel="noopener"
+            style="position:absolute;right:6px;bottom:6px;background:rgba(255,255,255,0.95);color:#1a73e8;font-size:11px;font-weight:600;padding:4px 8px;border-radius:4px;text-decoration:none;box-shadow:0 1px 4px rgba(0,0,0,0.2);">📍 精準開啟</a>
+        </div>`;
     }
 
     // 地籍圖（含邊長）
