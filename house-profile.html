@@ -1659,7 +1659,11 @@
     const url = URBAN_PROXY + '/moi-wfs?ld=' + encodeURIComponent(ld) + '&sec=' + encodeURIComponent(scno) + '&no=' + encodeURIComponent(po);
     try {
       const r = await fetch(url);
-      if (!r.ok) { console.warn('MOI WFS', r.status); return null; }
+      if (!r.ok) {
+        const errBody = await r.text().catch(() => '');
+        console.warn('MOI WFS', r.status, ld, scno, po, '→', errBody.slice(0, 300));
+        return null;
+      }
       const xml = await r.text();
       // ServiceException → 失敗
       if (xml.includes('ServiceException')) {
