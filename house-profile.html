@@ -4638,7 +4638,12 @@
         if (ring && ring.length >= 3 && _landData[idx]) {
           _landData[idx].polygon = ring;
           try { updateCadastralMap(); } catch (e) {}
-          try { updateCard(); } catch (e) {}
+          try { updateCard(); } catch (e) {}  // 觸發 syncDeedAlias → 合成 deed.lat/lng（從 polygon 重心）
+          // 土地案件專用模式：建物路徑會 auto-fire 周遭機能 + 嫌惡查核，土地路徑沒，這裡補一次
+          if (isLandOnlyMode()) {
+            try { doNearbySearch(true); } catch (e) { console.warn('doNearbySearch land-only', e); }
+            try { doHazardSearch(true); } catch (e) { console.warn('doHazardSearch land-only', e); }
+          }
         }
       });
 
@@ -8677,7 +8682,7 @@ ${factsText}
 
   async function doNearbySearch(silent = false) {
     const addr = (deed.district || '') + (deed.address || '');
-    if (!addr) {
+    if (!addr && !(isFinite(deed.lat) && isFinite(deed.lng))) {
       if (!silent) alert('請先上傳謄本 PDF，解析地址後再查詢');
       return;
     }
@@ -8690,8 +8695,15 @@ ${factsText}
 
     try {
       await loadGoogleMaps();
-      statusEl.textContent = '📍 定位地址中…';
-      const loc = await gmGeocode(addr);
+      // 土地案件專用模式：deed.lat/lng 由 MOI polygon 重心算出，比 geocode 段地號精準很多
+      let loc;
+      if (isFinite(deed.lat) && isFinite(deed.lng)) {
+        statusEl.textContent = '📍 用土地座標定位…';
+        loc = new google.maps.LatLng(deed.lat, deed.lng);
+      } else {
+        statusEl.textContent = '📍 定位地址中…';
+        loc = await gmGeocode(addr);
+      }
 
       statusEl.textContent = '🔎 搜尋周邊設施中…';
 
@@ -8908,7 +8920,7 @@ ${factsText}
 
   async function doHazardSearch(silent = false) {
     const addr = (deed.district || '') + (deed.address || '');
-    if (!addr) {
+    if (!addr && !(isFinite(deed.lat) && isFinite(deed.lng))) {
       if (!silent) alert('請先上傳謄本 PDF，解析地址後再查詢');
       return;
     }
@@ -8918,7 +8930,10 @@ ${factsText}
     if (statusEl) statusEl.textContent = '🔍 查詢中…';
     try {
       await loadGoogleMaps();
-      const loc = await gmGeocode(addr);
+      // 土地案件專用模式：用 MOI polygon 重心算的 lat/lng 直接定位，不用 geocode 段地號
+      const loc = (isFinite(deed.lat) && isFinite(deed.lng))
+        ? new google.maps.LatLng(deed.lat, deed.lng)
+        : await gmGeocode(addr);
       const RADIUS = 300;
       const results = [];
       for (const cat of HAZARD_CATEGORIES) {
