@@ -730,12 +730,21 @@ async function scrapeRakuya(env, params, subject, opts = {}) {
 
   async function newConfiguredPage() {
     const p = await browser.newPage();
-    await p.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36');
+    // 反偵測：CF Bot Detection 用這些 signal 抓 puppeteer，逐一隱藏（2026-04-30 加）
+    await p.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+      Object.defineProperty(navigator, 'languages', { get: () => ['zh-TW', 'zh', 'en-US', 'en'] });
+      window.chrome = { runtime: {} };
+    });
+    // UA 升 Chrome 130（最新主流版本，避免 121 被認為過舊）
+    await p.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36');
     await p.setRequestInterception(true);
     p.on('request', req => {
       const type = req.resourceType();
       const u = req.url();
-      if (type === 'image' || type === 'media' || type === 'font' || type === 'stylesheet') return req.abort();
+      // ⚠ 樂屋 CF Challenge 需要 stylesheet + script 才能驗證通過，不要 abort
+      if (type === 'image' || type === 'media' || type === 'font') return req.abort();
       if (/google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|criteo|googlesyndication|adservice|tiktok|line-scdn|tagcommander|matomo|sentry/.test(u)) return req.abort();
       req.continue();
     });
@@ -752,7 +761,29 @@ async function scrapeRakuya(env, params, subject, opts = {}) {
       } catch (gotoErr) {
         console.warn(`[rakuya ${matchType}] goto timeout:`, gotoErr.message);
       }
-      // 等 CF Challenge 過 + 卡片 hydrate
+      // CF Challenge 偵測 + 等過（樂屋 Cloudflare Bot Detection 對 cloud puppeteer 預設擋）
+      const isChallenge = await page.evaluate(() => {
+        const title = document.title || '';
+        const body = document.body?.innerText || '';
+        return title.includes('Just a moment') || body.includes('Performing security verification') || body.includes('Checking if the site connection is secure');
+      }).catch(() => false);
+      if (isChallenge) {
+        console.log(`[rakuya ${matchType}] CF challenge detected, waiting for auto-pass`);
+        try {
+          await page.waitForFunction(
+            () => {
+              const title = document.title || '';
+              const body = document.body?.innerText || '';
+              return !title.includes('Just a moment') && !body.includes('Performing security verification') && !body.includes('Checking if the site connection is secure');
+            },
+            { timeout: 30000 }
+          );
+          console.log(`[rakuya ${matchType}] CF challenge passed`);
+        } catch (_) {
+          console.warn(`[rakuya ${matchType}] CF challenge timeout 30s, abandoning page`);
+        }
+      }
+      // 等 list 卡片 hydrate
       try {
         await page.waitForSelector('section.grid-item.search-obj, .no-result', { timeout: 20000 });
       } catch (_) { /* 沒等到也試 evaluate */ }
